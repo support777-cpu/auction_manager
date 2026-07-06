@@ -1,0 +1,9 @@
+Timestamp,Email address,Score,Place and Pastor Name,Full Name,Gender,Mobile Number,Email,Skill,TShirt Size,Jersey Number,Meal Preference (only applicable for Registrants Outside of Bangalore),Photo Upload,Payment Confirmation,Payment Transaction Id,Validated
+2026-07-01 09:00:00,private-player@example.com,0,Bangalore Central / Pastor Jacob,Aarav Menon,Male,9876543210,aarav.private@example.com,Ace,L,7,Veg,aarav_menon.jpg,Paid,UPI-PRIVATE-001,Yes
+2026-07-01 09:01:00,neha.private@example.com,0,Bangalore Central / Pastor Jacob,Neha Rao,Female,9876543211,neha.private@example.com,Ace,M,12,Veg,neha_rao.png,Paid,UPI-PRIVATE-002,Yes
+2026-07-01 09:02:00,meera.private@example.com,0,Bangalore Central / Pastor Jacob,Meera Iyer,Female,9876543212,meera.private@example.com,All Rounder,S,21,Non Veg,meera_iyer.webp,Paid,UPI-PRIVATE-003,Yes
+2026-07-01 09:03:00,rohan.private@example.com,0,Bangalore Central / Pastor Jacob,Rohan Das,Male,9876543213,rohan.private@example.com,Bowling,L,18,Veg,rohan_das.heic,Paid,UPI-PRIVATE-004,Yes
+2026-07-01 09:04:00,kunal.private@example.com,0,Bangalore Central / Pastor Jacob,Kunal Shah,Male,9876543214,kunal.private@example.com,Batting,M,45,Veg,kunal_shah.jpg,Paid,UPI-PRIVATE-005,Yes
+2026-07-01 09:05:00,imran.private@example.com,0,Bangalore Central / Pastor Jacob,Imran Khan,Male,9876543215,imran.private@example.com,All Rounder,L,9,Non Veg,imran_khan.jpg,Paid,UPI-PRIVATE-006,Yes
+2026-07-01 09:06:00,dev.private@example.com,0,Bangalore Central / Pastor Jacob,Dev Patel,Male,9876543216,dev.private@example.com,Bowling,M,27,Veg,,Paid,UPI-PRIVATE-007,Yes
+2026-07-01 09:07:00,anika.private@example.com,0,Bangalore Central / Pastor Jacob,Anika Sen,Female,9876543217,anika.private@example.com,All Rounder,S,33,Veg,anika_sen.jpg,Paid,UPI-PRIVATE-008,Yes

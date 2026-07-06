@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "baseUrl": ".",
+    "paths": {
+      "@auction-manager/domain": ["packages/domain/src/index.ts"],
+      "@auction-manager/imports": ["packages/imports/src/index.ts"],
+      "@auction-manager/persistence": ["packages/persistence/src/index.ts"],
+      "@auction-manager/shared": ["packages/shared/src/index.ts"],
+      "@auction-manager/test-fixtures": ["packages/test-fixtures/src/index.ts"]
+    }
+  }
+}

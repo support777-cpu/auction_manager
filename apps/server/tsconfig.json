@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
+  "references": [
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/imports" },
+    { "path": "../../packages/persistence" },
+    { "path": "../../packages/shared" }
+  ]
+}

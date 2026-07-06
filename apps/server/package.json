@@ -1,0 +1,25 @@
+{
+  "name": "@auction-manager/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -b",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@auction-manager/domain": "0.1.0",
+    "@auction-manager/imports": "0.1.0",
+    "@auction-manager/persistence": "0.1.0",
+    "@auction-manager/shared": "0.1.0",
+    "@fastify/multipart": "^9.0.0",
+    "@fastify/static": "^8.0.0",
+    "fastify": "^5.9.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0"
+  }
+}

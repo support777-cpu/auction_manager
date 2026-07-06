@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "playerPhotos": [
+    {
+      "playerId": "p-001",
+      "playerName": "Aarav Menon",
+      "sourceFile": "aarav_menon.jpg",
+      "assetId": "asset-player-aarav-menon",
+      "matchStatus": "matched",
+      "mimeType": "image/jpeg"
+    },
+    {
+      "playerId": "p-002",
+      "playerName": "Neha Rao",
+      "sourceFile": "neha_rao.png",
+      "assetId": "asset-player-neha-rao",
+      "matchStatus": "matched",
+      "mimeType": "image/png"
+    },
+    {
+      "playerId": "p-003",
+      "playerName": "Meera Iyer",
+      "sourceFile": "meera_iyer.webp",
+      "assetId": "asset-player-meera-iyer",
+      "matchStatus": "matched",
+      "mimeType": "image/webp"
+    },
+    {
+      "playerId": "p-004",
+      "playerName": "Rohan Das",
+      "sourceFile": "rohan_das.heic",
+      "assetId": "asset-player-rohan-das",
+      "matchStatus": "event_pc_rehearsal_required",
+      "mimeType": "image/heic"
+    },
+    {
+      "playerId": "p-007",
+      "playerName": "Dev Patel",
+      "sourceFile": "",
+      "assetId": "placeholder-player",
+      "matchStatus": "missing_uses_placeholder",
+      "issueSeverity": "can_proceed_with_placeholder"
+    },
+    {
+      "playerId": "p-008",
+      "playerName": "Anika Sen",
+      "sourceFile": "anika_sen.jpg",
+      "assetId": "asset-player-anika-sen",
+      "matchStatus": "ambiguous_requires_review",
+      "ambiguousCandidates": ["anika_sen.jpg", "anika_sen_copy.jpg"]
+    }
+  ],
+  "teamLogos": [
+    {
+      "teamId": "t-001",
+      "teamName": "Falcons",
+      "sourceFile": "falcons.png",
+      "assetId": "asset-team-falcons",
+      "matchStatus": "matched",
+      "mimeType": "image/png"
+    },
+    {
+      "teamId": "t-002",
+      "teamName": "Tigers",
+      "sourceFile": "",
+      "assetId": "placeholder-team",
+      "matchStatus": "missing_uses_placeholder",
+      "issueSeverity": "can_proceed_with_placeholder"
+    },
+    {
+      "teamId": "t-003",
+      "teamName": "Royals",
+      "sourceFile": "royals.webp",
+      "assetId": "asset-team-royals",
+      "matchStatus": "matched",
+      "mimeType": "image/webp"
+    },
+    {
+      "teamId": "t-004",
+      "teamName": "Warriors",
+      "sourceFile": "warriors.jpg",
+      "assetId": "asset-team-warriors",
+      "matchStatus": "matched",
+      "mimeType": "image/jpeg"
+    }
+  ],
+  "securityCases": [
+    {
+      "caseId": "upload-unsupported-type",
+      "sourceFile": "script.svg",
+      "expectedStatus": 415
+    },
+    {
+      "caseId": "upload-traversal-name",
+      "sourceFile": "../outside.png",
+      "expectedStatus": 400
+    },
+    {
+      "caseId": "upload-too-large",
+      "sourceFile": "oversize-player-photo.jpg",
+      "expectedStatus": 413
+    },
+    {
+      "caseId": "static-path-traversal",
+      "requestPath": "/assets/../../private.csv",
+      "expectedStatus": 400
+    }
+  ],
+  "assetCases": [
+    {
+      "caseId": "serve-internal-asset",
+      "assetId": "asset-player-aarav-menon",
+      "expectedStatus": 200
+    },
+    {
+      "caseId": "reject-source-file-path",
+      "assetPath": "/Users/operator/Desktop/aarav_menon.jpg",
+      "expectedStatus": 400
+    }
+  ]
+}

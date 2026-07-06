@@ -1,0 +1,5 @@
+Timestamp,Email address,Score,Place and Pastor Name,Full Name,Gender,Mobile Number,Email,Skill,TShirt Size,Jersey Number,Meal Preference (only applicable for Registrants Outside of Bangalore),Photo Upload,Payment Confirmation,Payment Transaction Id,Validated
+2026-07-01 10:00:00,missing.name@example.com,0,Bangalore Central / Pastor Jacob,,Male,9876500001,missing.name@example.com,Batting,M,1,Veg,missing_name.jpg,Paid,UPI-INVALID-001,Yes
+2026-07-01 10:01:00,keeper@example.com,0,Bangalore Central / Pastor Jacob,Vikram Keeper,Male,9876500002,keeper@example.com,Wicket Keeper,L,2,Veg,vikram_keeper.jpg,Paid,UPI-INVALID-002,Yes
+2026-07-01 10:02:00,missing.gender@example.com,0,Bangalore Central / Pastor Jacob,Priya Unknown,,9876500003,missing.gender@example.com,Ace,S,3,Veg,priya_unknown.jpg,Paid,UPI-INVALID-003,Yes
+2026-07-01 10:03:00,no.price@example.com,0,Bangalore Central / Pastor Jacob,Sara No Price,Female,9876500004,no.price@example.com,Specialist,M,4,Veg,sara_no_price.jpg,Paid,UPI-INVALID-004,Yes

@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "parameters": {
+    "roleBasePrices": {
+      "Ace": 10,
+      "Batting": 8,
+      "Bowling": 6,
+      "AllRounder": 6,
+      "Girls": 6
+    },
+    "bidIncrement": 2,
+    "teamBudget": 170,
+    "maxSquadSize": 13,
+    "roleTargets": {
+      "Ace": 2,
+      "Batting": 3,
+      "Bowling": 2,
+      "AllRounder": 2,
+      "Girls": 2
+    },
+    "phase1CategoryOrder": [
+      "Ace Men",
+      "Ace Women",
+      "Women All Rounders",
+      "Men Bowlers",
+      "Men Batsmen",
+      "Men All Rounders"
+    ],
+    "manualAssignmentBudgetBehavior": "NoBudgetImpact"
+  },
+  "privacyDenyList": {
+    "fieldNames": [
+      "Timestamp",
+      "Email address",
+      "Score",
+      "Place and Pastor Name",
+      "Mobile Number",
+      "Email",
+      "TShirt Size",
+      "Jersey Number",
+      "Meal Preference (only applicable for Registrants Outside of Bangalore)",
+      "Photo Upload",
+      "Payment Confirmation",
+      "Payment Transaction Id",
+      "Validated"
+    ],
+    "fieldValues": [
+      "2026-07-01 09:00:00",
+      "private-player@example.com",
+      "9876543210",
+      "UPI-PRIVATE-001",
+      "Paid",
+      "Validated"
+    ]
+  },
+  "setupReady": {
+    "phase": "Setup",
+    "players": ["p-001", "p-002", "p-003", "p-004", "p-005", "p-006", "p-007", "p-008"],
+    "teams": ["t-001", "t-002", "t-003", "t-004"],
+    "importIssues": [
+      {
+        "id": "issue-photo-p-007",
+        "severity": "can_proceed_with_placeholder",
+        "targetType": "photo",
+        "targetId": "p-007"
+      },
+      {
+        "id": "issue-logo-t-002",
+        "severity": "can_proceed_with_placeholder",
+        "targetType": "logo",
+        "targetId": "t-002"
+      }
+    ],
+    "startAuctionAllowed": true
+  },
+  "invalidSaleBudget": {
+    "phase": "InitialAuction",
+    "currentPlayerId": "p-004",
+    "currentBid": 172,
+    "selectedTeamId": "t-001",
+    "team": {
+      "id": "t-001",
+      "remainingBudget": 170,
+      "squadCount": 0,
+      "roleCounts": {
+        "Ace": 0,
+        "Batting": 0,
+        "Bowling": 0,
+        "AllRounder": 0,
+        "Girls": 0
+      }
+    },
+    "expectedBlockReason": "Falcons has 170 remaining and cannot buy Rohan Das for 172."
+  },
+  "invalidSaleSquad": {
+    "phase": "InitialAuction",
+    "currentPlayerId": "p-005",
+    "currentBid": 8,
+    "selectedTeamId": "t-003",
+    "team": {
+      "id": "t-003",
+      "remainingBudget": 90,
+      "squadCount": 13,
+      "roleCounts": {
+        "Ace": 2,
+        "Batting": 3,
+        "Bowling": 2,
+        "AllRounder": 2,
+        "Girls": 2
+      }
+    },
+    "expectedBlockReason": "Royals already has 13 of 13 players."
+  },
+  "invalidSaleRole": {
+    "phase": "InitialAuction",
+    "currentPlayerId": "p-004",
+    "currentBid": 6,
+    "selectedTeamId": "t-004",
+    "team": {
+      "id": "t-004",
+      "remainingBudget": 120,
+      "squadCount": 5,
+      "roleCounts": {
+        "Ace": 1,
+        "Batting": 1,
+        "Bowling": 2,
+        "AllRounder": 1,
+        "Girls": 0
+      }
+    },
+    "expectedBlockReason": "Warriors already has 2 of 2 Bowling players."
+  },
+  "liveSale": {
+    "phase": "InitialAuction",
+    "currentPlayerId": "p-004",
+    "currentBid": 12,
+    "selectedTeamId": "t-001",
+    "soldPlayer": {
+      "playerId": "p-001",
+      "winningTeamId": "t-001",
+      "soldPrice": 12,
+      "acquisitionType": "Sold"
+    },
+    "teamState": {
+      "teamId": "t-001",
+      "remainingBudget": 158,
+      "squadCount": 1,
+      "roleCounts": {
+        "Ace": 1,
+        "Batting": 0,
+        "Bowling": 0,
+        "AllRounder": 0,
+        "Girls": 0
+      }
+    },
+    "undoHistory": ["Reveal Aarav Menon", "Select Falcons", "Increase bid to 12", "Mark Sold"]
+  },
+  "undoChain": {
+    "phase": "InitialAuction",
+    "actions": [
+      "Reveal Aarav Menon",
+      "Select Falcons",
+      "Increase bid to 12",
+      "Mark Sold",
+      "Reveal Neha Rao",
+      "Mark Unsold"
+    ],
+    "expectedAfterUndoAll": {
+      "currentPlayerId": null,
+      "currentBid": null,
+      "selectedTeamId": null,
+      "teamsUnchanged": true,
+      "playersReturnedToPending": true
+    }
+  },
+  "unsoldPhases": {
+    "phase2Pool": ["p-003", "p-007", "p-008"],
+    "phase2OrderSeed": "auction-manager-phase2-seed-001",
+    "phase2PersistedOrder": ["p-007", "p-003", "p-008"],
+    "phase3PoolAfterSecondUnsold": ["p-007"]
+  },
+  "manualAssignment": {
+    "phase": "ManualAssignment",
+    "currentPlayerId": "p-007",
+    "validTeamIds": ["t-001", "t-002", "t-003"],
+    "invalidTeamIds": ["t-004"],
+    "budgetBehavior": "NoBudgetImpact",
+    "expectedAssignment": {
+      "playerId": "p-007",
+      "teamId": "t-001",
+      "budgetDelta": 0,
+      "acquisitionType": "Assigned"
+    }
+  },
+  "noValidTeam": {
+    "phase": "ManualAssignment",
+    "currentPlayerId": "p-004",
+    "invalidReasonsByTeam": {
+      "t-001": ["Bowling capacity full"],
+      "t-002": ["Squad size full"],
+      "t-003": ["Bowling capacity full"],
+      "t-004": ["Squad size full", "Bowling capacity full"]
+    }
+  },
+  "phaseTransitions": {
+    "cannotStartUnsoldWhenPhase1Pending": true,
+    "explicitSkipRecordsSkippedPlayers": true,
+    "manualAssignmentHidesBiddingControls": true
+  },
+  "dangerousOperations": {
+    "requiresConfirmation": ["Reset Auction", "Close Auction"],
+    "undoExcluded": ["Reset Auction", "Close Auction"],
+    "cancelDoesNotMutate": true
+  },
+  "resumeLiveState": {
+    "phase": "InitialAuction",
+    "lastSavedAction": "Mark Sold",
+    "currentPlayerId": "p-004",
+    "undoHistoryLength": 4,
+    "snapshotPath": "data/snapshots/latest.json"
+  },
+  "writeFailure": {
+    "failingAction": "Mark Sold",
+    "expectedMutationStatus": 500,
+    "furtherMutationsBlocked": true,
+    "recoveryRequired": true
+  },
+  "errorContracts": {
+    "invalidInput": 400,
+    "ruleConflict": 409,
+    "uploadTooLarge": 413,
+    "unsupportedMedia": 415,
+    "unexpectedFault": 500
+  },
+  "clientCommandId": {
+    "requiredForMutations": true,
+    "sampleId": "cmd-test-0001",
+    "duplicatePolicy": "todo-finalize-before-api-story"
+  },
+  "keyboardFlow": {
+    "keys": ["Tab", "Enter", "Space", "+", "u", "n", "Escape"],
+    "requiresVisibleFocus": true,
+    "requiresAccessibleNames": true
+  },
+  "startupChecks": {
+    "nodeVersion": ">=24 <25",
+    "host": "127.0.0.1",
+    "healthPath": "/api/health",
+    "requiresDataDirWritable": true,
+    "requiresDatabaseOpen": true,
+    "requiresAssetPathsValid": true
+  }
+}
