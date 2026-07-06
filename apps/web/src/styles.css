@@ -1,12 +1,237 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  background: #f7f8fa;
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-width: 320px;
+  background: #f7f8fa;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 3px solid #f5b841;
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+  background: #f7f8fa;
+  color: #111827;
+}
+
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 1120px;
+  margin: 0 auto 20px;
+}
+
+.app-header h1,
+.setup-copy h2 {
+  margin: 0;
+  color: #111827;
+  letter-spacing: 0;
+}
+
+.app-header h1 {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.eyebrow,
+.status-label {
+  margin: 0 0 6px;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.runtime-pill {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8dee6;
+  border-radius: 9999px;
+  padding: 10px 14px;
+  background: #ffffff;
+  color: #136f45;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-grid,
+.phase-strip,
+.setup-panel {
+  max-width: 1120px;
+  margin: 0 auto 16px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.status-grid article {
+  min-height: 112px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.status-grid strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.status-grid span:last-child {
+  color: #4b5563;
+  line-height: 1.45;
+}
+
+.phase-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.phase-step {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.phase-step-active {
+  background: #136f45;
+  color: #ffffff;
+}
+
+.setup-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 20px;
+  align-items: center;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.setup-copy h2 {
+  margin-bottom: 10px;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.setup-copy p:last-child,
+.setup-actions p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.setup-actions {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.primary-action {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  padding: 12px 18px;
+  background: #136f45;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-action:hover {
+  background: #0b5133;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 16px;
+  }
+
+  .app-header,
+  .setup-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header {
+    display: grid;
+  }
+
+  .runtime-pill {
+    justify-content: center;
+    white-space: normal;
+  }
+
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-step {
+    justify-content: flex-start;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .phase-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

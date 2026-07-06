@@ -1,15 +1,22 @@
-import Fastify from "fastify";
+import { createAuctionManagerServer } from "./app.js";
 
-const host = process.env.HOST ?? "127.0.0.1";
-const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+const host = process.env.HOST?.trim() || "127.0.0.1";
+const port = parseLocalPort(process.env.PORT ?? "3000");
 
-const server = Fastify({
-  logger: true
-});
+try {
+  const server = await createAuctionManagerServer({ logger: true });
+  await server.listen({ host, port });
+} catch (error) {
+  console.error(error);
+  process.exit(1);
+}
 
-server.get("/health", async () => ({
-  ok: true,
-  service: "auction-manager"
-}));
+function parseLocalPort(value: string) {
+  const portNumber = Number.parseInt(value, 10);
 
-await server.listen({ host, port });
+  if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
+    throw new Error(`Invalid PORT value "${value}". Use a local TCP port from 1 to 65535.`);
+  }
+
+  return portNumber;
+}

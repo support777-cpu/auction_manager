@@ -16,11 +16,15 @@
     "dev": "npm run dev --workspace @auction-manager/server",
     "dev:web": "npm run dev --workspace @auction-manager/web",
     "dev:server": "npm run dev --workspace @auction-manager/server",
+    "start:event": "npm run build && npm run start --workspace @auction-manager/server",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:unit": "vitest run apps/server/src/dependencies.test.ts apps/web/src/dependencies.test.ts packages/imports/src/dependencies.test.ts packages/persistence/src/dependencies.test.ts packages/shared/src/dependencies.test.ts",
+    "test:integration": "vitest run apps/server/src/app.test.ts packages/shared/src/workspace-boundaries.test.ts",
     "test:watch": "vitest",
     "test:e2e": "npm run build --workspace @auction-manager/web && playwright test",
+    "test:e2e:event": "playwright test --config playwright.event.config.ts",
     "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
