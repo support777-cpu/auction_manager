@@ -1,5 +1,5 @@
 # generated: 2026-07-06T21:32:18+0530
-# last_updated: 2026-07-07T01:35:09+0530
+# last_updated: 2026-07-07T02:35:00+0530
 # project: auction_manager
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-06T21:32:18+0530
-last_updated: 2026-07-07T01:35:09+0530
+last_updated: 2026-07-07T02:35:00+0530
 project: auction_manager
 project_key: NOKEY
 tracking_system: file-system
@@ -49,9 +49,9 @@ story_location: /Users/udeetgulati/Projects/auction_manager/_bmad-output/impleme
 
 development_status:
   epic-1: in-progress
-  1-1-open-local-auction-manager-app-shell: in-progress
-  1-2-import-and-review-player-csv: backlog
-  1-3-match-player-photos-with-placeholders: backlog
+  1-1-open-local-auction-manager-app-shell: done
+  1-2-import-and-review-player-csv: done
+  1-3-match-player-photos-with-placeholders: ready-for-dev
   1-4-import-teams-and-logos: backlog
   1-5-configure-auction-parameters: backlog
   1-6-start-auction-with-persisted-initial-state: backlog
