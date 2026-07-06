@@ -85,7 +85,9 @@ button:focus-visible {
 .status-grid,
 .phase-strip,
 .setup-panel,
-.setup-player-csv {
+.setup-player-csv,
+.setup-player-photos,
+.start-auction-row {
   max-width: 1120px;
   margin: 0 auto 16px;
 }
@@ -204,7 +206,8 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
-.setup-player-csv {
+.setup-player-csv,
+.setup-player-photos {
   border: 1px solid #d8dee6;
   border-radius: 8px;
   padding: 24px;
@@ -286,6 +289,14 @@ button:focus-visible {
   background: #ecfdf5;
 }
 
+.csv-upload-control-disabled,
+.csv-upload-control-disabled:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
 .csv-upload-control:focus-within {
   outline: 3px solid #f5b841;
   outline-offset: 3px;
@@ -296,6 +307,10 @@ button:focus-visible {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.csv-upload-control input:disabled {
+  cursor: not-allowed;
 }
 
 .csv-upload-status {
@@ -344,6 +359,19 @@ button:focus-visible {
   color: #111827;
   font-size: 20px;
   line-height: 1.25;
+}
+
+.photo-summary-grid .neutral-summary {
+  background: #f0f9ff;
+}
+
+.neutral-summary span:last-child {
+  display: block;
+  margin-top: 6px;
+  color: #075985;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .review-layout {

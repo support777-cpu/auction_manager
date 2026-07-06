@@ -4,7 +4,7 @@ baseline_commit: 22a61dd069db045326863e6ade23166fd8fb55fa
 
 # Story 1.3: Match Player Photos With Placeholders
 
-Status: ready-for-dev
+Status: done
 
 Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
 
@@ -25,50 +25,50 @@ so that the live board can show Player photos where available and safe placehold
 
 ## Tasks / Subtasks
 
-- [ ] Extend shared contracts for photo matching and placeholder media state. (AC: 2, 3, 4)
-  - [ ] In `packages/shared/src/index.ts`, add photo match status values (suggested: `matched`, `missing_uses_placeholder`, `ambiguous_uses_placeholder`, `undecodable_uses_placeholder`), a photo match record schema (player reference, status, optional `photoAssetId`), and a photo review/summary schema that extends the setup review shape with matched/placeholder counts.
-  - [ ] Add new import issue codes to `importIssueCodeValues` (suggested: `missing_player_photo`, `unsupported_photo_format`, `ambiguous_photo_match`, `unmatched_photo_file`, `photo_not_decodable`, `photo_storage_failed`). Keep existing codes unchanged.
-  - [ ] Keep all schemas `.strict()` and privacy-safe: no `Photo Upload` cell values, no source filesystem paths, no private registration fields in any response record.
-  - [ ] Add source-local tests in `packages/shared/src/import-contracts.test.ts` (or a new focused file) proving photo review records expose only internal asset IDs, never source file paths, and that `startAuctionBlocked` remains driven only by `must_fix` count.
+- [x] Extend shared contracts for photo matching and placeholder media state. (AC: 2, 3, 4)
+  - [x] In `packages/shared/src/index.ts`, add photo match status values (suggested: `matched`, `missing_uses_placeholder`, `ambiguous_uses_placeholder`, `undecodable_uses_placeholder`), a photo match record schema (player reference, status, optional `photoAssetId`), and a photo review/summary schema that extends the setup review shape with matched/placeholder counts.
+  - [x] Add new import issue codes to `importIssueCodeValues` (suggested: `missing_player_photo`, `unsupported_photo_format`, `ambiguous_photo_match`, `unmatched_photo_file`, `photo_not_decodable`, `photo_storage_failed`). Keep existing codes unchanged.
+  - [x] Keep all schemas `.strict()` and privacy-safe: no `Photo Upload` cell values, no source filesystem paths, no private registration fields in any response record.
+  - [x] Add source-local tests in `packages/shared/src/import-contracts.test.ts` (or a new focused file) proving photo review records expose only internal asset IDs, never source file paths, and that `startAuctionBlocked` remains driven only by `must_fix` count.
 
-- [ ] Implement the photo matching adapter in `packages/imports`. (AC: 1, 2, 3, 4)
-  - [ ] Add failing tests first in `packages/imports/src/player-photos.test.ts` using `_bmad-output/test-artifacts/sample-test-data/media-manifest.json` expectations and `packages/test-fixtures` player fixtures (test-only imports).
-  - [ ] Create `packages/imports/src/player-photos.ts` with a pure matching function: inputs are the imported Player previews (with internal `Photo Upload` metadata carried from Story 1.2 parsing as adapter-internal data) plus uploaded file descriptors (filename, detected format); outputs are per-Player match results and grouped import issues.
-  - [ ] Matching order: (1) exact normalized match of the Player's `Photo Upload` cell value against an uploaded filename, (2) uploaded filename contains the normalized Player name. Normalize by lowercasing and stripping non-alphanumeric characters.
-  - [ ] Ambiguity rule: if more than one uploaded file matches one Player, or one file matches more than one Player, do not guess. Emit `ambiguous_photo_match` as `can_proceed_with_placeholder` and leave the Player on placeholder.
-  - [ ] Classify every imported Player without a matched photo as `missing_player_photo` with severity `can_proceed_with_placeholder`, message in calm setup language naming the Player (e.g. "Dev Patel has no matched photo; player placeholder will be used.").
-  - [ ] Add image normalization using `sharp` (already a dependency of `packages/imports`): validate the file is a decodable image, and normalize matched photos to a bounded-size web-safe output (suggested: max 512px longest edge, WebP or JPEG output) written under managed asset storage with a generated opaque asset ID.
-  - [ ] HEIC handling: accept `.heic` uploads through the extension allowlist and attempt decode. If sharp cannot decode (expected with prebuilt binaries — see Latest Tech Information), emit `photo_not_decodable` as `can_proceed_with_placeholder` with a message telling the operator to convert the photo to JPEG and reimport. Never crash the import.
-  - [ ] Extension/format allowlist: `.jpg`, `.jpeg`, `.png`, `.webp`, `.heic`. Everything else is rejected at the upload boundary (see server task), not silently ignored.
+- [x] Implement the photo matching adapter in `packages/imports`. (AC: 1, 2, 3, 4)
+  - [x] Add failing tests first in `packages/imports/src/player-photos.test.ts` using `_bmad-output/test-artifacts/sample-test-data/media-manifest.json` expectations and `packages/test-fixtures` player fixtures (test-only imports).
+  - [x] Create `packages/imports/src/player-photos.ts` with a pure matching function: inputs are the imported Player previews (with internal `Photo Upload` metadata carried from Story 1.2 parsing as adapter-internal data) plus uploaded file descriptors (filename, detected format); outputs are per-Player match results and grouped import issues.
+  - [x] Matching order: (1) exact normalized match of the Player's `Photo Upload` cell value against an uploaded filename, (2) uploaded filename contains the normalized Player name. Normalize by lowercasing and stripping non-alphanumeric characters.
+  - [x] Ambiguity rule: if more than one uploaded file matches one Player, or one file matches more than one Player, do not guess. Emit `ambiguous_photo_match` as `can_proceed_with_placeholder` and leave the Player on placeholder.
+  - [x] Classify every imported Player without a matched photo as `missing_player_photo` with severity `can_proceed_with_placeholder`, message in calm setup language naming the Player (e.g. "Dev Patel has no matched photo; player placeholder will be used.").
+  - [x] Add image normalization using `sharp` (already a dependency of `packages/imports`): validate the file is a decodable image, and normalize matched photos to a bounded-size web-safe output (suggested: max 512px longest edge, WebP or JPEG output) written under managed asset storage with a generated opaque asset ID.
+  - [x] HEIC handling: accept `.heic` uploads through the extension allowlist and attempt decode. If sharp cannot decode (expected with prebuilt binaries — see Latest Tech Information), emit `photo_not_decodable` as `can_proceed_with_placeholder` with a message telling the operator to convert the photo to JPEG and reimport. Never crash the import.
+  - [x] Extension/format allowlist: `.jpg`, `.jpeg`, `.png`, `.webp`, `.heic`. Everything else is rejected at the upload boundary (see server task), not silently ignored.
 
-- [ ] Add server-side photo upload, setup staging, and managed asset serving. (AC: 1, 2, 3)
-  - [ ] Add an in-memory setup staging module (suggested: `apps/server/src/setup-staging.ts`) that holds the latest successful Player CSV review (including adapter-internal `Photo Upload` metadata) and the latest photo match state. Reimporting the Player CSV re-runs matching against already-staged photos or clears photo state — pick one behavior, document it in code, and test it. This staging is explicitly non-durable; durable persistence is Story 1.6.
-  - [ ] Update the Player CSV preview route so its successful result populates staging without changing its existing response contract, selectors, or tests.
-  - [ ] Register `@fastify/multipart` (already in `apps/server` dependencies) scoped to setup upload routes only, with explicit `limits`: `fileSize` (suggested 10 MB per photo), `files` (suggested 200), `fields`, and `parts`. Do not enable multipart globally.
-  - [ ] Add `POST /api/setup/player-photos` accepting multipart photo uploads. Return the shared photo review response. Return `409` with a clear message if no Player CSV has been imported yet.
-  - [ ] Upload boundary rejections per `media-manifest.json#securityCases`: unsupported extension/content type returns `415`; filenames containing path separators or traversal sequences return `400`; oversize file returns `413`; exceeding file-count limits returns a clear `4xx` error. Never write a rejected file to disk.
-  - [ ] Store normalized photos under a managed data directory: add a `dataDirectory` option to `createAuctionManagerServer` (default `data/` at repo root; tests pass a temp dir) and write assets to `{dataDirectory}/assets/players/{assetId}.{ext}` with generated opaque IDs (e.g. `crypto.randomUUID()`), never source filenames.
-  - [ ] Serve stored photos read-only via an internal-ID route (suggested: `GET /assets/players/:assetId.{ext}` backed by `@fastify/static` rooted at `{dataDirectory}/assets`). Per `media-manifest.json#assetCases`: traversal request paths are rejected (`400` or `404`, assert explicitly), and arbitrary filesystem paths are never served.
-  - [ ] Add Fastify `inject()` tests in `apps/server/src/player-photos.test.ts` covering: successful match review, photos-before-CSV `409`, all security cases above, asset serving by internal ID, and asset traversal rejection. Use temp data directories and clean them up.
-  - [ ] Add `data/` to `.gitignore`.
+- [x] Add server-side photo upload, setup staging, and managed asset serving. (AC: 1, 2, 3)
+  - [x] Add an in-memory setup staging module (suggested: `apps/server/src/setup-staging.ts`) that holds the latest successful Player CSV review (including adapter-internal `Photo Upload` metadata) and the latest photo match state. Reimporting the Player CSV re-runs matching against already-staged photos or clears photo state — pick one behavior, document it in code, and test it. This staging is explicitly non-durable; durable persistence is Story 1.6.
+  - [x] Update the Player CSV preview route so its successful result populates staging without changing its existing response contract, selectors, or tests.
+  - [x] Register `@fastify/multipart` (already in `apps/server` dependencies) scoped to setup upload routes only, with explicit `limits`: `fileSize` (suggested 10 MB per photo), `files` (suggested 200), `fields`, and `parts`. Do not enable multipart globally.
+  - [x] Add `POST /api/setup/player-photos` accepting multipart photo uploads. Return the shared photo review response. Return `409` with a clear message if no Player CSV has been imported yet.
+  - [x] Upload boundary rejections per `media-manifest.json#securityCases`: unsupported extension/content type returns `415`; filenames containing path separators or traversal sequences return `400`; oversize file returns `413`; exceeding file-count limits returns a clear `4xx` error. Never write a rejected file to disk.
+  - [x] Store normalized photos under a managed data directory: add a `dataDirectory` option to `createAuctionManagerServer` (default `data/` at repo root; tests pass a temp dir) and write assets to `{dataDirectory}/assets/players/{assetId}.{ext}` with generated opaque IDs (e.g. `crypto.randomUUID()`), never source filenames.
+  - [x] Serve stored photos read-only via an internal-ID route (suggested: `GET /assets/players/:assetId.{ext}` backed by `@fastify/static` rooted at `{dataDirectory}/assets`). Per `media-manifest.json#assetCases`: traversal request paths are rejected (`400` or `404`, assert explicitly), and arbitrary filesystem paths are never served.
+  - [x] Add Fastify `inject()` tests in `apps/server/src/player-photos.test.ts` covering: successful match review, photos-before-CSV `409`, all security cases above, asset serving by internal ID, and asset traversal rejection. Use temp data directories and clean them up.
+  - [x] Add `data/` to `.gitignore`.
 
-- [ ] Upgrade the setup UI with the Player photos step. (AC: 1, 3, 4)
-  - [ ] In `apps/web/src/main.tsx`, add a Player photos section after the Player CSV section with stable selectors: `setup-player-photos`, `player-photos-input` (multi-file input accepting the allowlist), and `player-photos-summary` (matched count, placeholder count).
-  - [ ] Disable or clearly gate the photo upload control until a Player CSV review with imported Players exists, matching the server's `409` behavior.
-  - [ ] Render placeholder-compatible photo issues inside the existing `import-issues-table` group `can_proceed_with_placeholder` (the group and its selector already exist and currently render "None").
-  - [ ] Style missing photos as neutral/informational per UX: no danger red, no error framing. Suggested copy: "3 Players will use the neutral placeholder. Start Auction is not blocked by missing photos."
-  - [ ] Keep Start Auction disabled in this story (Team CSV and parameters are later stories), but ensure the blocker text never cites photos and `must_fix` counting is unchanged by photo state.
-  - [ ] Preserve all Story 1.1/1.2 selectors and behavior: `app-shell`, `phase-indicator`, `setup-empty-state`, `setup-start`, `setup-player-csv`, `player-csv-input`, `player-csv-summary`, `import-issues-table`, `setup-start-auction`, `start-auction-blocker`.
-  - [ ] Reuse the Story 1.2 upload patterns: upload-generation ref to discard stale responses, loading/ready/error states, `role="alert"` errors, real file input with accessible label, 44px minimum targets, and text kept fitting at 1440x900, 1366x768, 1920x1080, and 390x844. Extend `apps/web/src/styles.css` in the existing light setup token style.
+- [x] Upgrade the setup UI with the Player photos step. (AC: 1, 3, 4)
+  - [x] In `apps/web/src/main.tsx`, add a Player photos section after the Player CSV section with stable selectors: `setup-player-photos`, `player-photos-input` (multi-file input accepting the allowlist), and `player-photos-summary` (matched count, placeholder count).
+  - [x] Disable or clearly gate the photo upload control until a Player CSV review with imported Players exists, matching the server's `409` behavior.
+  - [x] Render placeholder-compatible photo issues inside the existing `import-issues-table` group `can_proceed_with_placeholder` (the group and its selector already exist and currently render "None").
+  - [x] Style missing photos as neutral/informational per UX: no danger red, no error framing. Suggested copy: "3 Players will use the neutral placeholder. Start Auction is not blocked by missing photos."
+  - [x] Keep Start Auction disabled in this story (Team CSV and parameters are later stories), but ensure the blocker text never cites photos and `must_fix` counting is unchanged by photo state.
+  - [x] Preserve all Story 1.1/1.2 selectors and behavior: `app-shell`, `phase-indicator`, `setup-empty-state`, `setup-start`, `setup-player-csv`, `player-csv-input`, `player-csv-summary`, `import-issues-table`, `setup-start-auction`, `start-auction-blocker`.
+  - [x] Reuse the Story 1.2 upload patterns: upload-generation ref to discard stale responses, loading/ready/error states, `role="alert"` errors, real file input with accessible label, 44px minimum targets, and text kept fitting at 1440x900, 1366x768, 1920x1080, and 390x844. Extend `apps/web/src/styles.css` in the existing light setup token style.
 
-- [ ] Add story-level acceptance and regression coverage. (AC: 5, 6)
-  - [ ] Unit: matching boundaries (exact metadata match, name-in-filename match, no match, ambiguous file, ambiguous player, case/punctuation-insensitive normalization).
-  - [ ] Unit: classification (missing photo, unsupported format, undecodable HEIC path, storage failure) all resolve to the correct severity, and only `must_fix` can set `startAuctionBlocked`.
-  - [ ] Unit/integration: normalized asset files exist under the managed directory with generated IDs; source filenames never appear in stored names, response records, or issue-free UI fields.
-  - [ ] API: full security-case matrix from `media-manifest.json` (`415`, `400` traversal, `413` oversize, asset-ID-only serving).
-  - [ ] E2E (Playwright event mode, in `apps/web/e2e/event-mode.spec.ts` or a new spec added to `playwright.event.config.ts` `testMatch`): upload valid Player CSV, upload a photo set with at least one matched and one missing photo, assert the `can_proceed_with_placeholder` group shows the missing-photo issue, the photos summary shows matched/placeholder counts, `setup-start-auction` remains disabled, and `start-auction-blocker` text does not mention photos.
-  - [ ] Regression: Story 1.1 shell smoke, Story 1.2 CSV preview unit/API/UI/E2E tests, `/api/health`, static serving, build, and typecheck all still pass.
-  - [ ] Run the Dev Gate and record results in the Dev Agent Record before marking tasks complete.
+- [x] Add story-level acceptance and regression coverage. (AC: 5, 6)
+  - [x] Unit: matching boundaries (exact metadata match, name-in-filename match, no match, ambiguous file, ambiguous player, case/punctuation-insensitive normalization).
+  - [x] Unit: classification (missing photo, unsupported format, undecodable HEIC path, storage failure) all resolve to the correct severity, and only `must_fix` can set `startAuctionBlocked`.
+  - [x] Unit/integration: normalized asset files exist under the managed directory with generated IDs; source filenames never appear in stored names, response records, or issue-free UI fields.
+  - [x] API: full security-case matrix from `media-manifest.json` (`415`, `400` traversal, `413` oversize, asset-ID-only serving).
+  - [x] E2E (Playwright event mode, in `apps/web/e2e/event-mode.spec.ts` or a new spec added to `playwright.event.config.ts` `testMatch`): upload valid Player CSV, upload a photo set with at least one matched and one missing photo, assert the `can_proceed_with_placeholder` group shows the missing-photo issue, the photos summary shows matched/placeholder counts, `setup-start-auction` remains disabled, and `start-auction-blocker` text does not mention photos.
+  - [x] Regression: Story 1.1 shell smoke, Story 1.2 CSV preview unit/API/UI/E2E tests, `/api/health`, static serving, build, and typecheck all still pass.
+  - [x] Run the Dev Gate and record results in the Dev Agent Record before marking tasks complete.
 
 ## Dev Notes
 
@@ -256,7 +256,7 @@ Out of scope:
 
 ### Agent Model Used
 
-TBD by dev agent.
+GPT-5.5
 
 ### Debug Log References
 
@@ -267,9 +267,56 @@ TBD by dev agent.
 ### Completion Notes List
 
 - Story context created on 2026-07-07 from PRD, architecture, UX, TEA test artifacts, current code, Story 1.2 learnings, git status, and verified current sharp/@fastify/multipart documentation.
+- Extended shared strict Zod contracts for photo match records/review summaries, placeholder-compatible photo statuses, and non-blocking photo issue codes. Added privacy tests proving records expose internal asset IDs only and no source paths or `Photo Upload` values. Validation: `npm test -- packages/shared/src/import-contracts.test.ts`, `npm test`.
+- Implemented the imports photo matching adapter with internal `Photo Upload` staging metadata, metadata-first/name-contained matching, ambiguity detection, missing/unmatched/undecodable/storage-failure placeholder issues, and sharp WebP normalization to opaque asset filenames. Validation: `npm test -- packages/imports/src/player-csv.test.ts packages/imports/src/player-photos.test.ts`, `npm test`.
+- Added non-durable setup staging, scoped multipart Player photo uploads, upload-boundary security rejections, managed `{dataDirectory}/assets/players` storage, and read-only internal asset serving. CSV reimport clears prior photo match state. Validation: `npm test -- apps/server/src/app.test.ts apps/server/src/player-csv-preview.test.ts apps/server/src/player-photos.test.ts`, `npm test`.
+- Added the setup Player photos UI step with CSV-gated multi-file upload, photo review schema validation, merged placeholder issue rendering, neutral non-blocking summary copy, and route-mocked Playwright coverage. Validation: `npm run build --workspace @auction-manager/shared`, `npm run test:e2e -- apps/web/e2e/player-csv-import.spec.ts`, `npm test`.
+- Added event-mode acceptance coverage for the real CSV plus Player photo upload path and completed the story Dev Gate. Dev Gate results: `npm run typecheck` passed; `npm test` passed (12 files, 42 tests); `npm run build` passed; `npm run test:e2e` passed (4 tests); `npm run test:e2e:event` passed (4 tests).
 
 ### File List
+
+- packages/shared/src/index.ts
+- packages/shared/src/import-contracts.test.ts
+- packages/imports/src/index.ts
+- packages/imports/src/player-csv.ts
+- packages/imports/src/player-photos.ts
+- packages/imports/src/player-photos.test.ts
+- .gitignore
+- _bmad-output/implementation-artifacts/1-3-match-player-photos-with-placeholders.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- apps/server/src/app.ts
+- apps/server/src/player-photos.test.ts
+- apps/server/src/setup-staging.ts
+- apps/web/e2e/player-csv-import.spec.ts
+- apps/web/e2e/event-mode.spec.ts
+- apps/web/src/main.tsx
+- apps/web/src/styles.css
 
 ### Change Log
 
 - 2026-07-07: Created Story 1.3 context file and marked ready-for-dev.
+- 2026-07-07: Added shared photo review contracts and privacy/non-blocking contract tests.
+- 2026-07-07: Added Player photo matching adapter, internal CSV staging metadata, normalization, and adapter tests.
+- 2026-07-07: Added server photo upload route, setup staging, managed asset serving, and API security tests.
+- 2026-07-07: Added setup UI Player photos step, neutral placeholder display, and route-mocked UI coverage.
+- 2026-07-07: Added event-mode photo acceptance test and recorded passing Dev Gate.
+- 2026-07-07: Code review patches — metadata-first matching, ambiguous filenames, staging/asset cleanup, upload guards, schema refine, traversal hardening.
+
+### Review Findings
+
+- [x] [Review][Patch] Metadata-first matching false ambiguity when unique Photo Upload match exists [packages/imports/src/player-photos.ts:161]
+- [x] [Review][Patch] Ambiguous match issues omit candidate filenames required for diagnosis [packages/imports/src/player-photos.ts:89]
+- [x] [Review][Patch] Stale CSV remains staged when reimport has must_fix issues [apps/server/src/app.ts:131]
+- [x] [Review][Patch] Empty multipart upload overwrites prior matches with all placeholders [apps/server/src/app.ts:214]
+- [x] [Review][Patch] Empty normalized player name matches every uploaded filename [packages/imports/src/player-photos.ts:167]
+- [x] [Review][Patch] CSV reimport and photo re-upload leave orphan asset files on disk [apps/server/src/setup-staging.ts:17]
+- [x] [Review][Patch] Strict Content-Type check rejects valid files sent as application/octet-stream [apps/server/src/app.ts:287]
+- [x] [Review][Patch] photoAssetId not required when match status is matched [packages/shared/src/index.ts:111]
+- [x] [Review][Patch] Encoded URL traversal (%2e%2e) not blocked in asset request hook [apps/server/src/app.ts:313]
+- [x] [Review][Patch] Duplicate issue IDs when player names slugify identically [packages/imports/src/player-photos.ts:70]
+- [x] [Review][Defer] Concurrent photo upload requests can interleave staging writes [apps/server/src/app.ts:157] — deferred, single-operator event PC assumed for Story 1.3
+- [x] [Review][Defer] Full in-memory buffering of up to 200×10 MB uploads [apps/server/src/app.ts:194] — deferred, within spec limits; streaming is a later NFR
+- [x] [Review][Defer] Missing aggregate placeholder count copy in UI [apps/web/src/main.tsx:526] — deferred, suggested UX copy only
+- [x] [Review][Defer] No viewport layout regression tests for photo UI [apps/web/e2e/] — deferred, manual acceptance sufficient for this story
+- [x] [Review][Defer] getPlayerPhotos() staging accessor is unused [apps/server/src/setup-staging.ts:23] — deferred, reserved for Story 1.6 persistence seam
+- [x] [Review][Defer] File-count limit test lacks specific error code/message assertion [apps/server/src/player-photos.test.ts:233] — deferred, status range check meets minimum gate

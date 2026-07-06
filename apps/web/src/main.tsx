@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import {
   playerCsvImportReviewResponseSchema,
+  playerPhotoReviewResponseSchema,
   type ImportIssueSeverity,
-  type PlayerCsvImportReviewResponse
+  type PlayerCsvImportReviewResponse,
+  type PlayerPhotoReviewResponse
 } from "@auction-manager/shared";
 import "./styles.css";
 
@@ -50,13 +52,22 @@ const emptyIssueGroups: PlayerCsvImportReviewResponse["issueGroups"] = [
 
 function App() {
   const uploadGenerationRef = useRef(0);
+  const photoUploadGenerationRef = useRef(0);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [review, setReview] = useState<PlayerCsvImportReviewResponse | null>(null);
+  const [photoReview, setPhotoReview] = useState<PlayerPhotoReviewResponse | null>(null);
   const [uploadState, setUploadState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
+  const [photoUploadState, setPhotoUploadState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const issueGroups = review?.issueGroups ?? emptyIssueGroups;
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const issueGroups = mergeIssueGroups(review?.issueGroups, photoReview?.issueGroups);
+  const photoUploadDisabled =
+    !review || review.summary.startAuctionBlocked || review.summary.importedPlayers === 0;
   const reviewStatus = useMemo(() => {
     if (!review) {
       return {
@@ -102,11 +113,16 @@ function App() {
     }
 
     const previousReview = review;
+    const previousPhotoReview = photoReview;
     const uploadGeneration = ++uploadGenerationRef.current;
 
     setSelectedFileName(file.name);
     setReview(null);
+    setPhotoReview(null);
+    setSelectedPhotoFileNames([]);
     setUploadError(null);
+    setPhotoUploadError(null);
+    setPhotoUploadState("idle");
     setUploadState("loading");
 
     try {
@@ -125,6 +141,7 @@ function App() {
 
       if (!response.ok) {
         setReview(previousReview);
+        setPhotoReview(previousPhotoReview);
         setUploadState("error");
         setUploadError(await readUploadErrorMessage(response));
         return;
@@ -136,12 +153,14 @@ function App() {
 
       if (!parsedReview.success) {
         setReview(previousReview);
+        setPhotoReview(previousPhotoReview);
         setUploadState("error");
         setUploadError("Player CSV preview returned an unexpected response. Try again.");
         return;
       }
 
       setReview(parsedReview.data);
+      setPhotoReview(null);
       setUploadState("ready");
     } catch {
       if (uploadGeneration !== uploadGenerationRef.current) {
@@ -149,8 +168,71 @@ function App() {
       }
 
       setReview(previousReview);
+      setPhotoReview(previousPhotoReview);
       setUploadState("error");
       setUploadError("Player CSV could not be reviewed. Check the file and try again.");
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+
+  async function handlePlayerPhotosChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+
+    if (files.length === 0 || photoUploadDisabled) {
+      event.currentTarget.value = "";
+      return;
+    }
+
+    const previousPhotoReview = photoReview;
+    const uploadGeneration = ++photoUploadGenerationRef.current;
+
+    setSelectedPhotoFileNames(files.map((file) => file.name));
+    setPhotoReview(null);
+    setPhotoUploadError(null);
+    setPhotoUploadState("loading");
+
+    try {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("photos", file);
+      }
+
+      const response = await fetch("/api/setup/player-photos", {
+        method: "POST",
+        body: formData
+      });
+
+      if (uploadGeneration !== photoUploadGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok) {
+        setPhotoReview(previousPhotoReview);
+        setPhotoUploadState("error");
+        setPhotoUploadError(await readPhotoUploadErrorMessage(response));
+        return;
+      }
+
+      const parsedReview = playerPhotoReviewResponseSchema.safeParse(await response.json());
+
+      if (!parsedReview.success) {
+        setPhotoReview(previousPhotoReview);
+        setPhotoUploadState("error");
+        setPhotoUploadError("Player photo review returned an unexpected response. Try again.");
+        return;
+      }
+
+      setPhotoReview(parsedReview.data);
+      setPhotoUploadState("ready");
+    } catch {
+      if (uploadGeneration !== photoUploadGenerationRef.current) {
+        return;
+      }
+
+      setPhotoReview(previousPhotoReview);
+      setPhotoUploadState("error");
+      setPhotoUploadError("Player photos could not be reviewed. Check the files and try again.");
     } finally {
       event.currentTarget.value = "";
     }
@@ -377,19 +459,102 @@ function App() {
           </section>
         </div>
 
-        <div className="start-auction-row">
-          <p data-testid="start-auction-blocker">{blockerText}</p>
-          <button
-            className="primary-action primary-action-disabled"
-            data-testid="setup-start-auction"
-            disabled
-            type="button"
+      </section>
+
+      <section
+        className="setup-player-photos"
+        data-testid="setup-player-photos"
+        aria-labelledby="player-photos-title"
+      >
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Setup checklist</p>
+            <h2 id="player-photos-title">Player photos</h2>
+          </div>
+          <span className={photoReview ? "review-state review-state-ready" : "review-state"}>
+            <Upload aria-hidden="true" size={18} />
+            {photoReview ? "Photos reviewed" : "Awaiting photos"}
+          </span>
+        </div>
+
+        <div className="csv-upload-row">
+          <label
+            className={
+              photoUploadDisabled
+                ? "csv-upload-control csv-upload-control-disabled"
+                : "csv-upload-control"
+            }
+            htmlFor="player-photos-input"
           >
-            <PlayCircle aria-hidden="true" size={20} />
-            <span>Start Auction</span>
-          </button>
+            <Upload aria-hidden="true" size={20} />
+            <span>Choose Player photos</span>
+            <input
+              accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic,image/heif"
+              data-testid="player-photos-input"
+              disabled={photoUploadDisabled}
+              id="player-photos-input"
+              multiple
+              onChange={handlePlayerPhotosChange}
+              type="file"
+            />
+          </label>
+          <div className="csv-upload-status" aria-live="polite">
+            <strong>
+              {selectedPhotoFileNames.length
+                ? `${selectedPhotoFileNames.length} photo file${selectedPhotoFileNames.length === 1 ? "" : "s"} selected`
+                : "No photo files selected"}
+            </strong>
+            <span>
+              {photoUploadDisabled
+                ? "Import a valid Player CSV before adding photos."
+                : photoUploadState === "loading"
+                  ? "Reviewing Player photos..."
+                  : photoUploadState === "error"
+                    ? "Photo upload failed. Fix the files or try again."
+                    : "JPEG, PNG, WebP, and HEIC files are accepted where this event PC can decode them."}
+            </span>
+          </div>
+        </div>
+
+        {photoUploadError ? (
+          <p className="csv-error" role="alert">
+            <FileWarning aria-hidden="true" size={18} />
+            <span>{photoUploadError}</span>
+          </p>
+        ) : null}
+
+        <div className="csv-summary-grid photo-summary-grid" data-testid="player-photos-summary">
+          <article>
+            <span className="status-label">Matched photos</span>
+            <strong>{photoReview?.summary.matchedPhotos ?? 0} matched</strong>
+          </article>
+          <article>
+            <span className="status-label">Placeholders</span>
+            <strong>
+              {photoReview?.summary.placeholderPhotos ?? 0}{" "}
+              {(photoReview?.summary.placeholderPhotos ?? 0) === 1 ? "placeholder" : "placeholders"}
+            </strong>
+          </article>
+          <article className="neutral-summary">
+            <span className="status-label">Auction readiness</span>
+            <strong>Photos are non-blocking</strong>
+            <span>Start Auction is not blocked by missing photos.</span>
+          </article>
         </div>
       </section>
+
+      <div className="start-auction-row">
+        <p data-testid="start-auction-blocker">{blockerText}</p>
+        <button
+          className="primary-action primary-action-disabled"
+          data-testid="setup-start-auction"
+          disabled
+          type="button"
+        >
+          <PlayCircle aria-hidden="true" size={20} />
+          <span>Start Auction</span>
+        </button>
+      </div>
     </main>
   );
 }
@@ -413,4 +578,42 @@ async function readUploadErrorMessage(response: Response): Promise<string> {
   }
 
   return "Player CSV could not be reviewed. Check the file and try again.";
+}
+
+async function readPhotoUploadErrorMessage(response: Response): Promise<string> {
+  if (response.status === 409) {
+    return "Import the Player CSV before uploading Player photos.";
+  }
+
+  if (response.status === 413) {
+    return "A Player photo exceeds the 10 MB upload limit.";
+  }
+
+  if (response.status === 400 || response.status === 415) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    return body?.message ?? "Upload Player photos as JPEG, PNG, WebP, or HEIC files.";
+  }
+
+  return "Player photos could not be reviewed. Check the files and try again.";
+}
+
+function mergeIssueGroups(
+  csvGroups: PlayerCsvImportReviewResponse["issueGroups"] | undefined,
+  photoGroups: PlayerPhotoReviewResponse["issueGroups"] | undefined
+): PlayerCsvImportReviewResponse["issueGroups"] {
+  const sourceCsvGroups = csvGroups ?? emptyIssueGroups;
+  const sourcePhotoGroups = photoGroups ?? emptyIssueGroups;
+
+  return emptyIssueGroups.map((emptyGroup) => {
+    const csvGroup = sourceCsvGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
+    const photoGroup =
+      sourcePhotoGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
+    const issues = [...csvGroup.issues, ...photoGroup.issues];
+
+    return {
+      severity: emptyGroup.severity,
+      count: issues.length,
+      issues
+    };
+  });
 }

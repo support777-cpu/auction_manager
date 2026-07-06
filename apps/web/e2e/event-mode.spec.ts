@@ -10,6 +10,10 @@ const invalidCsvPath = join(
   process.cwd(),
   "_bmad-output/test-artifacts/sample-test-data/players-invalid.csv"
 );
+const tinyPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  "base64"
+);
 
 test("serves the app shell and health endpoint from event mode", async ({
   page,
@@ -67,4 +71,33 @@ test("keeps Start Auction blocked for invalid Player CSV in event mode", async (
     "Blocked: 4 Player CSV issues must be fixed in the source CSV and reimported."
   );
   await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+});
+
+test("uploads Player photos in event mode and keeps missing photos non-blocking", async ({
+  page
+}) => {
+  await page.goto("/");
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("player-photos-input").setInputFiles([
+    {
+      name: "aarav_menon.jpg",
+      mimeType: "image/jpeg",
+      buffer: tinyPng
+    }
+  ]);
+
+  await expect(page.getByTestId("player-photos-summary")).toContainText("1 matched");
+  await expect(page.getByTestId("player-photos-summary")).toContainText("7 placeholders");
+  await expect(page.getByTestId("import-issue-group-can_proceed_with_placeholder")).toContainText(
+    "Dev Patel has no matched photo; player placeholder will be used."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+  await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/photo/i);
 });

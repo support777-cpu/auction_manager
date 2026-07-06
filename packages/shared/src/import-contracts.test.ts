@@ -1,6 +1,10 @@
 import {
+  photoMatchStatusValues,
+  playerPhotoMatchRecordSchema,
+  playerPhotoReviewResponseSchema,
   playerCsvImportReviewResponseSchema,
   setupPlayerPreviewSchema,
+  importIssueCodeValues,
   importIssueSeverityValues,
   auctionRoleValues,
   phase1CategoryValues
@@ -120,5 +124,122 @@ describe("Player CSV import shared contracts", () => {
     expect(review.issueGroups.map((group) => group.severity)).toEqual(
       importIssueSeverityValues
     );
+  });
+
+  it("exposes strict privacy-safe photo review records with only internal asset IDs", () => {
+    expect(photoMatchStatusValues).toEqual([
+      "matched",
+      "missing_uses_placeholder",
+      "ambiguous_uses_placeholder",
+      "undecodable_uses_placeholder"
+    ]);
+    expect(importIssueCodeValues).toEqual(
+      expect.arrayContaining([
+        "missing_player_photo",
+        "unsupported_photo_format",
+        "ambiguous_photo_match",
+        "unmatched_photo_file",
+        "photo_not_decodable",
+        "photo_storage_failed"
+      ])
+    );
+
+    const matchRecord = playerPhotoMatchRecordSchema.parse({
+      player: {
+        sourceRowNumber: 2,
+        name: "Aarav Menon",
+        gender: "Male",
+        role: "Ace",
+        phase1Category: "Ace Men"
+      },
+      status: "matched",
+      photoAssetId: "asset-player-aarav-menon"
+    });
+
+    expect(matchRecord.photoAssetId).toBe("asset-player-aarav-menon");
+    expect(JSON.stringify(matchRecord)).not.toContain("aarav_menon.jpg");
+    expect(JSON.stringify(matchRecord)).not.toContain("/Users/operator/Desktop");
+    for (const privateField of privateSourceFieldNames) {
+      expect(matchRecord.player).not.toHaveProperty(privateField);
+    }
+
+    expect(() =>
+      playerPhotoMatchRecordSchema.parse({
+        ...matchRecord,
+        sourcePath: "/Users/operator/Desktop/aarav_menon.jpg"
+      })
+    ).toThrow();
+
+    expect(() =>
+      playerPhotoMatchRecordSchema.parse({
+        player: matchRecord.player,
+        status: "matched"
+      })
+    ).toThrow();
+  });
+
+  it("keeps photo placeholders out of start-auction blocking logic", () => {
+    const review = playerPhotoReviewResponseSchema.parse({
+      players: [
+        {
+          player: {
+            sourceRowNumber: 2,
+            name: "Aarav Menon",
+            gender: "Male",
+            role: "Ace",
+            phase1Category: "Ace Men"
+          },
+          status: "matched",
+          photoAssetId: "asset-player-aarav-menon"
+        },
+        {
+          player: {
+            sourceRowNumber: 3,
+            name: "Dev Patel",
+            gender: "Male",
+            role: "Bowling",
+            phase1Category: "Men Bowlers"
+          },
+          status: "missing_uses_placeholder"
+        }
+      ],
+      issueGroups: [
+        {
+          severity: "must_fix",
+          count: 0,
+          issues: []
+        },
+        {
+          severity: "can_proceed_with_placeholder",
+          count: 1,
+          issues: [
+            {
+              id: "photo-missing-dev-patel",
+              severity: "can_proceed_with_placeholder",
+              code: "missing_player_photo",
+              message: "Dev Patel has no matched photo; player placeholder will be used.",
+              playerName: "Dev Patel"
+            }
+          ]
+        },
+        {
+          severity: "ignored_source_field",
+          count: 0,
+          issues: []
+        }
+      ],
+      summary: {
+        totalPlayers: 2,
+        matchedPhotos: 1,
+        placeholderPhotos: 1,
+        mustFixCount: 0,
+        canProceedWithPlaceholderCount: 1,
+        ignoredSourceFieldCount: 0,
+        startAuctionBlocked: false
+      }
+    });
+
+    expect(review.summary.startAuctionBlocked).toBe(false);
+    expect(review.summary.placeholderPhotos).toBe(1);
   });
 });

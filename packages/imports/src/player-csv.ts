@@ -35,6 +35,16 @@ type PlayerCsvRequiredHeader = (typeof playerCsvRequiredHeaders)[number];
 type CsvRecord = Record<string, string | undefined>;
 type NormalizedSkill = "Ace" | "Batting" | "Bowling" | "AllRounder";
 
+export interface PlayerSetupStagingRecord {
+  readonly player: SetupPlayerPreview;
+  readonly photoUploadValue?: string;
+}
+
+export interface PlayerCsvSetupStaging {
+  readonly review: PlayerCsvImportReviewResponse;
+  readonly players: readonly PlayerSetupStagingRecord[];
+}
+
 const auctionSourceColumns = new Set<PlayerCsvRequiredHeader>([
   "Full Name",
   "Gender",
@@ -44,26 +54,34 @@ const auctionSourceColumns = new Set<PlayerCsvRequiredHeader>([
 const maxPlayerCsvRecordSizeBytes = 32 * 1024;
 
 export function parsePlayerCsvForSetup(csvText: string): PlayerCsvImportReviewResponse {
+  return parsePlayerCsvForSetupStaging(csvText).review;
+}
+
+export function parsePlayerCsvForSetupStaging(csvText: string): PlayerCsvSetupStaging {
   const parsedCsv = parseCsv(csvText);
 
   if (!parsedCsv.ok) {
-    return buildReview({
-      players: [],
-      issues: [
-        createIssue({
-          id: "parse-error",
-          severity: "must_fix",
-          code: "parse_error",
-          message: "Player CSV could not be parsed. Export the source sheet as CSV and reimport."
-        })
-      ],
-      totalRows: 0
-    });
+    return {
+      review: buildReview({
+        players: [],
+        issues: [
+          createIssue({
+            id: "parse-error",
+            severity: "must_fix",
+            code: "parse_error",
+            message: "Player CSV could not be parsed. Export the source sheet as CSV and reimport."
+          })
+        ],
+        totalRows: 0
+      }),
+      players: []
+    };
   }
 
   const { headers, rows } = parsedCsv;
   const issues: ImportIssue[] = [];
   const players: SetupPlayerPreview[] = [];
+  const stagingPlayers: PlayerSetupStagingRecord[] = [];
   const headerSet = new Set(headers);
 
   issues.push(...createIgnoredSourceFieldIssues(headers));
@@ -81,11 +99,14 @@ export function parsePlayerCsvForSetup(csvText: string): PlayerCsvImportReviewRe
   }
 
   if (hasMustFixHeaderIssues(issues)) {
-    return buildReview({
-      players,
-      issues,
-      totalRows: rows.length
-    });
+    return {
+      review: buildReview({
+        players,
+        issues,
+        totalRows: rows.length
+      }),
+      players: stagingPlayers
+    };
   }
 
   if (rows.length === 0) {
@@ -98,11 +119,14 @@ export function parsePlayerCsvForSetup(csvText: string): PlayerCsvImportReviewRe
       })
     );
 
-    return buildReview({
-      players,
-      issues,
-      totalRows: 0
-    });
+    return {
+      review: buildReview({
+        players,
+        issues,
+        totalRows: 0
+      }),
+      players: stagingPlayers
+    };
   }
 
   rows.forEach((row, rowIndex) => {
@@ -200,21 +224,29 @@ export function parsePlayerCsvForSetup(csvText: string): PlayerCsvImportReviewRe
     }
 
     if (name && gender && mapping) {
-      players.push({
+      const player = {
         sourceRowNumber,
         name,
         gender,
         role: mapping.role,
         phase1Category: mapping.phase1Category
+      };
+      players.push(player);
+      stagingPlayers.push({
+        player,
+        ...(getCell(row, "Photo Upload") ? { photoUploadValue: getCell(row, "Photo Upload") } : {})
       });
     }
   });
 
-  return buildReview({
-    players,
-    issues,
-    totalRows: rows.length
-  });
+  return {
+    review: buildReview({
+      players,
+      issues,
+      totalRows: rows.length
+    }),
+    players: stagingPlayers
+  };
 }
 
 function parseCsv(csvText: string):
