@@ -332,7 +332,8 @@ button:focus-visible {
   color: #111827;
 }
 
-.csv-error {
+.csv-error,
+.command-error {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -606,12 +607,87 @@ button:focus-visible {
   padding: 24px;
 }
 
+.current-player-layout {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+}
+
+.current-player-media {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.current-player-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-photo-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  place-items: center;
+  padding: 16px;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.current-player-details {
+  min-width: 0;
+}
+
 .current-player-panel h2 {
   margin: 0 0 10px;
   color: #111827;
   font-size: 32px;
   line-height: 1.15;
   letter-spacing: 0;
+}
+
+.current-player-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.current-player-facts div {
+  min-height: 66px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f9fafb;
+}
+
+.current-player-facts dt,
+.current-player-facts dd {
+  margin: 0;
+}
+
+.current-player-facts dt {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.current-player-facts dd {
+  margin-top: 6px;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .current-player-panel p:last-child {
@@ -633,6 +709,12 @@ button:focus-visible {
   color: #111827;
   font-size: 28px;
   line-height: 1.2;
+}
+
+.bid-panel .current-bid-live {
+  color: #9a5b00;
+  font-size: 52px;
+  line-height: 1;
 }
 
 .phase1-progress-panel {
@@ -791,6 +873,8 @@ button:focus-visible {
   .review-layout,
   .parameter-grid,
   .auction-parameters-summary,
+  .current-player-layout,
+  .current-player-facts,
   .board-main,
   .phase1-progress-summary,
   .phase1-category-grid,
@@ -822,6 +906,14 @@ button:focus-visible {
 
   .team-tile dl {
     grid-template-columns: 1fr;
+  }
+
+  .current-player-media {
+    max-width: 220px;
+  }
+
+  .bid-panel .current-bid-live {
+    font-size: 44px;
   }
 }
 

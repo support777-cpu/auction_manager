@@ -191,6 +191,142 @@ describe("auction manager event server", () => {
 
     await app.close();
   });
+
+  it("reveals next player from a started auction and resumes revealed board state", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+    await stageValidSetup(app);
+
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-1" }
+    });
+    expect(start.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-1" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.result).toMatchObject({
+      command: "RevealNextPlayer",
+      clientCommandId: "cmd-reveal-1"
+    });
+    expect(body.result.message).toMatch(/^Revealed .+ at base price \d+\.$/);
+    expect(body.state.currentPlayer).toMatchObject({
+      status: "Current"
+    });
+    expect(body.state.currentBid).toBe(body.state.currentPlayer.basePrice);
+    expect(body.state.phase1Progress).toMatchObject({
+      orderedPlayerCount: 8,
+      pendingPlayerCount: 7,
+      revealedPlayerCount: 1
+    });
+    expect(body.state.phase1Progress.categories).toContainEqual({
+      category: body.state.currentPlayer.phase1Category,
+      total: expect.any(Number),
+      pending: expect.any(Number),
+      completed: 0
+    });
+    expect(JSON.stringify(body)).not.toContain("private-player@example.com");
+    expect(JSON.stringify(body)).not.toContain("UPI-PRIVATE");
+
+    const stateResponse = await app.inject({ method: "GET", url: "/api/state" });
+    expect(stateResponse.statusCode).toBe(200);
+    expect(stateResponse.json()).toMatchObject({
+      mode: "auction",
+      state: {
+        currentPlayer: {
+          id: body.state.currentPlayer.id
+        },
+        currentBid: body.state.currentBid,
+        phase1Progress: body.state.phase1Progress
+      }
+    });
+
+    await app.close();
+  });
+
+  it("validates Reveal Next content type and clientCommandId", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "text/plain" },
+      payload: "reveal"
+    });
+    expect(unsupported.statusCode).toBe(415);
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: {}
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it("rejects duplicate Reveal Next command id and second reveal while current player is unresolved", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+    await stageValidSetup(app);
+
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-1" }
+    });
+    expect(start.statusCode).toBe(200);
+
+    const firstReveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-1" }
+    });
+    expect(firstReveal.statusCode).toBe(200);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-1" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: "duplicate_client_command_id"
+    });
+
+    const secondReveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-2" }
+    });
+    expect(secondReveal.statusCode).toBe(409);
+    expect(secondReveal.json()).toMatchObject({
+      error: "current_player_requires_outcome"
+    });
+
+    await app.close();
+  });
 });
 
 async function createWebDistFixture() {

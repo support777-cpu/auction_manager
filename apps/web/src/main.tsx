@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import {
   CheckCircle2,
   Circle,
+  AlertCircle,
   FileWarning,
   ListChecks,
   PlayCircle,
@@ -17,6 +18,7 @@ import {
   auctionParameterReviewResponseSchema,
   appStateResponseSchema,
   auctionRoleValues,
+  revealNextPlayerResponseSchema,
   startAuctionResponseSchema,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
@@ -26,8 +28,7 @@ import {
   type AuctionParameterReviewResponse,
   type AuctionParameterReviewParameters,
   type AuctionRole,
-  type BoardStateDto,
-  type Phase1ProgressDto
+  type BoardStateDto
 } from "@auction-manager/shared";
 import { AuctionParametersSection } from "./auction-parameters-section.js";
 import {
@@ -36,6 +37,10 @@ import {
   parsePhase1CategoryOrderTextStrict,
   type ParameterNumberFields
 } from "./auction-parameters-helpers.js";
+import {
+  canRevealNextPlayer,
+  getPhase1OrderStatusLabel
+} from "./auction-board-helpers.js";
 import "./styles.css";
 
 const phases = [
@@ -94,6 +99,8 @@ function App() {
   const parameterPreviewGenerationRef = useRef(0);
   const stateLoadGenerationRef = useRef(0);
   const startAuctionGenerationRef = useRef(0);
+  const revealNextGenerationRef = useRef(0);
+  const revealNextInFlightRef = useRef(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -148,6 +155,10 @@ function App() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [startAuctionError, setStartAuctionError] = useState<string | null>(null);
+  const [revealNextState, setRevealNextState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [revealNextError, setRevealNextError] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -196,6 +207,23 @@ function App() {
     parameterLoadGenerationRef.current += 1;
     setParameterSaveState("idle");
     setParameterReview(null);
+  }, []);
+
+  const refreshBoardState = useCallback(async () => {
+    try {
+      const response = await fetch("/api/state");
+      const parsedState = appStateResponseSchema.safeParse(await response.json());
+
+      if (!response.ok || !parsedState.success) {
+        return;
+      }
+
+      if (parsedState.data.mode === "auction") {
+        setBoardState(parsedState.data.state);
+      }
+    } catch {
+      // Keep the current board state when resync fails.
+    }
   }, []);
 
   useEffect(() => {
@@ -706,7 +734,7 @@ function App() {
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          clientCommandId: createClientCommandId()
+          clientCommandId: createClientCommandId("start")
         })
       });
       const responseBody = (await response.json().catch(() => null)) as unknown;
@@ -730,6 +758,61 @@ function App() {
       }
       setStartAuctionState("error");
       setStartAuctionError("Start Auction could not be completed. Try again.");
+    }
+  }
+
+  async function handleRevealNext() {
+    if (
+      !boardState ||
+      !canRevealNextPlayer(boardState) ||
+      revealNextState === "loading" ||
+      revealNextInFlightRef.current
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++revealNextGenerationRef.current;
+    revealNextInFlightRef.current = true;
+    setRevealNextState("loading");
+    setRevealNextError(null);
+
+    try {
+      const response = await fetch("/api/auction/reveal-next", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("reveal")
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = revealNextPlayerResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== revealNextGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok || !parsedResponse.success) {
+        setRevealNextState("error");
+        setRevealNextError(readRevealNextErrorMessage(response, responseBody));
+        await refreshBoardState();
+        return;
+      }
+
+      setBoardState(parsedResponse.data.state);
+      setRevealNextState("ready");
+    } catch {
+      if (commandGeneration !== revealNextGenerationRef.current) {
+        return;
+      }
+      setRevealNextState("error");
+      setRevealNextError("Reveal Next Player could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === revealNextGenerationRef.current) {
+        revealNextInFlightRef.current = false;
+      }
     }
   }
 
@@ -810,7 +893,16 @@ function App() {
   }
 
   if (boardState) {
-    return <AuctionBoard boardState={boardState} />;
+    return (
+      <AuctionBoard
+        boardState={boardState}
+        onRevealNext={() => {
+          void handleRevealNext();
+        }}
+        revealNextError={revealNextError}
+        revealNextState={revealNextState}
+      />
+    );
   }
 
   return (
@@ -1340,20 +1432,21 @@ function App() {
   );
 }
 
-function getPhase1OrderStatusLabel(progress: Phase1ProgressDto): string {
-  if (progress.orderedPlayerCount === 0) {
-    return "No Phase 1 players ordered";
-  }
-  if (progress.pendingPlayerCount === progress.orderedPlayerCount) {
-    return "Phase 1 order ready";
-  }
-  if (progress.pendingPlayerCount === 0) {
-    return "Phase 1 order complete";
-  }
-  return "Phase 1 in progress";
-}
+function AuctionBoard({
+  boardState,
+  onRevealNext,
+  revealNextError,
+  revealNextState
+}: {
+  readonly boardState: BoardStateDto;
+  readonly onRevealNext: () => void;
+  readonly revealNextError: string | null;
+  readonly revealNextState: "idle" | "loading" | "ready" | "error";
+}) {
+  const currentPlayer = boardState.currentPlayer;
+  const revealDisabled =
+    !canRevealNextPlayer(boardState) || revealNextState === "loading";
 
-function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
   return (
     <main className="app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
@@ -1377,7 +1470,10 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
           <article>
             <span className="status-label">Recovery</span>
             <strong>Snapshot warning</strong>
-            <span>Auction started, but the local recovery snapshot could not be written.</span>
+            <span>
+              Local recovery snapshot could not be written. Resolve persistence before
+              the next command.
+            </span>
           </article>
         ) : null}
       </section>
@@ -1413,24 +1509,95 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
             data-testid="current-player-panel"
             aria-labelledby="current-player-title"
           >
-            <h2 id="current-player-title">No Current Player</h2>
-            <p data-testid="phase1-current-category">
-              Current category: {boardState.phase1Progress.currentCategory ?? "None"}
-            </p>
+            {currentPlayer ? (
+              <div className="current-player-layout">
+                <div className="current-player-media">
+                  {currentPlayer.photoAssetId ? (
+                    <img
+                      alt={`${currentPlayer.name} player photo`}
+                      data-testid="current-player-photo"
+                      src={`/assets/players/${currentPlayer.photoAssetId}.webp`}
+                    />
+                  ) : (
+                    <div
+                      aria-label="Player photo placeholder"
+                      className="player-photo-placeholder"
+                      data-testid="current-player-photo-placeholder"
+                      role="img"
+                    >
+                      Player photo placeholder
+                    </div>
+                  )}
+                </div>
+                <div className="current-player-details">
+                  <h2 id="current-player-title" data-testid="current-player-name">
+                    {currentPlayer.name}
+                  </h2>
+                  <dl className="current-player-facts">
+                    <div>
+                      <dt>Role</dt>
+                      <dd data-testid="current-player-role">{currentPlayer.role}</dd>
+                    </div>
+                    <div>
+                      <dt>Base price</dt>
+                      <dd data-testid="current-player-base-price">
+                        {currentPlayer.basePrice}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p data-testid="phase1-current-category">
+                    Current category: {boardState.phase1Progress.currentCategory ?? "None"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 id="current-player-title">No Current Player</h2>
+                <p data-testid="phase1-current-category">
+                  Current category: {boardState.phase1Progress.currentCategory ?? "None"}
+                </p>
+              </>
+            )}
           </section>
 
           <section className="bid-panel" aria-label="Current bid">
             <span className="status-label">Current bid</span>
-            <strong data-testid="current-bid">No current bid</strong>
+            <strong
+              className={
+                currentPlayer && boardState.currentBid !== null
+                  ? "current-bid-live"
+                  : undefined
+              }
+              data-testid="current-bid"
+            >
+              {currentPlayer && boardState.currentBid !== null
+                ? boardState.currentBid
+                : "No current bid"}
+            </strong>
             <button
-              className="primary-action primary-action-disabled"
+              className={
+                revealDisabled
+                  ? "primary-action primary-action-disabled"
+                  : "primary-action"
+              }
               data-testid="reveal-next"
-              disabled
+              disabled={revealDisabled}
+              onClick={onRevealNext}
               type="button"
             >
               <PlayCircle aria-hidden="true" size={20} />
-              <span>Reveal Next Player</span>
+              <span>
+                {revealNextState === "loading"
+                  ? "Revealing Player..."
+                  : "Reveal Next Player"}
+              </span>
             </button>
+            {revealNextError ? (
+              <p className="command-error" role="alert">
+                <AlertCircle aria-hidden="true" size={18} />
+                <span>{revealNextError}</span>
+              </p>
+            ) : null}
           </section>
         </div>
 
@@ -1452,11 +1619,15 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
             </div>
             <div>
               <dt>Pending</dt>
-              <dd>{boardState.phase1Progress.pendingPlayerCount}</dd>
+              <dd data-testid="phase1-pending-count">
+                {boardState.phase1Progress.pendingPlayerCount}
+              </dd>
             </div>
             <div>
               <dt>Revealed</dt>
-              <dd>{boardState.phase1Progress.revealedPlayerCount}</dd>
+              <dd data-testid="phase1-revealed-count">
+                {boardState.phase1Progress.revealedPlayerCount}
+              </dd>
             </div>
           </dl>
           <div className="phase1-category-grid" aria-label="Phase 1 categories">
@@ -1648,12 +1819,32 @@ function readStartAuctionErrorMessage(
   return "Start Auction could not be completed. Try again.";
 }
 
-function createClientCommandId(): string {
-  if ("crypto" in window && "randomUUID" in window.crypto) {
-    return `start_${window.crypto.randomUUID()}`;
+function readRevealNextErrorMessage(
+  response: Response,
+  body: unknown
+): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
   }
 
-  return `start_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  if (response.status === 409) {
+    return "Reveal Next Player is blocked by the current auction state.";
+  }
+
+  return "Reveal Next Player could not be completed. Try again.";
+}
+
+function createClientCommandId(command: "start" | "reveal"): string {
+  if ("crypto" in window && "randomUUID" in window.crypto) {
+    return `${command}_${window.crypto.randomUUID()}`;
+  }
+
+  return `${command}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 function mergeIssueGroups(

@@ -13,7 +13,8 @@
 - persistence_failure marking happens outside the commit transaction — rare crash window; snapshot failure still blocks mutations
 - Board DTO includes phase1/sold fields beyond the story's literal allowlist — fields are null-safe and needed for later live phases
 
-## Deferred from: code review of 2-1-create-persisted-phase-1-player-order (2026-07-07)
+## Deferred from: code review of 2-2-reveal-current-player-on-the-live-board (2026-07-07)
 
-- Legacy Story 1.6 rows cannot recover original within-category shuffle — identity backfill is the documented compatibility tradeoff for upgraded in-flight auctions
-- Domain order generation invoked from persistence for legacy migration — accepted story-scoped compatibility seam per Dev Agent Record
+- Concurrent reveal lost-update race without optimistic concurrency — matches existing Start Auction pattern until concurrent live commands land
+- Application-level duplicate clientCommandId pre-check is racy and O(n) — consistent with Start Auction idempotency pattern
+- Strict undoHistory schema will need widening for future live commands — intentional for Story 2.2 scope

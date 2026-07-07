@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { createAuctionRepository, PersistenceSnapshotWriteError } from "./index.js";
 import type { AuctionState } from "@auction-manager/shared";
+import { revealNextPlayer } from "@auction-manager/domain";
 
 describe("auction repository", () => {
   it("commits current state, action log, and latest snapshot", async () => {
@@ -197,6 +198,207 @@ describe("auction repository", () => {
       repository.commitStartAuction({
         state: { ...createState(), auctionId: "auction-2" },
         clientCommandId: "cmd-2"
+      })
+    ).rejects.toThrow("persistence failure");
+    repository.close();
+  });
+
+  it("commits Reveal Next Player state, undoable action log, and latest snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const state = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state,
+      clientCommandId: "cmd-start-1"
+    });
+    const reveal = revealNextPlayer({
+      state,
+      now: () => "2026-07-07T09:00:00.000Z"
+    });
+    expect(reveal.ok).toBe(true);
+    if (!reveal.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitRevealNextPlayer({
+      previousState: state,
+      state: reveal.state,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: reveal.revealedPlayerId,
+      summary: reveal.summary
+    });
+
+    expect(repository.loadCurrentState()).toEqual(reveal.state);
+    expect(JSON.parse(await readFile(join(directory, "snapshots/latest.json"), "utf8")))
+      .toEqual(reveal.state);
+    expect(repository.listActionLog()).toMatchObject([
+      {
+        command: "StartAuction",
+        clientCommandId: "cmd-start-1",
+        undoable: false
+      },
+      {
+        command: "RevealNextPlayer",
+        clientCommandId: "cmd-reveal-1",
+        summary: "Revealed Aarav Menon at base price 10.",
+        undoable: true
+      }
+    ]);
+    expect(JSON.parse(repository.listActionLog()[1]?.payloadJson ?? "{}")).toEqual({
+      command: "RevealNextPlayer",
+      playerId: "player-1",
+      previous: {
+        currentPlayerId: null,
+        currentBid: null,
+        selectedTeamId: null,
+        playerStatus: "Pending"
+      },
+      next: {
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: null
+      },
+      undo: {
+        command: "RevealNextPlayer",
+        playerId: "player-1",
+        previousCurrentPlayerId: null,
+        previousCurrentBid: null,
+        previousSelectedTeamId: null,
+        previousPlayerStatus: "Pending",
+        timestamp: "2026-07-07T09:00:00.000Z"
+      }
+    });
+
+    repository.close();
+  });
+
+  it("reopens and resumes revealed current player state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const state = createMultiPlayerState();
+    await firstRepository.commitStartAuction({
+      state,
+      clientCommandId: "cmd-start-1"
+    });
+    const reveal = revealNextPlayer({
+      state,
+      now: () => "2026-07-07T09:00:00.000Z"
+    });
+    expect(reveal.ok).toBe(true);
+    if (!reveal.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitRevealNextPlayer({
+      previousState: state,
+      state: reveal.state,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: reveal.revealedPlayerId,
+      summary: reveal.summary
+    });
+    firstRepository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()).toEqual(reveal.state);
+    reopenedRepository.close();
+  });
+
+  it("rejects duplicate reveal clientCommandId without a second reveal action", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const state = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state,
+      clientCommandId: "cmd-start-1"
+    });
+    const reveal = revealNextPlayer({
+      state,
+      now: () => "2026-07-07T09:00:00.000Z"
+    });
+    expect(reveal.ok).toBe(true);
+    if (!reveal.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitRevealNextPlayer({
+      previousState: state,
+      state: reveal.state,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: reveal.revealedPlayerId,
+      summary: reveal.summary
+    });
+    await expect(
+      repository.commitRevealNextPlayer({
+        previousState: state,
+        state: reveal.state,
+        clientCommandId: "cmd-reveal-1",
+        revealedPlayerId: reveal.revealedPlayerId,
+        summary: reveal.summary
+      })
+    ).rejects.toThrow("Duplicate clientCommandId");
+
+    expect(repository.listActionLog().filter((entry) => entry.command === "RevealNextPlayer"))
+      .toHaveLength(1);
+    repository.close();
+  });
+
+  it("marks snapshot failure after reveal and blocks later live mutations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const validSnapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({
+      databasePath,
+      snapshotPath: validSnapshotPath
+    });
+    const state = createMultiPlayerState();
+    await firstRepository.commitStartAuction({
+      state,
+      clientCommandId: "cmd-start-1"
+    });
+    firstRepository.close();
+
+    const repository = createAuctionRepository({
+      databasePath,
+      snapshotPath: directory
+    });
+    const reveal = revealNextPlayer({
+      state,
+      now: () => "2026-07-07T09:00:00.000Z"
+    });
+    expect(reveal.ok).toBe(true);
+    if (!reveal.ok) {
+      repository.close();
+      return;
+    }
+
+    await expect(
+      repository.commitRevealNextPlayer({
+        previousState: state,
+        state: reveal.state,
+        clientCommandId: "cmd-reveal-1",
+        revealedPlayerId: reveal.revealedPlayerId,
+        summary: reveal.summary
+      })
+    ).rejects.toBeInstanceOf(PersistenceSnapshotWriteError);
+
+    expect(repository.loadCurrentState()?.persistenceFailure).toContain("snapshot");
+    await expect(
+      repository.commitRevealNextPlayer({
+        previousState: state,
+        state: reveal.state,
+        clientCommandId: "cmd-reveal-2",
+        revealedPlayerId: reveal.revealedPlayerId,
+        summary: reveal.summary
       })
     ).rejects.toThrow("persistence failure");
     repository.close();

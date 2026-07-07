@@ -16,10 +16,18 @@ export interface CommitStartAuctionInput {
   readonly clientCommandId: string;
 }
 
+export interface CommitRevealNextPlayerInput {
+  readonly previousState: AuctionState;
+  readonly state: AuctionState;
+  readonly clientCommandId: string;
+  readonly revealedPlayerId: string;
+  readonly summary: string;
+}
+
 export interface ActionLogEntry {
   readonly actionId: number;
   readonly auctionId: string;
-  readonly command: "StartAuction";
+  readonly command: "StartAuction" | "RevealNextPlayer";
   readonly clientCommandId: string;
   readonly timestamp: string;
   readonly summary: string;
@@ -29,6 +37,9 @@ export interface ActionLogEntry {
 
 export interface AuctionRepository {
   readonly commitStartAuction: (input: CommitStartAuctionInput) => Promise<void>;
+  readonly commitRevealNextPlayer: (
+    input: CommitRevealNextPlayerInput
+  ) => Promise<void>;
   readonly loadCurrentState: () => AuctionState | null;
   readonly listActionLog: () => readonly ActionLogEntry[];
   readonly close: () => void;
@@ -128,6 +139,72 @@ export function createAuctionRepository(
     }
   );
 
+  const revealTransaction = database.transaction(
+    (input: CommitRevealNextPlayerInput) => {
+      assertMutationsAllowed(database);
+      const duplicateCommand = database
+        .prepare("SELECT 1 AS found FROM action_log WHERE client_command_id = ?")
+        .get(input.clientCommandId) as { found: 1 } | undefined;
+      if (duplicateCommand) {
+        throw new DuplicateClientCommandError(input.clientCommandId);
+      }
+
+      const currentAuction = database
+        .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
+        .get() as { auctionId: string } | undefined;
+      if (!currentAuction || currentAuction.auctionId !== input.state.auctionId) {
+        throw new Error("Cannot commit reveal without an active matching auction.");
+      }
+
+      database
+        .prepare(
+          `UPDATE auction_state
+              SET state_json = @stateJson,
+                  phase = @phase,
+                  updated_at = @updatedAt,
+                  persistence_failure = NULL
+            WHERE auction_id = @auctionId`
+        )
+        .run({
+          auctionId: input.state.auctionId,
+          stateJson: JSON.stringify(input.state),
+          phase: input.state.phase,
+          updatedAt: input.state.updatedAt
+        });
+      database
+        .prepare(
+          `INSERT INTO action_log
+            (auction_id, command, client_command_id, timestamp, summary, payload_json, undoable)
+            VALUES (?, 'RevealNextPlayer', ?, ?, ?, ?, 1)`
+        )
+        .run(
+          input.state.auctionId,
+          input.clientCommandId,
+          input.state.updatedAt,
+          input.summary,
+          JSON.stringify({
+            command: "RevealNextPlayer",
+            playerId: input.revealedPlayerId,
+            previous: {
+              currentPlayerId: input.previousState.currentPlayerId,
+              currentBid: input.previousState.currentBid,
+              selectedTeamId: input.previousState.selectedTeamId,
+              playerStatus:
+                input.previousState.players.find(
+                  (player) => player.id === input.revealedPlayerId
+                )?.status ?? null
+            },
+            next: {
+              currentPlayerId: input.state.currentPlayerId,
+              currentBid: input.state.currentBid,
+              selectedTeamId: input.state.selectedTeamId
+            },
+            undo: input.state.undoHistory.at(-1) ?? null
+          })
+        );
+    }
+  );
+
   return {
     commitStartAuction: async (input) => {
       const parsed = auctionStateSchema.parse(input.state);
@@ -151,6 +228,32 @@ export function createAuctionRepository(
         );
         throw new PersistenceSnapshotWriteError(
           "Start Auction committed, but latest snapshot could not be written.",
+          { cause: error }
+        );
+      }
+    },
+    commitRevealNextPlayer: async (input) => {
+      const parsed = auctionStateSchema.parse(input.state);
+      try {
+        revealTransaction({ ...input, state: parsed });
+      } catch (error) {
+        if (isDuplicateClientCommandError(error, input.clientCommandId)) {
+          throw new DuplicateClientCommandError(input.clientCommandId);
+        }
+        throw error;
+      }
+      try {
+        await mkdir(dirname(options.snapshotPath), { recursive: true });
+        await writeFile(options.snapshotPath, JSON.stringify(parsed, null, 2), "utf8");
+      } catch (error) {
+        markPersistenceFailure(
+          database,
+          parsed.auctionId,
+          "snapshot_write_failed",
+          options.snapshotPath
+        );
+        throw new PersistenceSnapshotWriteError(
+          "Reveal Next Player committed, but latest snapshot could not be written.",
           { cause: error }
         );
       }

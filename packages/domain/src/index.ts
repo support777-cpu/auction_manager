@@ -19,6 +19,12 @@ export {
   type StartAuctionFromSetupResult
 } from "./start-auction.js";
 export {
+  revealNextPlayer,
+  type RevealNextPlayerErrorCode,
+  type RevealNextPlayerInput,
+  type RevealNextPlayerResult
+} from "./reveal-next-player.js";
+export {
   createPhase1Order,
   type CreatePhase1OrderError,
   type CreatePhase1OrderInput,

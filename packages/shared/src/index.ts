@@ -526,6 +526,21 @@ export const phase1OrderStateSchema = z
   })
   .strict();
 
+export const revealNextPlayerUndoHistoryEntrySchema = z
+  .object({
+    command: z.literal("RevealNextPlayer"),
+    playerId: opaqueIdSchema,
+    previousCurrentPlayerId: nullableOpaqueIdSchema,
+    previousCurrentBid: nullableMoneySchema,
+    previousSelectedTeamId: nullableOpaqueIdSchema,
+    previousPlayerStatus: playerStatusSchema,
+    timestamp: z.string().trim().min(1)
+  })
+  .strict();
+
+export const liveActionUndoHistoryEntrySchema =
+  revealNextPlayerUndoHistoryEntrySchema;
+
 function validatePhase1OrderInAuctionState(
   state: {
     players: z.infer<typeof auctionPlayerSchema>[];
@@ -618,7 +633,7 @@ export const auctionStateBaseSchema = z
     currentPlayerId: nullableOpaqueIdSchema,
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
-    undoHistory: z.array(z.unknown()),
+    undoHistory: z.array(liveActionUndoHistoryEntrySchema),
     createdAt: z.string().trim().min(1),
     updatedAt: z.string().trim().min(1),
     persistenceFailure: z.string().trim().min(1).nullable()
@@ -694,6 +709,12 @@ export const startAuctionRequestSchema = z
   })
   .strict();
 
+export const revealNextPlayerRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
 export const commandResultSummarySchema = z
   .object({
     command: z.string().trim().min(1),
@@ -707,6 +728,15 @@ export const startAuctionResponseSchema = z
     state: boardStateDtoSchema,
     result: commandResultSummarySchema.extend({
       command: z.literal("StartAuction")
+    })
+  })
+  .strict();
+
+export const revealNextPlayerResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("RevealNextPlayer")
     })
   })
   .strict();
@@ -775,6 +805,12 @@ export type AuctionPlayer = z.infer<typeof auctionPlayerSchema>;
 export type AuctionTeam = z.infer<typeof auctionTeamSchema>;
 export type Phase1OrderCategory = z.infer<typeof phase1OrderCategorySchema>;
 export type Phase1OrderState = z.infer<typeof phase1OrderStateSchema>;
+export type RevealNextPlayerUndoHistoryEntry = z.infer<
+  typeof revealNextPlayerUndoHistoryEntrySchema
+>;
+export type LiveActionUndoHistoryEntry = z.infer<
+  typeof liveActionUndoHistoryEntrySchema
+>;
 export type AuctionState = z.infer<typeof auctionStateSchema>;
 export type Phase1ProgressCategoryDto = z.infer<
   typeof phase1ProgressCategoryDtoSchema
@@ -782,8 +818,14 @@ export type Phase1ProgressCategoryDto = z.infer<
 export type Phase1ProgressDto = z.infer<typeof phase1ProgressDtoSchema>;
 export type BoardStateDto = z.infer<typeof boardStateDtoSchema>;
 export type StartAuctionRequest = z.infer<typeof startAuctionRequestSchema>;
+export type RevealNextPlayerRequest = z.infer<
+  typeof revealNextPlayerRequestSchema
+>;
 export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
 export type StartAuctionResponse = z.infer<typeof startAuctionResponseSchema>;
+export type RevealNextPlayerResponse = z.infer<
+  typeof revealNextPlayerResponseSchema
+>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

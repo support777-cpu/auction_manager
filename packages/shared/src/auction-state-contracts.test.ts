@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   auctionStateSchema,
   boardStateDtoSchema,
+  revealNextPlayerRequestSchema,
+  revealNextPlayerResponseSchema,
   startAuctionRequestSchema,
   startAuctionResponseSchema
 } from "./index.js";
@@ -11,6 +13,19 @@ describe("auction state contracts", () => {
     expect(startAuctionRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success)
       .toBe(true);
     expect(startAuctionRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("requires a strict clientCommandId request for Reveal Next Player", () => {
+    expect(
+      revealNextPlayerRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success
+    ).toBe(true);
+    expect(revealNextPlayerRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      revealNextPlayerRequestSchema.safeParse({
+        clientCommandId: "cmd-1",
+        sourceRowNumber: 2
+      }).success
+    ).toBe(false);
   });
 
   it("rejects private setup source fields in board DTOs", () => {
@@ -92,6 +107,159 @@ describe("auction state contracts", () => {
         }
       }).success
     ).toBe(true);
+  });
+
+  it("validates Reveal Next Player response shape and rejects private fields", () => {
+    const boardState = {
+      ...createBoardState(),
+      players: [
+        {
+          ...createBoardState().players[0],
+          status: "Current" as const
+        }
+      ],
+      currentPlayer: {
+        ...createBoardState().players[0],
+        status: "Current" as const
+      },
+      currentBid: 10,
+      phase1Progress: {
+        ...createBoardState().phase1Progress,
+        pendingPlayerCount: 0,
+        revealedPlayerCount: 1,
+        categories: [
+          {
+            category: "Ace Men",
+            total: 1,
+            pending: 0,
+            completed: 0
+          }
+        ]
+      }
+    };
+
+    expect(
+      revealNextPlayerResponseSchema.safeParse({
+        state: boardState,
+        result: {
+          command: "RevealNextPlayer",
+          clientCommandId: "cmd-reveal-1",
+          message: "Revealed Aarav Menon at base price 10."
+        }
+      }).success
+    ).toBe(true);
+
+    expect(
+      revealNextPlayerResponseSchema.safeParse({
+        state: {
+          ...boardState,
+          currentPlayer: {
+            ...boardState.currentPlayer,
+            email: "private-player@example.com"
+          }
+        },
+        result: {
+          command: "RevealNextPlayer",
+          clientCommandId: "cmd-reveal-1",
+          message: "Revealed Aarav Menon at base price 10."
+        }
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates Reveal Next Player undo-history entries in auction state", () => {
+    const boardState = createBoardState();
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: null,
+        undoHistory: [
+          {
+            command: "RevealNextPlayer",
+            playerId: "player-1",
+            previousCurrentPlayerId: null,
+            previousCurrentBid: null,
+            previousSelectedTeamId: null,
+            previousPlayerStatus: "Pending",
+            timestamp: "2026-07-07T08:31:00.000Z"
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(true);
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: null,
+        undoHistory: [
+          {
+            command: "RevealNextPlayer",
+            playerId: "player-1",
+            previousCurrentPlayerId: null,
+            previousCurrentBid: null,
+            previousSelectedTeamId: null,
+            previousPlayerStatus: "Pending",
+            timestamp: "2026-07-07T08:31:00.000Z",
+            sourceRowNumber: 2
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(false);
   });
 
   it("rejects persisted Phase 1 order that omits configured categories", () => {

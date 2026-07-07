@@ -4,6 +4,7 @@ import {
   applyAuctionParameterDraft,
   getDefaultAuctionParameters,
   getSetupReadiness,
+  revealNextPlayer,
   startAuctionFromSetup,
   validateAuctionParametersForSetup,
   type AuctionParameterSetupContext
@@ -21,6 +22,7 @@ import {
 import type { AuctionRole } from "@auction-manager/shared";
 import {
   auctionRoleValues,
+  revealNextPlayerRequestSchema,
   startAuctionRequestSchema,
   type AuctionState,
   type BoardStateDto
@@ -451,6 +453,122 @@ export async function createAuctionManagerServer(
         command: "StartAuction",
         clientCommandId: parsedRequest.data.clientCommandId,
         message: "Auction started from validated setup."
+      }
+    };
+  });
+
+  app.post("/api/auction/reveal-next", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Reveal Next Player as application/json."
+      });
+    }
+
+    const parsedRequest = revealNextPlayerRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Reveal Next Player requires clientCommandId."
+      });
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send({
+        ok: false,
+        error: "auction_not_active",
+        message: "Start an auction before revealing the next Player."
+      });
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send({
+        ok: false,
+        error: "persistence_failure_uncleared",
+        message: "Resolve local persistence recovery before revealing the next Player."
+      });
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send({
+        ok: false,
+        error: "duplicate_client_command_id",
+        message: "Reveal Next Player was already submitted with this command id."
+      });
+    }
+
+    const result = revealNextPlayer({
+      state: currentState,
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send({
+        ok: false,
+        error: result.error,
+        message: result.message
+      });
+    }
+
+    try {
+      await auctionRepository.commitRevealNextPlayer({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        revealedPlayerId: result.revealedPlayerId,
+        summary: result.summary
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Reveal Next Player was already submitted with this command id."
+        });
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        const persistedState = auctionRepository.loadCurrentState();
+        if (persistedState) {
+          return {
+            state: toBoardStateDto(persistedState),
+            result: {
+              command: "RevealNextPlayer",
+              clientCommandId: parsedRequest.data.clientCommandId,
+              message:
+                "Player revealed, but local recovery snapshot could not be written."
+            }
+          };
+        }
+      }
+
+      const message =
+        error instanceof Error &&
+        error.message.includes("persistence failure is uncleared")
+          ? "Persistence recovery is required before further commands."
+          : "Reveal Next Player could not be persisted. Try again.";
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message
+      });
+    }
+
+    return {
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "RevealNextPlayer",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.summary
       }
     };
   });
