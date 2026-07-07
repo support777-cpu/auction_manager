@@ -5,6 +5,7 @@ import {
   getDefaultAuctionParameters,
   getSetupReadiness,
   getCurrentPlayerTeamCapacity,
+  increaseBid,
   revealNextPlayer,
   selectTeam,
   startAuctionFromSetup,
@@ -24,6 +25,7 @@ import {
 import type { AuctionRole } from "@auction-manager/shared";
 import {
   auctionRoleValues,
+  increaseBidRequestSchema,
   revealNextPlayerRequestSchema,
   selectTeamRequestSchema,
   startAuctionRequestSchema,
@@ -699,6 +701,125 @@ export async function createAuctionManagerServer(
       state: toBoardStateDto(result.state),
       result: {
         command: "SelectTeam",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.summary
+      }
+    };
+  });
+
+  app.post("/api/auction/increase-bid", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Increase Bid as application/json."
+      });
+    }
+
+    const parsedRequest = increaseBidRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Increase Bid requires clientCommandId."
+      });
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send({
+        ok: false,
+        error: "auction_not_active",
+        message: "Start an auction before increasing the bid."
+      });
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send({
+        ok: false,
+        error: "persistence_failure_uncleared",
+        message: "Resolve local persistence recovery before increasing the bid."
+      });
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send({
+        ok: false,
+        error: "duplicate_client_command_id",
+        message: "Increase Bid was already submitted with this command id."
+      });
+    }
+
+    const result = increaseBid({
+      state: currentState,
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send({
+        ok: false,
+        error: result.error,
+        message: result.message
+      });
+    }
+
+    try {
+      await auctionRepository.commitIncreaseBid({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        summary: result.summary,
+        currentPlayerId: result.state.currentPlayerId!,
+        previousCurrentBid: result.previousCurrentBid,
+        nextCurrentBid: result.nextCurrentBid,
+        bidIncrement: result.bidIncrement
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Increase Bid was already submitted with this command id."
+        });
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        const persistedState = auctionRepository.loadCurrentState();
+        if (persistedState) {
+          return {
+            state: toBoardStateDto(persistedState),
+            result: {
+              command: "IncreaseBid",
+              clientCommandId: parsedRequest.data.clientCommandId,
+              message:
+                "Bid increased, but local recovery snapshot could not be written."
+            }
+          };
+        }
+      }
+
+      const message =
+        error instanceof Error &&
+        error.message.includes("persistence failure is uncleared")
+          ? "Persistence recovery is required before further commands."
+          : "Increase Bid could not be persisted. Try again.";
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message
+      });
+    }
+
+    return {
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "IncreaseBid",
         clientCommandId: parsedRequest.data.clientCommandId,
         message: result.summary
       }

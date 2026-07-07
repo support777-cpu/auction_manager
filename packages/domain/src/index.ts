@@ -32,6 +32,12 @@ export {
   type SelectTeamResult
 } from "./select-team.js";
 export {
+  increaseBid,
+  type IncreaseBidErrorCode,
+  type IncreaseBidInput,
+  type IncreaseBidResult
+} from "./increase-bid.js";
+export {
   createPhase1Order,
   type CreatePhase1OrderError,
   type CreatePhase1OrderInput,

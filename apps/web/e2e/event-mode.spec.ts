@@ -288,6 +288,12 @@ test("reviews and saves auction parameters before starting the auction", async (
     "Player photo placeholder"
   );
   await expect(page.getByTestId("current-bid")).toContainText("10");
+  await expect(page.getByTestId("increase-bid")).toContainText("+5");
+  await expect(page.getByTestId("increase-bid")).toBeEnabled();
+  await page.getByTestId("increase-bid").click();
+  await expect(page.getByTestId("current-bid")).toHaveText("15");
+  await page.keyboard.press("+");
+  await expect(page.getByTestId("current-bid")).toHaveText("20");
   await expect(page.getByTestId("phase1-progress")).toContainText(
     "Phase 1 in progress"
   );
@@ -317,7 +323,7 @@ test("reviews and saves auction parameters before starting the auction", async (
 
   await expect(page.getByTestId("auction-board")).toBeVisible();
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
-  await expect(page.getByTestId("current-bid")).toContainText("10");
+  await expect(page.getByTestId("current-bid")).toContainText("20");
   await expect(page.getByTestId("selected-team")).toContainText("Tigers");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
 
@@ -335,6 +341,6 @@ test("reviews and saves auction parameters before starting the auction", async (
   );
   await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
-  await expect(page.getByTestId("current-bid")).toContainText("10");
+  await expect(page.getByTestId("current-bid")).toContainText("20");
   await expect(page.getByTestId("selected-team")).toContainText("None");
 });

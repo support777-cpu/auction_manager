@@ -26,7 +26,10 @@ export default defineConfig({
     include: ["apps/**/*.{test,spec}.{ts,tsx}", "packages/**/*.{test,spec}.ts"],
     exclude: ["apps/web/e2e/**", "**/dist/**", "**/node_modules/**"],
     environment: "node",
-    environmentMatchGlobs: [["apps/web/src/**/*.test.tsx", "jsdom"]],
+    environmentMatchGlobs: [
+      ["apps/web/src/**/*.test.tsx", "jsdom"],
+      ["apps/web/src/auction-board-helpers.test.ts", "jsdom"]
+    ],
     setupFiles: ["./apps/web/src/test-setup.ts"]
   }
 });

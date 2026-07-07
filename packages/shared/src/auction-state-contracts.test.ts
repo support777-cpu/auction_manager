@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   auctionStateSchema,
   boardStateDtoSchema,
+  increaseBidRequestSchema,
+  increaseBidResponseSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
   selectTeamRequestSchema,
@@ -49,6 +51,18 @@ describe("auction state contracts", () => {
       selectTeamRequestSchema.safeParse({
         clientCommandId: "cmd-1",
         teamId: "team-1",
+        sourceFilename: "private.csv"
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires a strict clientCommandId request for Increase Bid", () => {
+    expect(increaseBidRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success)
+      .toBe(true);
+    expect(increaseBidRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      increaseBidRequestSchema.safeParse({
+        clientCommandId: "cmd-1",
         sourceFilename: "private.csv"
       }).success
     ).toBe(false);
@@ -251,6 +265,51 @@ describe("auction state contracts", () => {
           command: "RevealNextPlayer",
           clientCommandId: "cmd-reveal-1",
           message: "Revealed Aarav Menon at base price 10."
+        }
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates Increase Bid response shape and rejects private fields", () => {
+    const boardState = {
+      ...createBoardState(),
+      players: [
+        {
+          ...createBoardState().players[0],
+          status: "Current" as const
+        }
+      ],
+      currentPlayer: {
+        ...createBoardState().players[0],
+        status: "Current" as const
+      },
+      currentBid: 12
+    };
+
+    expect(
+      increaseBidResponseSchema.safeParse({
+        state: boardState,
+        result: {
+          command: "IncreaseBid",
+          clientCommandId: "cmd-increase-1",
+          message: "Increased bid for Aarav Menon to 12."
+        }
+      }).success
+    ).toBe(true);
+
+    expect(
+      increaseBidResponseSchema.safeParse({
+        state: {
+          ...boardState,
+          currentPlayer: {
+            ...boardState.currentPlayer,
+            sourceFilename: "private.csv"
+          }
+        },
+        result: {
+          command: "IncreaseBid",
+          clientCommandId: "cmd-increase-1",
+          message: "Increased bid for Aarav Menon to 12."
         }
       }).success
     ).toBe(false);
@@ -465,6 +524,99 @@ describe("auction state contracts", () => {
         undoHistory: [],
         createdAt: "2026-07-07T08:30:00.000Z",
         updatedAt: "2026-07-07T08:30:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates Increase Bid undo-history entries in auction state", () => {
+    const boardState = createBoardState();
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 12,
+        selectedTeamId: null,
+        undoHistory: [
+          {
+            command: "IncreaseBid",
+            currentPlayerId: "player-1",
+            previousCurrentBid: 10,
+            nextCurrentBid: 12,
+            bidIncrement: 2,
+            timestamp: "2026-07-07T08:31:00.000Z"
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(true);
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 12,
+        selectedTeamId: null,
+        undoHistory: [
+          {
+            command: "IncreaseBid",
+            currentPlayerId: "player-1",
+            previousCurrentBid: 10,
+            nextCurrentBid: 12,
+            bidIncrement: 2,
+            timestamp: "2026-07-07T08:31:00.000Z",
+            actionLogPayload: { private: true }
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
         persistenceFailure: null
       }).success
     ).toBe(false);

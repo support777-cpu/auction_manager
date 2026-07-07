@@ -1,11 +1,14 @@
-/** @vitest-environment jsdom */
-
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, expect, it } from "vitest";
 import type { BoardStateDto } from "@auction-manager/shared";
 import {
+  canIncreaseBid,
   canSelectTeam,
   canRevealNextPlayer,
-  getPhase1OrderStatusLabel
+  getPhase1OrderStatusLabel,
+  isEditableShortcutTarget
 } from "./auction-board-helpers.js";
 
 function createBoardState(
@@ -166,5 +169,51 @@ describe("auction board helpers", () => {
         })
       )
     ).toBe(false);
+  });
+
+  it("enables Increase Bid only with a current player, current bid, and no blockers", () => {
+    const currentPlayer = {
+      id: "player-1",
+      name: "Aarav Menon",
+      role: "Ace" as const,
+      basePrice: 10,
+      status: "Current" as const,
+      phase1Category: "Ace Men" as const,
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    };
+
+    expect(
+      canIncreaseBid(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10
+        })
+      )
+    ).toBe(true);
+    expect(canIncreaseBid(createBoardState({ currentBid: 10 }))).toBe(false);
+    expect(canIncreaseBid(createBoardState({ currentPlayer }))).toBe(false);
+    expect(
+      canIncreaseBid(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
+          persistenceFailure: "snapshot_write_failed"
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("ignores Increase Bid shortcut targets inside editable fields", () => {
+    expect(isEditableShortcutTarget(null)).toBe(false);
+    expect(isEditableShortcutTarget(document.createElement("div"))).toBe(false);
+    expect(isEditableShortcutTarget(document.createElement("input"))).toBe(true);
+    expect(isEditableShortcutTarget(document.createElement("textarea"))).toBe(true);
+    expect(isEditableShortcutTarget(document.createElement("select"))).toBe(true);
+
+    const editable = document.createElement("div");
+    Object.defineProperty(editable, "isContentEditable", { value: true });
+    expect(isEditableShortcutTarget(editable)).toBe(true);
   });
 });

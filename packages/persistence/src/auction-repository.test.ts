@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { createAuctionRepository, PersistenceSnapshotWriteError } from "./index.js";
 import type { AuctionState } from "@auction-manager/shared";
-import { revealNextPlayer, selectTeam } from "@auction-manager/domain";
+import { increaseBid, revealNextPlayer, selectTeam } from "@auction-manager/domain";
 
 describe("auction repository", () => {
   it("commits current state, action log, and latest snapshot", async () => {
@@ -631,6 +631,261 @@ describe("auction repository", () => {
         clientCommandId: "cmd-select-2",
         summary: selection.summary,
         undoRecorded: selection.undoRecorded
+      })
+    ).rejects.toThrow("persistence failure");
+    repository.close();
+  });
+
+  it("commits Increase Bid state, undoable action log, and latest snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const startedState = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state: startedState,
+      clientCommandId: "cmd-start-1"
+    });
+    const revealedState = createRevealedState(startedState);
+    await repository.commitRevealNextPlayer({
+      previousState: startedState,
+      state: revealedState,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: "player-1",
+      summary: "Revealed Aarav Menon at base price 10."
+    });
+    const bid = increaseBid({
+      state: revealedState,
+      now: () => "2026-07-07T09:15:00.000Z"
+    });
+    expect(bid.ok).toBe(true);
+    if (!bid.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitIncreaseBid({
+      previousState: revealedState,
+      state: bid.state,
+      clientCommandId: "cmd-increase-1",
+      summary: bid.summary,
+      currentPlayerId: "player-1",
+      previousCurrentBid: bid.previousCurrentBid,
+      nextCurrentBid: bid.nextCurrentBid,
+      bidIncrement: bid.bidIncrement
+    });
+
+    expect(repository.loadCurrentState()).toEqual(bid.state);
+    expect(JSON.parse(await readFile(join(directory, "snapshots/latest.json"), "utf8")))
+      .toEqual(bid.state);
+    expect(repository.listActionLog()).toMatchObject([
+      { command: "StartAuction", clientCommandId: "cmd-start-1" },
+      { command: "RevealNextPlayer", clientCommandId: "cmd-reveal-1" },
+      {
+        command: "IncreaseBid",
+        clientCommandId: "cmd-increase-1",
+        summary: "Increased bid for Aarav Menon to 12.",
+        undoable: true
+      }
+    ]);
+    expect(JSON.parse(repository.listActionLog()[2]?.payloadJson ?? "{}")).toEqual({
+      command: "IncreaseBid",
+      currentPlayerId: "player-1",
+      previousCurrentBid: 10,
+      nextCurrentBid: 12,
+      bidIncrement: 2,
+      previous: {
+        currentBid: 10
+      },
+      next: {
+        currentBid: 12
+      },
+      undo: {
+        command: "IncreaseBid",
+        currentPlayerId: "player-1",
+        previousCurrentBid: 10,
+        nextCurrentBid: 12,
+        bidIncrement: 2,
+        timestamp: "2026-07-07T09:15:00.000Z"
+      }
+    });
+
+    repository.close();
+  });
+
+  it("commits repeated Increase Bid steps and resumes bid after reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const startedState = createMultiPlayerState();
+    const revealedState = createRevealedState(startedState);
+    await firstRepository.commitStartAuction({
+      state: startedState,
+      clientCommandId: "cmd-start-1"
+    });
+
+    const firstBid = increaseBid({
+      state: revealedState,
+      now: () => "2026-07-07T09:15:00.000Z"
+    });
+    expect(firstBid.ok).toBe(true);
+    if (!firstBid.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitIncreaseBid({
+      previousState: revealedState,
+      state: firstBid.state,
+      clientCommandId: "cmd-increase-1",
+      summary: firstBid.summary,
+      currentPlayerId: "player-1",
+      previousCurrentBid: firstBid.previousCurrentBid,
+      nextCurrentBid: firstBid.nextCurrentBid,
+      bidIncrement: firstBid.bidIncrement
+    });
+
+    const secondBid = increaseBid({
+      state: firstBid.state,
+      now: () => "2026-07-07T09:16:00.000Z"
+    });
+    expect(secondBid.ok).toBe(true);
+    if (!secondBid.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitIncreaseBid({
+      previousState: firstBid.state,
+      state: secondBid.state,
+      clientCommandId: "cmd-increase-2",
+      summary: secondBid.summary,
+      currentPlayerId: "player-1",
+      previousCurrentBid: secondBid.previousCurrentBid,
+      nextCurrentBid: secondBid.nextCurrentBid,
+      bidIncrement: secondBid.bidIncrement
+    });
+    firstRepository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()?.currentBid).toBe(14);
+    expect(
+      reopenedRepository
+        .listActionLog()
+        .filter((entry) => entry.command === "IncreaseBid")
+    ).toHaveLength(2);
+    reopenedRepository.close();
+  });
+
+  it("rejects duplicate Increase Bid command id without a second bid action", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const startedState = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state: startedState,
+      clientCommandId: "cmd-start-1"
+    });
+    const revealedState = createRevealedState(startedState);
+    await repository.commitRevealNextPlayer({
+      previousState: startedState,
+      state: revealedState,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: "player-1",
+      summary: "Revealed Aarav Menon at base price 10."
+    });
+    const bid = increaseBid({
+      state: revealedState,
+      now: () => "2026-07-07T09:15:00.000Z"
+    });
+    expect(bid.ok).toBe(true);
+    if (!bid.ok) {
+      repository.close();
+      return;
+    }
+    await repository.commitIncreaseBid({
+      previousState: revealedState,
+      state: bid.state,
+      clientCommandId: "cmd-increase-1",
+      summary: bid.summary,
+      currentPlayerId: "player-1",
+      previousCurrentBid: bid.previousCurrentBid,
+      nextCurrentBid: bid.nextCurrentBid,
+      bidIncrement: bid.bidIncrement
+    });
+    await expect(
+      repository.commitIncreaseBid({
+        previousState: revealedState,
+        state: bid.state,
+        clientCommandId: "cmd-increase-1",
+        summary: bid.summary,
+        currentPlayerId: "player-1",
+        previousCurrentBid: bid.previousCurrentBid,
+        nextCurrentBid: bid.nextCurrentBid,
+        bidIncrement: bid.bidIncrement
+      })
+    ).rejects.toThrow("Duplicate clientCommandId");
+
+    expect(repository.listActionLog().filter((entry) => entry.command === "IncreaseBid"))
+      .toHaveLength(1);
+    repository.close();
+  });
+
+  it("marks snapshot failure after Increase Bid and blocks later live mutations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const validSnapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({
+      databasePath,
+      snapshotPath: validSnapshotPath
+    });
+    const state = createRevealedState(createMultiPlayerState());
+    await firstRepository.commitStartAuction({
+      state: createMultiPlayerState(),
+      clientCommandId: "cmd-start-1"
+    });
+    firstRepository.close();
+
+    const repository = createAuctionRepository({
+      databasePath,
+      snapshotPath: directory
+    });
+    const bid = increaseBid({
+      state,
+      now: () => "2026-07-07T09:15:00.000Z"
+    });
+    expect(bid.ok).toBe(true);
+    if (!bid.ok) {
+      repository.close();
+      return;
+    }
+
+    await expect(
+      repository.commitIncreaseBid({
+        previousState: state,
+        state: bid.state,
+        clientCommandId: "cmd-increase-1",
+        summary: bid.summary,
+        currentPlayerId: "player-1",
+        previousCurrentBid: bid.previousCurrentBid,
+        nextCurrentBid: bid.nextCurrentBid,
+        bidIncrement: bid.bidIncrement
+      })
+    ).rejects.toBeInstanceOf(PersistenceSnapshotWriteError);
+
+    expect(repository.loadCurrentState()?.persistenceFailure).toContain("snapshot");
+    await expect(
+      repository.commitIncreaseBid({
+        previousState: state,
+        state: bid.state,
+        clientCommandId: "cmd-increase-2",
+        summary: bid.summary,
+        currentPlayerId: "player-1",
+        previousCurrentBid: bid.previousCurrentBid,
+        nextCurrentBid: bid.nextCurrentBid,
+        bidIncrement: bid.bidIncrement
       })
     ).rejects.toThrow("persistence failure");
     repository.close();

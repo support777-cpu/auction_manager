@@ -19,7 +19,12 @@
 - Application-level duplicate clientCommandId pre-check is racy and O(n) — consistent with Start Auction idempotency pattern
 - Strict undoHistory schema will need widening for future live commands — intentional for Story 2.2 scope
 
-## Deferred from: code review of 2-3-select-bidding-team-from-team-tiles (2026-07-07)
+## Deferred from: code review of 2-4-increase-current-bid (2026-07-07)
+
+- Bid increment has no budget/team cap guard — Story 2.5 owns invalid-sale blocking UX
+- Concurrent stale-state / optimistic concurrency — matches existing live-command pattern until concurrency work lands
+- Route-level listActionLog duplicate pre-check — consistent with Stories 2.2–2.3 idempotency pattern
+
 
 - Concurrent select-team stale-state protection — matches existing Start Auction / Reveal Next pattern until optimistic concurrency lands
 - Full UI/component test suite for tile accessibility and keyboard — helper and E2E tests cover primary flow; dedicated component tests deferred

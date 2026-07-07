@@ -18,6 +18,7 @@ import {
   auctionParameterReviewResponseSchema,
   appStateResponseSchema,
   auctionRoleValues,
+  increaseBidResponseSchema,
   revealNextPlayerResponseSchema,
   selectTeamResponseSchema,
   startAuctionResponseSchema,
@@ -40,8 +41,10 @@ import {
 } from "./auction-parameters-helpers.js";
 import {
   canRevealNextPlayer,
+  canIncreaseBid,
   canSelectTeam,
-  getPhase1OrderStatusLabel
+  getPhase1OrderStatusLabel,
+  isEditableShortcutTarget
 } from "./auction-board-helpers.js";
 import "./styles.css";
 
@@ -105,6 +108,9 @@ function App() {
   const revealNextInFlightRef = useRef(false);
   const selectTeamGenerationRef = useRef(0);
   const selectTeamInFlightRef = useRef(false);
+  const increaseBidGenerationRef = useRef(0);
+  const increaseBidInFlightRef = useRef(false);
+  const handleIncreaseBidRef = useRef<() => Promise<void>>(async () => {});
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -167,6 +173,10 @@ function App() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [selectTeamError, setSelectTeamError] = useState<string | null>(null);
+  const [increaseBidState, setIncreaseBidState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [increaseBidError, setIncreaseBidError] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -880,6 +890,86 @@ function App() {
     }
   }
 
+  handleIncreaseBidRef.current = async function handleIncreaseBid() {
+    if (
+      !boardState ||
+      !canIncreaseBid(boardState) ||
+      increaseBidState === "loading" ||
+      increaseBidInFlightRef.current
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++increaseBidGenerationRef.current;
+    increaseBidInFlightRef.current = true;
+    setIncreaseBidState("loading");
+    setIncreaseBidError(null);
+
+    try {
+      const response = await fetch("/api/auction/increase-bid", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("increase")
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = increaseBidResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== increaseBidGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok || !parsedResponse.success) {
+        setIncreaseBidState("error");
+        setIncreaseBidError(readIncreaseBidErrorMessage(response, responseBody));
+        await refreshBoardState();
+        return;
+      }
+
+      setBoardState(parsedResponse.data.state);
+      setIncreaseBidState("ready");
+    } catch {
+      if (commandGeneration !== increaseBidGenerationRef.current) {
+        return;
+      }
+      setIncreaseBidState("error");
+      setIncreaseBidError("Increase Bid could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === increaseBidGenerationRef.current) {
+        increaseBidInFlightRef.current = false;
+      }
+    }
+  };
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "+") {
+        return;
+      }
+
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+      if (isEditableShortcutTarget(target)) {
+        return;
+      }
+
+      event.preventDefault();
+      void handleIncreaseBidRef.current();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   function updateRoleNumberField(
     group: "roleBasePrices" | "roleTargets",
     role: AuctionRole,
@@ -966,6 +1056,11 @@ function App() {
         onSelectTeam={(teamId) => {
           void handleSelectTeam(teamId);
         }}
+        onIncreaseBid={() => {
+          void handleIncreaseBidRef.current();
+        }}
+        increaseBidError={increaseBidError}
+        increaseBidState={increaseBidState}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
         selectTeamError={selectTeamError}
@@ -1505,6 +1600,9 @@ function AuctionBoard({
   boardState,
   onRevealNext,
   onSelectTeam,
+  onIncreaseBid,
+  increaseBidError,
+  increaseBidState,
   revealNextError,
   revealNextState,
   selectTeamError,
@@ -1513,6 +1611,9 @@ function AuctionBoard({
   readonly boardState: BoardStateDto;
   readonly onRevealNext: () => void;
   readonly onSelectTeam: (teamId: string | null) => void;
+  readonly onIncreaseBid: () => void;
+  readonly increaseBidError: string | null;
+  readonly increaseBidState: "idle" | "loading" | "ready" | "error";
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
   readonly selectTeamError: string | null;
@@ -1523,6 +1624,8 @@ function AuctionBoard({
     !canRevealNextPlayer(boardState) || revealNextState === "loading";
   const selectionEnabled =
     canSelectTeam(boardState) && selectTeamState !== "loading";
+  const increaseBidDisabled =
+    !canIncreaseBid(boardState) || increaseBidState === "loading";
   const selectedTeam =
     boardState.selectedTeamId === null
       ? null
@@ -1658,6 +1761,23 @@ function AuctionBoard({
                 : "No current bid"}
             </strong>
             <button
+              aria-busy={increaseBidState === "loading"}
+              className={
+                increaseBidDisabled
+                  ? "live-action live-action-disabled"
+                  : "live-action"
+              }
+              data-testid="increase-bid"
+              disabled={increaseBidDisabled}
+              onClick={onIncreaseBid}
+              type="button"
+            >
+              <span>{increaseBidState === "loading" ? "Increasing..." : "Increase Bid"}</span>
+              <span className="bid-increment-chip">
+                +{boardState.parameters.bidIncrement}
+              </span>
+            </button>
+            <button
               className={
                 revealDisabled
                   ? "primary-action primary-action-disabled"
@@ -1714,6 +1834,16 @@ function AuctionBoard({
               <p className="command-error" role="alert">
                 <AlertCircle aria-hidden="true" size={18} />
                 <span>{selectTeamError}</span>
+              </p>
+            ) : null}
+            {increaseBidError ? (
+              <p
+                className="command-error"
+                data-testid="increase-bid-error"
+                role="alert"
+              >
+                <AlertCircle aria-hidden="true" size={18} />
+                <span>{increaseBidError}</span>
               </p>
             ) : null}
           </section>
@@ -2060,7 +2190,29 @@ function readSelectTeamErrorMessage(
   return "Select Team could not be completed. Try again.";
 }
 
-function createClientCommandId(command: "start" | "reveal" | "select"): string {
+function readIncreaseBidErrorMessage(
+  response: Response,
+  body: unknown
+): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (response.status === 409) {
+    return "Increase Bid is blocked by the current auction state.";
+  }
+
+  return "Increase Bid could not be completed. Try again.";
+}
+
+function createClientCommandId(
+  command: "start" | "reveal" | "select" | "increase"
+): string {
   if ("crypto" in window && "randomUUID" in window.crypto) {
     return `${command}_${window.crypto.randomUUID()}`;
   }

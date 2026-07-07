@@ -731,9 +731,55 @@ button:focus-visible {
 }
 
 .bid-panel .current-bid-live {
+  min-height: 58px;
   color: #9a5b00;
   font-size: 52px;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-action {
+  display: inline-flex;
+  min-height: 48px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #9a5b00;
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: #fff7e0;
+  color: #5f3700;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.live-action:hover {
+  background: #ffefbf;
+}
+
+.live-action:focus-visible {
+  outline: 3px solid #f5b841;
+  outline-offset: 3px;
+}
+
+.live-action-disabled,
+.live-action-disabled:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.bid-increment-chip {
+  display: inline-grid;
+  min-width: 44px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #9a5b00;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
 }
 
 .phase1-progress-panel {
@@ -759,6 +805,11 @@ button:focus-visible {
 .phase1-progress-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
+}
+
+.phase1-progress-summary dd,
+.team-tile dd {
+  font-variant-numeric: tabular-nums;
 }
 
 .phase1-progress-summary div,

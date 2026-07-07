@@ -549,9 +549,21 @@ export const selectTeamUndoHistoryEntrySchema = z
   })
   .strict();
 
+export const increaseBidUndoHistoryEntrySchema = z
+  .object({
+    command: z.literal("IncreaseBid"),
+    currentPlayerId: opaqueIdSchema,
+    previousCurrentBid: positiveIntegerSchema,
+    nextCurrentBid: positiveIntegerSchema,
+    bidIncrement: positiveIntegerSchema,
+    timestamp: z.string().trim().min(1)
+  })
+  .strict();
+
 export const liveActionUndoHistoryEntrySchema = z.discriminatedUnion("command", [
   revealNextPlayerUndoHistoryEntrySchema,
-  selectTeamUndoHistoryEntrySchema
+  selectTeamUndoHistoryEntrySchema,
+  increaseBidUndoHistoryEntrySchema
 ]);
 
 function validatePhase1OrderInAuctionState(
@@ -745,6 +757,12 @@ export const selectTeamRequestSchema = z
   })
   .strict();
 
+export const increaseBidRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
 export const commandResultSummarySchema = z
   .object({
     command: z.string().trim().min(1),
@@ -776,6 +794,15 @@ export const selectTeamResponseSchema = z
     state: boardStateDtoSchema,
     result: commandResultSummarySchema.extend({
       command: z.literal("SelectTeam")
+    })
+  })
+  .strict();
+
+export const increaseBidResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("IncreaseBid")
     })
   })
   .strict();
@@ -850,6 +877,9 @@ export type RevealNextPlayerUndoHistoryEntry = z.infer<
 export type SelectTeamUndoHistoryEntry = z.infer<
   typeof selectTeamUndoHistoryEntrySchema
 >;
+export type IncreaseBidUndoHistoryEntry = z.infer<
+  typeof increaseBidUndoHistoryEntrySchema
+>;
 export type LiveActionUndoHistoryEntry = z.infer<
   typeof liveActionUndoHistoryEntrySchema
 >;
@@ -867,12 +897,14 @@ export type RevealNextPlayerRequest = z.infer<
   typeof revealNextPlayerRequestSchema
 >;
 export type SelectTeamRequest = z.infer<typeof selectTeamRequestSchema>;
+export type IncreaseBidRequest = z.infer<typeof increaseBidRequestSchema>;
 export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
 export type StartAuctionResponse = z.infer<typeof startAuctionResponseSchema>;
 export type RevealNextPlayerResponse = z.infer<
   typeof revealNextPlayerResponseSchema
 >;
 export type SelectTeamResponse = z.infer<typeof selectTeamResponseSchema>;
+export type IncreaseBidResponse = z.infer<typeof increaseBidResponseSchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

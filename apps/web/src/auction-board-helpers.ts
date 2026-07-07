@@ -30,3 +30,25 @@ export function canSelectTeam(boardState: BoardStateDto): boolean {
     boardState.persistenceFailure === null
   );
 }
+
+export function canIncreaseBid(boardState: BoardStateDto): boolean {
+  return (
+    boardState.phase === "InitialAuction" &&
+    boardState.currentPlayer !== null &&
+    boardState.currentBid !== null &&
+    boardState.persistenceFailure === null
+  );
+}
+
+export function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable === true
+  );
+}
