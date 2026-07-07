@@ -47,6 +47,7 @@ function createBoardState(
     phase2PoolCount: 0,
     persistenceFailure: null,
     teams: [],
+    teamRosters: [],
     canUndo: false,
     phase1Progress: {
       orderedPlayerCount: 8,

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
-import { createAuctionRepository, PersistenceSnapshotWriteError } from "./index.js";
+import { createAuctionRepository, PersistenceSnapshotWriteError, PersistenceStateLoadError } from "./index.js";
 import type { AuctionState } from "@auction-manager/shared";
 import {
   increaseBid,
@@ -36,6 +36,12 @@ describe("auction repository", () => {
         undoable: false
       }
     ]);
+    expect(repository.getLatestActionSummary()).toMatchObject({
+      command: "StartAuction",
+      clientCommandId: "cmd-1",
+      summary: "Auction started from validated setup."
+    });
+    expect(repository.getLatestActionSummary()).not.toHaveProperty("payloadJson");
     expect(JSON.parse(repository.listActionLog()[0]?.payloadJson ?? "{}")).toEqual({
       command: "StartAuction",
       auctionId: "auction-1",
@@ -1402,7 +1408,269 @@ describe("auction repository", () => {
     expect(loadedState?.players).toEqual(state.players);
     reopenedRepository.close();
   });
+
+  it("reopens a full Phase 1 sold and unsold command sequence without reshuffle or state loss", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const repository = createAuctionRepository({ databasePath, snapshotPath });
+    const started = createMultiPlayerState();
+
+    await repository.commitStartAuction({ state: started, clientCommandId: "cmd-start" });
+
+    const firstReveal = requireOk(
+      revealNextPlayer({ state: started, now: () => "2026-07-07T09:00:00.000Z" })
+    );
+    await repository.commitRevealNextPlayer({
+      previousState: started,
+      state: firstReveal.state,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: firstReveal.revealedPlayerId,
+      summary: firstReveal.summary
+    });
+
+    const firstSelect = requireOk(
+      selectTeam({
+        state: firstReveal.state,
+        teamId: "team-1",
+        now: () => "2026-07-07T09:01:00.000Z"
+      })
+    );
+    await repository.commitSelectTeam({
+      previousState: firstReveal.state,
+      state: firstSelect.state,
+      clientCommandId: "cmd-select-1",
+      summary: firstSelect.summary,
+      undoRecorded: firstSelect.undoRecorded
+    });
+
+    const firstBid = requireOk(
+      increaseBid({
+        state: firstSelect.state,
+        now: () => "2026-07-07T09:02:00.000Z"
+      })
+    );
+    await repository.commitIncreaseBid({
+      previousState: firstSelect.state,
+      state: firstBid.state,
+      clientCommandId: "cmd-increase-1",
+      summary: firstBid.summary,
+      currentPlayerId: firstBid.currentPlayerId,
+      previousCurrentBid: firstBid.previousCurrentBid,
+      nextCurrentBid: firstBid.nextCurrentBid,
+      bidIncrement: firstBid.bidIncrement
+    });
+
+    const sold = requireOk(
+      markSold({ state: firstBid.state, now: () => "2026-07-07T09:03:00.000Z" })
+    );
+    await repository.commitMarkSold({
+      previousState: firstBid.state,
+      state: sold.state,
+      clientCommandId: "cmd-sold-1",
+      summary: sold.message,
+      playerId: "player-1",
+      winningTeamId: "team-1",
+      soldPrice: firstBid.nextCurrentBid
+    });
+
+    const secondReveal = requireOk(
+      revealNextPlayer({ state: sold.state, now: () => "2026-07-07T09:04:00.000Z" })
+    );
+    await repository.commitRevealNextPlayer({
+      previousState: sold.state,
+      state: secondReveal.state,
+      clientCommandId: "cmd-reveal-2",
+      revealedPlayerId: secondReveal.revealedPlayerId,
+      summary: secondReveal.summary
+    });
+
+    const secondSelect = requireOk(
+      selectTeam({
+        state: secondReveal.state,
+        teamId: "team-1",
+        now: () => "2026-07-07T09:05:00.000Z"
+      })
+    );
+    await repository.commitSelectTeam({
+      previousState: secondReveal.state,
+      state: secondSelect.state,
+      clientCommandId: "cmd-select-2",
+      summary: secondSelect.summary,
+      undoRecorded: secondSelect.undoRecorded
+    });
+
+    const clearedSelect = requireOk(
+      selectTeam({
+        state: secondSelect.state,
+        teamId: null,
+        now: () => "2026-07-07T09:06:00.000Z"
+      })
+    );
+    await repository.commitSelectTeam({
+      previousState: secondSelect.state,
+      state: clearedSelect.state,
+      clientCommandId: "cmd-clear-2",
+      summary: clearedSelect.summary,
+      undoRecorded: clearedSelect.undoRecorded
+    });
+
+    const changedSelect = requireOk(
+      selectTeam({
+        state: clearedSelect.state,
+        teamId: "team-1",
+        now: () => "2026-07-07T09:07:00.000Z"
+      })
+    );
+    await repository.commitSelectTeam({
+      previousState: clearedSelect.state,
+      state: changedSelect.state,
+      clientCommandId: "cmd-reselect-2",
+      summary: changedSelect.summary,
+      undoRecorded: changedSelect.undoRecorded
+    });
+
+    const secondBid = requireOk(
+      increaseBid({
+        state: changedSelect.state,
+        now: () => "2026-07-07T09:08:00.000Z"
+      })
+    );
+    await repository.commitIncreaseBid({
+      previousState: changedSelect.state,
+      state: secondBid.state,
+      clientCommandId: "cmd-increase-2",
+      summary: secondBid.summary,
+      currentPlayerId: secondBid.currentPlayerId,
+      previousCurrentBid: secondBid.previousCurrentBid,
+      nextCurrentBid: secondBid.nextCurrentBid,
+      bidIncrement: secondBid.bidIncrement
+    });
+
+    const unsold = requireOk(
+      markUnsold({ state: secondBid.state, now: () => "2026-07-07T09:09:00.000Z" })
+    );
+    await repository.commitMarkUnsold({
+      previousState: secondBid.state,
+      state: unsold.state,
+      clientCommandId: "cmd-unsold-2",
+      summary: unsold.message,
+      playerId: secondReveal.revealedPlayerId
+    });
+
+    repository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const reopenedState = reopenedRepository.loadCurrentState();
+    expect(reopenedState).toEqual(unsold.state);
+    expect(reopenedState?.phase1Order).toEqual(started.phase1Order);
+    expect(reopenedState?.players.find((player) => player.id === "player-1"))
+      .toMatchObject({
+        status: "Sold",
+        winningTeamId: "team-1",
+        soldPrice: firstBid.nextCurrentBid,
+        acquisitionType: "Auction"
+      });
+    expect(
+      reopenedState?.players.find((player) => player.id === secondReveal.revealedPlayerId)
+    ).toMatchObject({
+      status: "Unsold",
+      winningTeamId: null,
+      soldPrice: null,
+      acquisitionType: null
+    });
+    expect(reopenedState?.phase2Pool).toEqual([secondReveal.revealedPlayerId]);
+    expect(reopenedState?.currentPlayerId).toBeNull();
+    expect(reopenedState?.currentBid).toBeNull();
+    expect(reopenedState?.selectedTeamId).toBeNull();
+    expect(reopenedState?.undoHistory.map((entry) => entry.command)).toEqual([
+      "RevealNextPlayer",
+      "SelectTeam",
+      "IncreaseBid",
+      "MarkSold",
+      "RevealNextPlayer",
+      "SelectTeam",
+      "SelectTeam",
+      "SelectTeam",
+      "IncreaseBid",
+      "MarkUnsold"
+    ]);
+    expect(reopenedRepository.listActionLog().map((entry) => entry.command)).toEqual([
+      "StartAuction",
+      "RevealNextPlayer",
+      "SelectTeam",
+      "IncreaseBid",
+      "MarkSold",
+      "RevealNextPlayer",
+      "SelectTeam",
+      "SelectTeam",
+      "SelectTeam",
+      "IncreaseBid",
+      "MarkUnsold"
+    ]);
+    expect(
+      reopenedRepository.listActionLog().slice(1).every((entry) => entry.undoable)
+    ).toBe(true);
+    expect(reopenedRepository.getLatestActionSummary()).toMatchObject({
+      command: "MarkUnsold",
+      clientCommandId: "cmd-unsold-2"
+    });
+    const actionLog = reopenedRepository.listActionLog();
+    expect(JSON.parse(actionLog[0]?.payloadJson ?? "{}")).toMatchObject({
+      command: "StartAuction",
+      auctionId: "auction-1"
+    });
+    expect(JSON.parse(actionLog[1]?.payloadJson ?? "{}")).toMatchObject({
+      command: "RevealNextPlayer",
+      playerId: "player-1"
+    });
+    expect(JSON.parse(actionLog[4]?.payloadJson ?? "{}")).toMatchObject({
+      command: "MarkSold",
+      playerId: "player-1",
+      winningTeamId: "team-1",
+      soldPrice: firstBid.nextCurrentBid
+    });
+    expect(JSON.parse(actionLog[actionLog.length - 1]?.payloadJson ?? "{}")).toMatchObject({
+      command: "MarkUnsold",
+      playerId: secondReveal.revealedPlayerId
+    });
+    expect(JSON.parse(await readFile(snapshotPath, "utf8"))).toEqual(unsold.state);
+    reopenedRepository.close();
+  });
+
+  it("fails closed when state_json is corrupted instead of returning setup mode", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const repository = createAuctionRepository({ databasePath, snapshotPath });
+
+    await repository.commitStartAuction({
+      state: createState(),
+      clientCommandId: "cmd-1"
+    });
+    repository.close();
+
+    const database = new Database(databasePath);
+    database
+      .prepare("UPDATE auction_state SET state_json = ? WHERE auction_id = ?")
+      .run("{invalid-json", "auction-1");
+    database.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(() => reopenedRepository.loadCurrentState()).toThrow(PersistenceStateLoadError);
+    reopenedRepository.close();
+  });
 });
+
+function requireOk<T extends { ok: boolean }>(
+  result: T
+): Extract<T, { ok: true }> {
+  if (!result.ok) {
+    throw new Error("Expected command result to be ok.");
+  }
+
+  return result as Extract<T, { ok: true }>;
+}
 
 function createState(): AuctionState {
   return {

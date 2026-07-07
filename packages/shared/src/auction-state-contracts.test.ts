@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appStateResponseSchema,
   auctionStateSchema,
   boardStateDtoSchema,
   deriveSoldRosterRows,
@@ -16,10 +17,12 @@ import {
   markUnsoldResponseSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
+  resumeSummarySchema,
   selectTeamRequestSchema,
   selectTeamResponseSchema,
   startAuctionRequestSchema,
-  startAuctionResponseSchema
+  startAuctionResponseSchema,
+  teamRosterDtoSchema
 } from "./index.js";
 
 describe("auction state contracts", () => {
@@ -434,6 +437,113 @@ describe("auction state contracts", () => {
     ).toBe(false);
   });
 
+  it("validates strict resume summaries and app-state resume modes", () => {
+    const boardState = createBoardState();
+    const resume = {
+      phase: "InitialAuction" as const,
+      lastSavedAction: "RevealNextPlayer",
+      lastSavedAt: "2026-07-07T08:40:00.000Z",
+      pendingPlayerCount: 1,
+      currentPlayerName: "Aarav Menon",
+      persistenceFailure: null
+    };
+
+    expect(resumeSummarySchema.safeParse(resume).success).toBe(true);
+    expect(
+      resumeSummarySchema.safeParse({
+        ...resume,
+        actionLogRows: [{ command: "RevealNextPlayer" }]
+      }).success
+    ).toBe(false);
+    expect(
+      appStateResponseSchema.safeParse({
+        mode: "setup",
+        state: null,
+        resume: null
+      }).success
+    ).toBe(true);
+    expect(
+      appStateResponseSchema.safeParse({
+        mode: "auction",
+        state: boardState,
+        resume
+      }).success
+    ).toBe(true);
+    expect(
+      appStateResponseSchema.safeParse({
+        mode: "auction",
+        state: boardState,
+        resume: null
+      }).success
+    ).toBe(false);
+    expect(
+      appStateResponseSchema.safeParse({
+        mode: "setup",
+        state: boardState,
+        resume
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates strict team roster projections and rejects private fields", () => {
+    const boardState = createBoardState();
+    const roster = {
+      teamId: "team-1",
+      name: "Falcons",
+      captain: "Riya Shah",
+      logoAssetId: "logo-1",
+      budget: 200,
+      remainingBudget: 160,
+      squadCount: 2,
+      roleCounts: {
+        Ace: 1,
+        Batting: 1,
+        Bowling: 0,
+        AllRounder: 0,
+        Girls: 0
+      },
+      roster: [
+        {
+          playerId: "player-1",
+          name: "Aarav Menon",
+          role: "Ace" as const,
+          acquisitionType: "Sold" as const,
+          soldPrice: 40
+        }
+      ]
+    };
+
+    expect(teamRosterDtoSchema.safeParse(roster).success).toBe(true);
+    expect(
+      teamRosterDtoSchema.safeParse({
+        ...roster,
+        paymentStatus: "paid"
+      }).success
+    ).toBe(false);
+    expect(
+      boardStateDtoSchema.safeParse({
+        ...boardState,
+        teamRosters: [roster]
+      }).success
+    ).toBe(true);
+    expect(
+      boardStateDtoSchema.safeParse({
+        ...boardState,
+        teamRosters: [
+          {
+            ...roster,
+            roster: [
+              {
+                ...roster.roster[0],
+                sourceFilename: "players.csv"
+              }
+            ]
+          }
+        ]
+      }).success
+    ).toBe(false);
+  });
+
   it("validates persisted Phase 1 order and board progress contracts", () => {
     const boardState = createBoardState();
 
@@ -676,6 +786,27 @@ describe("auction state contracts", () => {
           soldPrice: 10,
           winningTeamId: "team-1",
           acquisitionType: "Auction" as const
+        },
+        {
+          ...boardState.players[0],
+          id: "player-2",
+          name: "Nisha Rao",
+          role: "Batting" as const,
+          gender: "Female" as const,
+          status: "Sold" as const,
+          soldPrice: 12,
+          winningTeamId: "team-1",
+          acquisitionType: "Auction" as const
+        },
+        {
+          ...boardState.players[0],
+          id: "player-3",
+          name: "Kabir Sethi",
+          gender: "Male" as const,
+          status: "Unsold" as const,
+          soldPrice: null,
+          winningTeamId: null,
+          acquisitionType: null
         }
       ],
       teams: [
@@ -691,14 +822,14 @@ describe("auction state contracts", () => {
       ],
       phase1Order: {
         categories: [
-          { category: "Ace Men", playerIds: ["player-1"] },
+          { category: "Ace Men", playerIds: ["player-1", "player-2", "player-3"] },
           { category: "Ace Women", playerIds: [] },
           { category: "Women All Rounders", playerIds: [] },
           { category: "Men Bowlers", playerIds: [] },
           { category: "Men Batsmen", playerIds: [] },
           { category: "Men All Rounders", playerIds: [] }
         ],
-        playerIds: ["player-1"],
+        playerIds: ["player-1", "player-2", "player-3"],
         generatedAt: "2026-07-07T08:30:00.000Z"
       },
       currentPlayerId: null,
@@ -740,6 +871,13 @@ describe("auction state contracts", () => {
         role: "Ace",
         acquisitionType: "Sold",
         soldPrice: 10
+      },
+      {
+        playerId: "player-2",
+        name: "Nisha Rao",
+        role: "Batting",
+        acquisitionType: "Sold",
+        soldPrice: 12
       }
     ]);
     expect(
@@ -1138,6 +1276,7 @@ function createBoardState() {
         }
       }
     ],
+    teamRosters: [],
     currentPlayer: null,
     currentBid: null,
     selectedTeamId: null,

@@ -47,3 +47,12 @@
 - Stale concurrent mutating commands can overwrite newer state — no optimistic locking on any live command; matches Stories 2.2–2.6 pattern
 - Cross-command stale Mark Unsold response can overwrite fresher board state — per-command generation refs only; same pattern as Mark Sold / Reveal Next
 - Additional route tests for `persistence_failure_uncleared`, wrong phase, snapshot write failure — same coverage gap as Mark Sold route tests
+
+## Deferred from: code review of 2-8-persist-and-resume-phase-1-live-state (2026-07-08)
+
+- `state` vs `resume` metadata torn read across separate repository reads — matches existing read-path pattern until snapshot-isolated load lands
+- Legacy Phase 1 migration can write during `loadCurrentState` on GET — documented pre-2.1 migration behavior from Story 2.1
+- No snapshot fallback when SQLite `state_json` is corrupt but `latest.json` is valid — recovery UX belongs to a later persistence story
+- `deriveSoldRosterRows` silently omits or throws on corrupt sold-player rows — corrupt-row hardening is cross-cutting data-integrity work
+- No in-app discard path when saved auction state is unrecoverable — Reset/Close belong to later stories
+- E2E coverage for persistence-failure resume blocking — component and API tests cover the operator path for this story

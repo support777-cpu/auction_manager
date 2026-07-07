@@ -26,7 +26,9 @@ import {
 } from "@auction-manager/imports";
 import type { AuctionRole } from "@auction-manager/shared";
 import {
+  appStateResponseSchema,
   auctionRoleValues,
+  deriveSoldRosterRows,
   increaseBidRequestSchema,
   markSoldAcceptedResponseSchema,
   markSoldRejectedResponseSchema,
@@ -38,7 +40,8 @@ import {
   selectTeamRequestSchema,
   startAuctionRequestSchema,
   type AuctionState,
-  type BoardStateDto
+  type BoardStateDto,
+  type ResumeSummary
 } from "@auction-manager/shared";
 import {
   AuctionAlreadyStartedError,
@@ -173,19 +176,58 @@ export async function createAuctionManagerServer(
     mode: "event"
   }));
 
-  app.get("/api/state", async () => {
-    const state = auctionRepository.loadCurrentState();
-    if (!state) {
-      return {
-        mode: "setup",
-        state: null
-      };
+  app.get("/api/state", async (_request, reply) => {
+    let state: AuctionState | null;
+    try {
+      state = auctionRepository.loadCurrentState();
+    } catch {
+      return reply.code(500).send({
+        ok: false,
+        error: "state_response_invalid",
+        message: "Auction state could not be loaded. Restart the app and try again."
+      });
     }
 
-    return {
-      mode: "auction",
-      state: toBoardStateDto(state)
-    };
+    if (!state) {
+      const response = {
+        mode: "setup",
+        state: null,
+        resume: null
+      };
+      const parsedResponse = appStateResponseSchema.safeParse(response);
+      if (!parsedResponse.success) {
+        return reply.code(500).send({
+          ok: false,
+          error: "state_response_invalid",
+          message: "Auction state could not be loaded. Restart the app and try again."
+        });
+      }
+      return parsedResponse.data;
+    }
+
+    try {
+      const boardState = toBoardStateDto(state);
+      const response = {
+        mode: "auction",
+        state: boardState,
+        resume: toResumeSummary(state, boardState, auctionRepository.getLatestActionSummary())
+      };
+      const parsedResponse = appStateResponseSchema.safeParse(response);
+      if (!parsedResponse.success) {
+        return reply.code(500).send({
+          ok: false,
+          error: "state_response_invalid",
+          message: "Auction state could not be loaded. Restart the app and try again."
+        });
+      }
+      return parsedResponse.data;
+    } catch {
+      return reply.code(500).send({
+        ok: false,
+        error: "state_response_invalid",
+        message: "Auction state could not be loaded. Restart the app and try again."
+      });
+    }
   });
 
   app.post(
@@ -1556,6 +1598,17 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
         ...(currentPlayerCapacity ? { currentPlayerCapacity } : {})
       };
     }),
+    teamRosters: state.teams.map((team) => ({
+      teamId: team.id,
+      name: team.name,
+      captain: team.captain,
+      ...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {}),
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: team.roleCounts,
+      roster: deriveSoldRosterRows(state, team.id)
+    })),
     currentPlayer:
       currentPlayer === null
         ? null
@@ -1578,6 +1631,24 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
     phase2PoolCount: new Set(state.phase2Pool).size,
     phase1Progress: toPhase1ProgressDto(state),
     canUndo: state.undoHistory.length > 0,
+    persistenceFailure: state.persistenceFailure
+  };
+}
+
+function toResumeSummary(
+  state: AuctionState,
+  boardState: BoardStateDto,
+  latestAction: {
+    readonly command: string;
+    readonly timestamp: string;
+  } | null
+): ResumeSummary {
+  return {
+    phase: state.phase,
+    lastSavedAction: latestAction?.command ?? null,
+    lastSavedAt: latestAction?.timestamp ?? state.updatedAt,
+    pendingPlayerCount: boardState.phase1Progress.pendingPlayerCount,
+    currentPlayerName: boardState.currentPlayer?.name ?? null,
     persistenceFailure: state.persistenceFailure
   };
 }

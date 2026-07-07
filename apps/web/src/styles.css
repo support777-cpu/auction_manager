@@ -183,6 +183,39 @@ button:focus-visible {
   align-content: center;
 }
 
+.resume-start-panel {
+  display: grid;
+  gap: 20px;
+  max-width: 1120px;
+  margin: 0 auto 16px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.resume-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.resume-summary-grid article {
+  min-height: 96px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fafb;
+}
+
+.resume-summary-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
 .primary-action {
   display: inline-flex;
   min-height: 48px;
@@ -1122,7 +1155,8 @@ button:focus-visible {
     white-space: normal;
   }
 
-  .status-grid {
+  .status-grid,
+  .resume-summary-grid {
     grid-template-columns: 1fr;
   }
 

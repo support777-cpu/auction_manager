@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -22,6 +22,13 @@ const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
   "base64"
 );
+
+async function resumeSavedAuction(page: Page) {
+  await expect(page.getByTestId("resume-start-surface")).toBeVisible();
+  await expect(page.getByTestId("resume-phase")).toContainText("Initial Auction");
+  await page.getByTestId("resume-auction").click();
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+}
 
 test("serves the app shell and health endpoint from event mode", async ({
   page,
@@ -338,7 +345,24 @@ test("reviews and saves auction parameters before starting the auction", async (
   );
 
   await page.reload();
-  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await resumeSavedAuction(page);
+  const resumedAfterSale = await request.get("/api/state");
+  expect(resumedAfterSale.status()).toBe(200);
+  const resumedAfterSaleJson = await resumedAfterSale.json();
+  expect(resumedAfterSaleJson.resume).toMatchObject({
+    phase: "InitialAuction",
+    lastSavedAction: "MarkSold",
+    currentPlayerName: null,
+    persistenceFailure: null
+  });
+  expect(resumedAfterSaleJson.state.teamRosters[0].roster).toContainEqual(
+    expect.objectContaining({
+      name: "Aarav Menon",
+      role: "Ace",
+      acquisitionType: "Sold",
+      soldPrice: 20
+    })
+  );
   await expect(page.getByTestId("current-player-panel")).toContainText(
     "No Current Player"
   );
@@ -388,7 +412,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   });
 
   await page.reload();
-  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await resumeSavedAuction(page);
   await expect(page.getByTestId("current-player-name")).toContainText(
     secondPlayerName
   );
@@ -403,8 +427,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
 
   await page.reload();
-
-  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await resumeSavedAuction(page);
   await expect(page.getByTestId("current-player-name")).toContainText(
     secondPlayerName
   );
@@ -416,8 +439,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("selected-team")).toContainText("None");
 
   await page.reload();
-
-  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await resumeSavedAuction(page);
   await expect(page.getByTestId("phase1-progress")).toContainText(
     "Phase 1 in progress"
   );
@@ -453,7 +475,22 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(falconsTile).not.toContainText("2 of 2");
 
   await page.reload();
-  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await resumeSavedAuction(page);
+  const resumedAfterUnsold = await request.get("/api/state");
+  expect(resumedAfterUnsold.status()).toBe(200);
+  const resumedAfterUnsoldJson = await resumedAfterUnsold.json();
+  expect(resumedAfterUnsoldJson.resume).toMatchObject({
+    phase: "InitialAuction",
+    lastSavedAction: "MarkUnsold",
+    currentPlayerName: null,
+    persistenceFailure: null
+  });
+  expect(resumedAfterUnsoldJson.state.phase2PoolCount).toBe(1);
+  expect(
+    resumedAfterUnsoldJson.state.players.filter(
+      (player: { status: string }) => player.status === "Pending"
+    )
+  ).toHaveLength(6);
   await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
     "Unsold (Phase 2 rebid): 1"
   );

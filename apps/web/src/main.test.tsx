@@ -16,15 +16,16 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     document.body.innerHTML = '<div id="root"></div>';
   });
 
-  it("renders exact blocked text near the selected Team and Mark Sold context", async () => {
+  it("keeps the setup start surface when no auction is active", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url === "/api/state") {
           return jsonResponse({
-            mode: "auction",
-            state: createBlockedBoardState()
+            mode: "setup",
+            state: null,
+            resume: null
           });
         }
 
@@ -37,6 +38,145 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     );
 
     await import("./main.js");
+
+    expect(await screen.findByTestId("setup-empty-state")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-start")).toHaveTextContent("Start setup");
+  });
+
+  it("shows saved auction metadata and resumes without a command POST", async () => {
+    const savedState = createEligibleBoardState();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(savedState));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+
+    expect(await screen.findByTestId("resume-start-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("resume-phase")).toHaveTextContent("Initial Auction");
+    expect(screen.getByTestId("resume-last-action")).toHaveTextContent(
+      "Reveal Next Player"
+    );
+    expect(screen.getByTestId("resume-last-saved-at")).toHaveTextContent(
+      "2026-07-07T08:35:00.000Z"
+    );
+    expect(screen.getByTestId("resume-current-player")).toHaveTextContent(
+      "Aarav Menon"
+    );
+
+    fireEvent.click(screen.getByTestId("resume-auction"));
+
+    expect(await screen.findByTestId("current-player-panel")).toHaveTextContent(
+      "Aarav Menon"
+    );
+    expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, init] = call as unknown as [
+          RequestInfo | URL,
+          RequestInit | undefined
+        ];
+        return String(url).startsWith("/api/auction/") && init?.method === "POST";
+      })
+    ).toBe(false);
+  });
+
+  it("shows persistence failure copy on resume and keeps board controls disabled", async () => {
+    const failedState = {
+      ...createEligibleBoardState(),
+      persistenceFailure: "snapshot_write_failed"
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(failedState));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+
+    expect(await screen.findByTestId("resume-start-surface")).toHaveTextContent(
+      "Local recovery snapshot could not be written. Resolve persistence before the next command."
+    );
+    fireEvent.click(screen.getByTestId("resume-auction"));
+    expect(await screen.findByTestId("reveal-next")).toBeDisabled();
+    expect(screen.getByTestId("increase-bid")).toBeDisabled();
+    expect(screen.getByTestId("mark-sold")).toBeDisabled();
+    expect(screen.getByTestId("mark-unsold")).toBeDisabled();
+    expect(screen.getByTestId("app-shell")).toHaveTextContent(
+      "Local recovery snapshot could not be written. Resolve persistence before the next command."
+    );
+  });
+
+  it("shows the state load error surface when /api/state fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "state_response_invalid",
+              message: "Auction state could not be loaded. Restart the app and try again."
+            },
+            500
+          );
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+
+    expect(await screen.findByTestId("state-load-error")).toHaveTextContent(
+      "Auction state could not be loaded"
+    );
+  });
+
+  it("renders exact blocked text near the selected Team and Mark Sold context", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createBlockedBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+    await resumeSavedAuction();
 
     expect(await screen.findByTestId("mark-sold")).toBeDisabled();
     expect(await screen.findByTestId("mark-sold-blocked-reason")).toHaveTextContent(
@@ -51,10 +191,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/state") {
-        return jsonResponse({
-          mode: "auction",
-          state: createEligibleBoardState()
-        });
+        return jsonResponse(createAuctionAppState(createEligibleBoardState()));
       }
 
       if (url === "/api/setup/auction-parameters") {
@@ -83,6 +220,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     const markSoldButton = await screen.findByTestId("mark-sold");
     expect(markSoldButton).toBeEnabled();
@@ -106,10 +244,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/state") {
-        return jsonResponse({
-          mode: "auction",
-          state: createEligibleBoardState()
-        });
+        return jsonResponse(createAuctionAppState(createEligibleBoardState()));
       }
 
       if (url === "/api/setup/auction-parameters") {
@@ -132,6 +267,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     fireEvent.click(await screen.findByTestId("mark-sold"));
 
@@ -159,10 +295,7 @@ describe("AuctionBoard Mark Unsold", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/state") {
-        return jsonResponse({
-          mode: "auction",
-          state: createEligibleBoardState()
-        });
+        return jsonResponse(createAuctionAppState(createEligibleBoardState()));
       }
 
       if (url === "/api/setup/auction-parameters") {
@@ -185,6 +318,7 @@ describe("AuctionBoard Mark Unsold", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     fireEvent.click(await screen.findByTestId("mark-unsold"));
 
@@ -211,10 +345,7 @@ describe("AuctionBoard Mark Unsold", () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url === "/api/state") {
-          return jsonResponse({
-            mode: "auction",
-            state: createNoCurrentPlayerBoardState()
-          });
+          return jsonResponse(createAuctionAppState(createNoCurrentPlayerBoardState()));
         }
 
         if (url === "/api/setup/auction-parameters") {
@@ -226,6 +357,7 @@ describe("AuctionBoard Mark Unsold", () => {
     );
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     expect(await screen.findByTestId("mark-unsold")).toBeDisabled();
   });
@@ -236,10 +368,9 @@ describe("AuctionBoard Mark Unsold", () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url === "/api/state") {
-          return jsonResponse({
-            mode: "auction",
-            state: createPhase1CompleteUnsoldBoardState()
-          });
+          return jsonResponse(
+            createAuctionAppState(createPhase1CompleteUnsoldBoardState())
+          );
         }
 
         if (url === "/api/setup/auction-parameters") {
@@ -251,6 +382,7 @@ describe("AuctionBoard Mark Unsold", () => {
     );
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     expect(await screen.findByTestId("phase1-complete")).toHaveTextContent(
       "Phase 1 complete."
@@ -269,10 +401,7 @@ describe("AuctionBoard Mark Unsold", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/state") {
-        return jsonResponse({
-          mode: "auction",
-          state: createEligibleBoardState()
-        });
+        return jsonResponse(createAuctionAppState(createEligibleBoardState()));
       }
 
       if (url === "/api/setup/auction-parameters") {
@@ -290,6 +419,7 @@ describe("AuctionBoard Mark Unsold", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     const markUnsoldButton = await screen.findByTestId("mark-unsold");
     fireEvent.click(markUnsoldButton);
@@ -323,10 +453,9 @@ describe("AuctionBoard Mark Unsold", () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url === "/api/state") {
-          return jsonResponse({
-            mode: "auction",
-            state: createPhase1CompleteAllSoldBoardState()
-          });
+          return jsonResponse(
+            createAuctionAppState(createPhase1CompleteAllSoldBoardState())
+          );
         }
 
         if (url === "/api/setup/auction-parameters") {
@@ -338,6 +467,7 @@ describe("AuctionBoard Mark Unsold", () => {
     );
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     await screen.findByTestId("phase1-progress");
     expect(screen.queryByTestId("phase1-complete")).not.toBeInTheDocument();
@@ -353,10 +483,7 @@ describe("AuctionBoard Mark Unsold", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/state") {
-        return jsonResponse({
-          mode: "auction",
-          state: createEligibleBoardState()
-        });
+        return jsonResponse(createAuctionAppState(createEligibleBoardState()));
       }
 
       if (url === "/api/setup/auction-parameters") {
@@ -390,6 +517,7 @@ describe("AuctionBoard Mark Unsold", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await import("./main.js");
+    await resumeSavedAuction();
 
     fireEvent.click(await screen.findByTestId("mark-unsold"));
     expect(await screen.findByTestId("mark-unsold-success")).toBeInTheDocument();
@@ -408,6 +536,25 @@ function jsonResponse(body: unknown, status = 200): Response {
       "content-type": "application/json"
     }
   });
+}
+
+async function resumeSavedAuction() {
+  fireEvent.click(await screen.findByTestId("resume-auction"));
+}
+
+function createAuctionAppState(state: BoardStateDto) {
+  return {
+    mode: "auction" as const,
+    state,
+    resume: {
+      phase: state.phase,
+      lastSavedAction: "RevealNextPlayer",
+      lastSavedAt: "2026-07-07T08:35:00.000Z",
+      pendingPlayerCount: state.phase1Progress.pendingPlayerCount,
+      currentPlayerName: state.currentPlayer?.name ?? null,
+      persistenceFailure: state.persistenceFailure
+    }
+  };
 }
 
 function createEligibleBoardState(): BoardStateDto {
@@ -448,6 +595,24 @@ function createEligibleBoardState(): BoardStateDto {
           canBuy: true,
           reasons: []
         }
+      }
+    ],
+    teamRosters: [
+      {
+        teamId: "team-1",
+        name: "Falcons",
+        captain: "Priya Captain",
+        budget: 170,
+        remainingBudget: 170,
+        squadCount: 0,
+        roleCounts: {
+          Ace: 0,
+          Batting: 0,
+          Bowling: 0,
+          AllRounder: 0,
+          Girls: 0
+        },
+        roster: []
       }
     ],
     currentPlayer: {
@@ -523,6 +688,24 @@ function createBlockedBoardState(): BoardStateDto {
         }
       }
     ],
+    teamRosters: [
+      {
+        teamId: "team-1",
+        name: "Falcons",
+        captain: "Priya Captain",
+        budget: 170,
+        remainingBudget: 8,
+        squadCount: 0,
+        roleCounts: {
+          Ace: 0,
+          Batting: 0,
+          Bowling: 0,
+          AllRounder: 0,
+          Girls: 0
+        },
+        roster: []
+      }
+    ],
     currentPlayer: {
       id: "player-1",
       name: "Aarav Menon",
@@ -592,6 +775,29 @@ function createSoldBoardState(): BoardStateDto {
           ...baseTeam.roleCounts,
           Ace: 1
         }
+      }
+    ],
+    teamRosters: [
+      {
+        teamId: "team-1",
+        name: "Falcons",
+        captain: "Priya Captain",
+        budget: 170,
+        remainingBudget: 160,
+        squadCount: 1,
+        roleCounts: {
+          ...baseTeam.roleCounts,
+          Ace: 1
+        },
+        roster: [
+          {
+            playerId: "player-1",
+            name: "Aarav Menon",
+            role: "Ace",
+            acquisitionType: "Sold",
+            soldPrice: 10
+          }
+        ]
       }
     ],
     currentPlayer: null,
@@ -711,6 +917,7 @@ function createPhase1CompleteUnsoldBoardState(): BoardStateDto {
       }
     ],
     teams: createEligibleBoardState().teams,
+    teamRosters: createEligibleBoardState().teamRosters,
     currentPlayer: null,
     currentBid: null,
     selectedTeamId: null,
@@ -751,6 +958,32 @@ function createPhase1CompleteAllSoldBoardState(): BoardStateDto {
       }
     ],
     teams: createEligibleBoardState().teams,
+    teamRosters: [
+      {
+        teamId: "team-1",
+        name: "Falcons",
+        captain: "Priya Captain",
+        budget: 170,
+        remainingBudget: 158,
+        squadCount: 1,
+        roleCounts: {
+          Ace: 1,
+          Batting: 0,
+          Bowling: 0,
+          AllRounder: 0,
+          Girls: 0
+        },
+        roster: [
+          {
+            playerId: "player-1",
+            name: "Aarav Menon",
+            role: "Ace",
+            acquisitionType: "Sold",
+            soldPrice: 12
+          }
+        ]
+      }
+    ],
     currentPlayer: null,
     currentBid: null,
     selectedTeamId: null,

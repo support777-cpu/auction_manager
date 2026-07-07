@@ -762,6 +762,30 @@ export const phase1ProgressDtoSchema = z
   })
   .strict();
 
+export const soldRosterRowSchema = z
+  .object({
+    playerId: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    role: auctionRoleSchema,
+    acquisitionType: z.literal("Sold"),
+    soldPrice: positiveIntegerSchema
+  })
+  .strict();
+
+export const teamRosterDtoSchema = z
+  .object({
+    teamId: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    captain: z.string().trim().min(1),
+    logoAssetId: z.string().trim().min(1).optional(),
+    budget: positiveIntegerSchema,
+    remainingBudget: nonnegativeIntegerSchema,
+    squadCount: nonnegativeIntegerSchema,
+    roleCounts: roleTargetsSchema,
+    roster: z.array(soldRosterRowSchema)
+  })
+  .strict();
+
 export const boardStateDtoSchema = z
   .object({
     auctionId: opaqueIdSchema,
@@ -769,6 +793,7 @@ export const boardStateDtoSchema = z
     parameters: auctionParametersSchema,
     players: z.array(boardPlayerDtoSchema),
     teams: z.array(boardTeamDtoSchema),
+    teamRosters: z.array(teamRosterDtoSchema),
     currentPlayer: boardPlayerDtoSchema.nullable(),
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
@@ -940,16 +965,6 @@ export const markUnsoldResponseSchema = z.union([
   markUnsoldRejectedResponseSchema
 ]);
 
-export const soldRosterRowSchema = z
-  .object({
-    playerId: opaqueIdSchema,
-    name: z.string().trim().min(1),
-    role: auctionRoleSchema,
-    acquisitionType: z.literal("Sold"),
-    soldPrice: positiveIntegerSchema
-  })
-  .strict();
-
 export function deriveSoldRosterRows(
   state: Pick<z.infer<typeof auctionStateSchema>, "players">,
   teamId: string
@@ -972,12 +987,33 @@ export function deriveSoldRosterRows(
     );
 }
 
-export const appStateResponseSchema = z
+export const resumeSummarySchema = z
   .object({
-    mode: z.enum(["setup", "auction"]),
-    state: boardStateDtoSchema.nullable()
+    phase: auctionPhaseSchema,
+    lastSavedAction: z.string().trim().min(1).nullable(),
+    lastSavedAt: z.string().trim().min(1).nullable(),
+    pendingPlayerCount: nonnegativeIntegerSchema,
+    currentPlayerName: z.string().trim().min(1).nullable(),
+    persistenceFailure: z.string().trim().min(1).nullable()
   })
   .strict();
+
+export const appStateResponseSchema = z.discriminatedUnion("mode", [
+  z
+    .object({
+      mode: z.literal("setup"),
+      state: z.null(),
+      resume: z.null()
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal("auction"),
+      state: boardStateDtoSchema,
+      resume: resumeSummarySchema
+    })
+    .strict()
+]);
 
 export type Gender = z.infer<typeof genderSchema>;
 export type AuctionRole = z.infer<typeof auctionRoleSchema>;
@@ -1060,6 +1096,7 @@ export type TeamCurrentPlayerCapacityDto = z.infer<
   typeof teamCurrentPlayerCapacityDtoSchema
 >;
 export type BoardStateDto = z.infer<typeof boardStateDtoSchema>;
+export type TeamRosterDto = z.infer<typeof teamRosterDtoSchema>;
 export type StartAuctionRequest = z.infer<typeof startAuctionRequestSchema>;
 export type RevealNextPlayerRequest = z.infer<
   typeof revealNextPlayerRequestSchema
@@ -1097,6 +1134,7 @@ export type MarkUnsoldRejectedResponse = z.infer<
 >;
 export type MarkUnsoldResponse = z.infer<typeof markUnsoldResponseSchema>;
 export type SoldRosterRow = z.infer<typeof soldRosterRowSchema>;
+export type ResumeSummary = z.infer<typeof resumeSummarySchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

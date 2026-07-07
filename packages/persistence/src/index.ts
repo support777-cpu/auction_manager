@@ -82,6 +82,13 @@ export interface ActionLogEntry {
   readonly undoable: boolean;
 }
 
+export interface LatestActionSummary {
+  readonly command: ActionLogEntry["command"];
+  readonly clientCommandId: string;
+  readonly timestamp: string;
+  readonly summary: string;
+}
+
 export interface AuctionRepository {
   readonly commitStartAuction: (input: CommitStartAuctionInput) => Promise<void>;
   readonly commitRevealNextPlayer: (
@@ -92,6 +99,7 @@ export interface AuctionRepository {
   readonly commitMarkSold: (input: CommitMarkSoldInput) => Promise<void>;
   readonly commitMarkUnsold: (input: CommitMarkUnsoldInput) => Promise<void>;
   readonly loadCurrentState: () => AuctionState | null;
+  readonly getLatestActionSummary: () => LatestActionSummary | null;
   readonly listActionLog: () => readonly ActionLogEntry[];
   readonly close: () => void;
 }
@@ -755,6 +763,7 @@ export function createAuctionRepository(
       }
     },
     loadCurrentState: () => loadCurrentState(database, options.snapshotPath),
+    getLatestActionSummary: () => getLatestActionSummary(database),
     listActionLog: () => {
       const currentAuctionId = database
         .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
@@ -789,6 +798,33 @@ export function createAuctionRepository(
     },
     close: () => database.close()
   };
+}
+
+function getLatestActionSummary(
+  database: Database.Database
+): LatestActionSummary | null {
+  const currentAuctionId = database
+    .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
+    .get() as { auctionId: string } | undefined;
+
+  if (!currentAuctionId) {
+    return null;
+  }
+
+  return (
+    (database
+      .prepare(
+        `SELECT command,
+                client_command_id AS clientCommandId,
+                timestamp,
+                summary
+           FROM action_log
+          WHERE auction_id = ?
+          ORDER BY action_id DESC
+          LIMIT 1`
+      )
+      .get(currentAuctionId.auctionId) as LatestActionSummary | undefined) ?? null
+  );
 }
 
 function applySchema(database: Database.Database): void {
@@ -850,12 +886,24 @@ function loadCurrentState(
     return null;
   }
 
-  const migration = migrateLegacyPhase1OrderIfMissing(JSON.parse(row.stateJson));
+  let rawState: unknown;
+  try {
+    rawState = JSON.parse(row.stateJson);
+  } catch {
+    throw new PersistenceStateLoadError("Persisted auction state could not be parsed.");
+  }
+
+  const migration = migrateLegacyPhase1OrderIfMissing(rawState);
   if (!migration.ok) {
     throw new PersistenceStateLoadError(migration.message);
   }
 
-  const parsed = auctionStateSchema.parse(migration.state);
+  let parsed: AuctionState;
+  try {
+    parsed = auctionStateSchema.parse(migration.state);
+  } catch {
+    throw new PersistenceStateLoadError("Persisted auction state failed validation.");
+  }
   if (migration.didMigrate) {
     persistAuthoritativeState(database, snapshotPath, parsed);
   }

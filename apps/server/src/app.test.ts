@@ -2,6 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { createAuctionRepository } from "@auction-manager/persistence";
 import { createAuctionManagerServer } from "./app.js";
 
@@ -32,6 +33,24 @@ describe("auction manager event server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
     expect(response.body).toContain('<div id="root">Auction Manager</div>');
+
+    await app.close();
+  });
+
+  it("returns setup mode with no resume metadata when no auction is active", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/state" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      mode: "setup",
+      state: null,
+      resume: null
+    });
 
     await app.close();
   });
@@ -87,14 +106,132 @@ describe("auction manager event server", () => {
     expect(stateResponse.statusCode).toBe(200);
     expect(stateResponse.json()).toMatchObject({
       mode: "auction",
+      resume: {
+        phase: "InitialAuction",
+        lastSavedAction: "StartAuction",
+        pendingPlayerCount: 8,
+        currentPlayerName: null,
+        persistenceFailure: null
+      },
       state: {
         auctionId: body.state.auctionId,
         phase: "InitialAuction",
-        phase1Progress: body.state.phase1Progress
+        phase1Progress: body.state.phase1Progress,
+        teamRosters: expect.arrayContaining([
+          expect.objectContaining({
+            teamId: expect.any(String),
+            roster: []
+          })
+        ])
+      }
+    });
+    expect(stateResponse.json().resume.lastSavedAt).toEqual(expect.any(String));
+    expect(JSON.stringify(stateResponse.json())).not.toContain("private-player@example.com");
+    expect(JSON.stringify(stateResponse.json())).not.toContain("UPI-PRIVATE");
+
+    await app.close();
+  });
+
+  it("returns persistence failure in resume metadata when snapshot writes are blocked", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-persistence-failure" }
+    });
+    expect(started.statusCode).toBe(200);
+    const auctionId = started.json().state.auctionId;
+
+    const database = new Database(join(dataDirectory, "auction.db"));
+    database
+      .prepare("UPDATE auction_state SET persistence_failure = ? WHERE auction_id = ?")
+      .run("snapshot_write_failed", auctionId);
+    database.close();
+
+    const stateResponse = await app.inject({ method: "GET", url: "/api/state" });
+    expect(stateResponse.statusCode).toBe(200);
+    expect(stateResponse.json()).toMatchObject({
+      mode: "auction",
+      resume: {
+        persistenceFailure: "snapshot_write_failed"
+      },
+      state: {
+        persistenceFailure: "snapshot_write_failed"
       }
     });
 
     await app.close();
+  });
+
+  it("returns state_response_invalid when persisted auction state cannot be loaded", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-corrupt-state" }
+    });
+    expect(started.statusCode).toBe(200);
+    const auctionId = started.json().state.auctionId;
+
+    const database = new Database(join(dataDirectory, "auction.db"));
+    database
+      .prepare("UPDATE auction_state SET state_json = ? WHERE auction_id = ?")
+      .run("{invalid-json", auctionId);
+    database.close();
+
+    const stateResponse = await app.inject({ method: "GET", url: "/api/state" });
+    expect(stateResponse.statusCode).toBe(500);
+    expect(stateResponse.json()).toMatchObject({
+      error: "state_response_invalid",
+      message: "Auction state could not be loaded. Restart the app and try again."
+    });
+
+    await app.close();
+  });
+
+  it("returns resume metadata after restarting the server against the same data directory", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const webDistPath = await createWebDistFixture();
+    const firstApp = await createAuctionManagerServer({ webDistPath, dataDirectory });
+    await stageValidSetup(firstApp);
+
+    const started = await firstApp.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-restart" }
+    });
+    expect(started.statusCode).toBe(200);
+    await firstApp.close();
+
+    const secondApp = await createAuctionManagerServer({ webDistPath, dataDirectory });
+    const stateResponse = await secondApp.inject({ method: "GET", url: "/api/state" });
+    expect(stateResponse.statusCode).toBe(200);
+    expect(stateResponse.json()).toMatchObject({
+      mode: "auction",
+      resume: {
+        phase: "InitialAuction",
+        lastSavedAction: "StartAuction",
+        currentPlayerName: null,
+        persistenceFailure: null
+      }
+    });
+
+    await secondApp.close();
   });
 
   it("blocks Start Auction when setup is invalid", async () => {
@@ -244,6 +381,13 @@ describe("auction manager event server", () => {
     expect(stateResponse.statusCode).toBe(200);
     expect(stateResponse.json()).toMatchObject({
       mode: "auction",
+      resume: {
+        phase: "InitialAuction",
+        lastSavedAction: "RevealNextPlayer",
+        pendingPlayerCount: 7,
+        currentPlayerName: body.state.currentPlayer.name,
+        persistenceFailure: null
+      },
       state: {
         currentPlayer: {
           id: body.state.currentPlayer.id
@@ -830,6 +974,35 @@ describe("auction manager event server", () => {
         currentBid: null,
         selectedTeamId: null
       });
+
+    const resumed = await app.inject({ method: "GET", url: "/api/state" });
+    expect(resumed.statusCode).toBe(200);
+    expect(resumed.json()).toMatchObject({
+      mode: "auction",
+      resume: {
+        phase: "InitialAuction",
+        lastSavedAction: "MarkSold",
+        currentPlayerName: null,
+        persistenceFailure: null
+      },
+      state: {
+        teamRosters: expect.arrayContaining([
+          expect.objectContaining({
+            teamId: team.id,
+            roster: [
+              expect.objectContaining({
+                playerId,
+                role: revealed.state.currentPlayer.role,
+                acquisitionType: "Sold",
+                soldPrice: revealed.state.currentBid
+              })
+            ]
+          })
+        ])
+      }
+    });
+    expect(JSON.stringify(resumed.json())).not.toContain("private-player@example.com");
+    expect(JSON.stringify(resumed.json())).not.toContain("UPI-PRIVATE");
 
     const duplicate = await app.inject({
       method: "POST",

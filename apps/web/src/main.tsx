@@ -34,7 +34,8 @@ import {
   type AuctionParameterReviewResponse,
   type AuctionParameterReviewParameters,
   type AuctionRole,
-  type BoardStateDto
+  type BoardStateDto,
+  type ResumeSummary
 } from "@auction-manager/shared";
 import { AuctionParametersSection } from "./auction-parameters-section.js";
 import {
@@ -168,6 +169,10 @@ function App() {
   >([]);
   const [parameterSaveError, setParameterSaveError] = useState<string | null>(null);
   const [boardState, setBoardState] = useState<BoardStateDto | null>(null);
+  const [savedAuction, setSavedAuction] = useState<{
+    state: BoardStateDto;
+    resume: ResumeSummary;
+  } | null>(null);
   const [stateLoadState, setStateLoadState] = useState<"loading" | "ready" | "error">(
     "loading"
   );
@@ -297,7 +302,12 @@ function App() {
         }
 
         if (parsedState.data.mode === "auction") {
-          setBoardState(parsedState.data.state);
+          setSavedAuction({
+            state: parsedState.data.state,
+            resume: parsedState.data.resume
+          });
+        } else {
+          setSavedAuction(null);
         }
         setStateLoadState("ready");
       } catch {
@@ -801,6 +811,7 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
+      setSavedAuction(null);
       clearMarkSoldOutcome();
       clearMarkUnsoldOutcome();
       setStartAuctionState("ready");
@@ -1337,6 +1348,66 @@ function App() {
     );
   }
 
+  if (savedAuction && stateLoadState === "ready") {
+    return (
+      <ResumeStartSurface
+        resume={savedAuction.resume}
+        onResume={async () => {
+          try {
+            const response = await fetch("/api/state");
+            const parsedState = appStateResponseSchema.safeParse(await response.json());
+
+            if (
+              !response.ok ||
+              !parsedState.success ||
+              parsedState.data.mode !== "auction"
+            ) {
+              setStateLoadState("error");
+              setSavedAuction(null);
+              return;
+            }
+
+            setBoardState(parsedState.data.state);
+            setSavedAuction(null);
+          } catch {
+            setStateLoadState("error");
+            setSavedAuction(null);
+          }
+        }}
+      />
+    );
+  }
+
+  if (stateLoadState === "loading") {
+    return (
+      <main className="app-shell" data-testid="app-shell">
+        <header className="app-header" aria-labelledby="app-title">
+          <h1 id="app-title">Auction Manager</h1>
+        </header>
+        <section className="setup-panel" data-testid="state-loading">
+          <div className="setup-copy">
+            <h2>Loading auction state</h2>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (stateLoadState === "error") {
+    return (
+      <main className="app-shell" data-testid="app-shell">
+        <header className="app-header" aria-labelledby="app-title">
+          <h1 id="app-title">Auction Manager</h1>
+        </header>
+        <section className="setup-panel" data-testid="state-load-error">
+          <div className="setup-copy">
+            <h2>Auction state could not be loaded</h2>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
@@ -1860,6 +1931,73 @@ function App() {
           </span>
         </button>
       </div>
+    </main>
+  );
+}
+
+function ResumeStartSurface({
+  resume,
+  onResume
+}: {
+  readonly resume: ResumeSummary;
+  readonly onResume: () => void | Promise<void>;
+}) {
+  return (
+    <main className="app-shell" data-testid="app-shell">
+      <header className="app-header" aria-labelledby="app-title">
+        <h1 id="app-title">Auction Manager</h1>
+      </header>
+
+      <section className="resume-start-panel" data-testid="resume-start-surface">
+        <div className="setup-copy">
+          <h2>Saved auction found</h2>
+        </div>
+        <div className="resume-summary-grid" aria-label="Saved auction summary">
+          <article>
+            <span className="status-label">Saved phase</span>
+            <strong data-testid="resume-phase">{formatPhaseLabel(resume.phase)}</strong>
+          </article>
+          <article>
+            <span className="status-label">Last saved action</span>
+            <strong data-testid="resume-last-action">
+              {formatCommandLabel(resume.lastSavedAction)}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Last saved</span>
+            <strong data-testid="resume-last-saved-at">
+              {resume.lastSavedAt ?? "Unknown"}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Current player</span>
+            <strong data-testid="resume-current-player">
+              {resume.currentPlayerName ?? "No Current Player"}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Pending</span>
+            <strong>{resume.pendingPlayerCount} pending</strong>
+          </article>
+        </div>
+        {resume.persistenceFailure ? (
+          <p className="persistence-warning" role="alert">
+            Local recovery snapshot could not be written. Resolve persistence before the
+            next command.
+          </p>
+        ) : null}
+        <div className="setup-actions" aria-label="Resume actions">
+          <button
+            className="primary-action"
+            data-testid="resume-auction"
+            onClick={onResume}
+            type="button"
+          >
+            <PlayCircle aria-hidden="true" size={20} />
+            <span>Resume {formatPhaseLabel(resume.phase)}</span>
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
@@ -2658,6 +2796,18 @@ function readMarkUnsoldErrorMessage(response: Response, body: unknown): string {
   }
 
   return "Mark Unsold could not be completed. Try again.";
+}
+
+function formatPhaseLabel(phase: string): string {
+  return phase.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+function formatCommandLabel(command: string | null): string {
+  if (!command) {
+    return "Unknown";
+  }
+
+  return command.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
 function createClientCommandId(
