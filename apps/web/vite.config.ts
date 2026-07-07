@@ -14,7 +14,11 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true
       },
-      "/assets": {
+      "/assets/players": {
+        target: apiProxyTarget,
+        changeOrigin: true
+      },
+      "/assets/teams": {
         target: apiProxyTarget,
         changeOrigin: true
       }

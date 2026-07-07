@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { auctionStateSchema, type AuctionState } from "@auction-manager/shared";
+import { auctionStateBaseSchema, auctionStateSchema, type AuctionState } from "@auction-manager/shared";
+import { createPhase1Order } from "@auction-manager/domain";
 
 export const persistencePackageReady = true;
 
@@ -57,6 +58,13 @@ export class AuctionAlreadyStartedError extends Error {
   }
 }
 
+export class PersistenceStateLoadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PersistenceStateLoadError";
+  }
+}
+
 export function createAuctionRepository(
   options: AuctionRepositoryOptions
 ): AuctionRepository {
@@ -72,7 +80,7 @@ export function createAuctionRepository(
       if (duplicateCommand) {
         throw new DuplicateClientCommandError(input.clientCommandId);
       }
-      if (loadCurrentState(database)) {
+      if (loadCurrentState(database, options.snapshotPath)) {
         throw new AuctionAlreadyStartedError();
       }
       database.prepare("DELETE FROM current_auction").run();
@@ -105,7 +113,16 @@ export function createAuctionRepository(
           "Auction started from validated setup.",
           JSON.stringify({
             command: "StartAuction",
-            auctionId: input.state.auctionId
+            auctionId: input.state.auctionId,
+            phase1Order: {
+              playerIds: input.state.phase1Order.playerIds,
+              categoryCounts: Object.fromEntries(
+                input.state.phase1Order.categories.map((entry) => [
+                  entry.category,
+                  entry.playerIds.length
+                ])
+              )
+            }
           })
         );
     }
@@ -129,7 +146,8 @@ export function createAuctionRepository(
         markPersistenceFailure(
           database,
           parsed.auctionId,
-          "snapshot_write_failed"
+          "snapshot_write_failed",
+          options.snapshotPath
         );
         throw new PersistenceSnapshotWriteError(
           "Start Auction committed, but latest snapshot could not be written.",
@@ -137,7 +155,7 @@ export function createAuctionRepository(
         );
       }
     },
-    loadCurrentState: () => loadCurrentState(database),
+    loadCurrentState: () => loadCurrentState(database, options.snapshotPath),
     listActionLog: () => {
       const currentAuctionId = database
         .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
@@ -212,39 +230,141 @@ function applySchema(database: Database.Database): void {
   `);
 }
 
-function loadCurrentState(database: Database.Database): AuctionState | null {
+function loadCurrentState(
+  database: Database.Database,
+  snapshotPath: string
+): AuctionState | null {
   const row = database
     .prepare(
-      `SELECT s.state_json AS stateJson, s.persistence_failure AS persistenceFailure
+      `SELECT s.auction_id AS auctionId,
+              s.state_json AS stateJson,
+              s.persistence_failure AS persistenceFailure
          FROM current_auction c
          JOIN auction_state s ON s.auction_id = c.auction_id
         WHERE c.singleton = 1`
     )
-    .get() as { stateJson: string; persistenceFailure: string | null } | undefined;
+    .get() as
+    | { auctionId: string; stateJson: string; persistenceFailure: string | null }
+    | undefined;
 
   if (!row) {
     return null;
   }
 
-  const parsed = auctionStateSchema.parse(JSON.parse(row.stateJson));
+  const migration = migrateLegacyPhase1OrderIfMissing(JSON.parse(row.stateJson));
+  if (!migration.ok) {
+    throw new PersistenceStateLoadError(migration.message);
+  }
+
+  const parsed = auctionStateSchema.parse(migration.state);
+  if (migration.didMigrate) {
+    persistAuthoritativeState(database, snapshotPath, parsed);
+  }
+
   return {
     ...parsed,
     persistenceFailure: row.persistenceFailure
   };
 }
 
+interface LegacyPhase1MigrationResult {
+  readonly ok: true;
+  readonly state: unknown;
+  readonly didMigrate: boolean;
+}
+
+interface LegacyPhase1MigrationFailure {
+  readonly ok: false;
+  readonly message: string;
+}
+
+function migrateLegacyPhase1OrderIfMissing(
+  rawState: unknown
+): LegacyPhase1MigrationResult | LegacyPhase1MigrationFailure {
+  if (!isRecord(rawState) || "phase1Order" in rawState) {
+    return { ok: true, state: rawState, didMigrate: false };
+  }
+
+  const legacyState = rawState as Partial<AuctionState>;
+  const legacyParse = auctionStateBaseSchema
+    .omit({ phase1Order: true })
+    .safeParse(legacyState);
+  if (!legacyParse.success) {
+    return {
+      ok: false,
+      message: "Legacy auction state is missing Phase 1 order and could not be parsed."
+    };
+  }
+
+  const phase1Order = createPhase1Order({
+    players: legacyParse.data.players,
+    parameters: legacyParse.data.parameters,
+    generatedAt: legacyParse.data.updatedAt,
+    shuffle: (playerIds) => [...playerIds]
+  });
+
+  if (!phase1Order.ok) {
+    return {
+      ok: false,
+      message: `Legacy auction state could not derive Phase 1 order: ${phase1Order.error.code}.`
+    };
+  }
+
+  return {
+    ok: true,
+    didMigrate: true,
+    state: {
+      ...legacyParse.data,
+      phase1Order: phase1Order.order
+    }
+  };
+}
+
+function persistAuthoritativeState(
+  database: Database.Database,
+  snapshotPath: string,
+  state: AuctionState
+): void {
+  database
+    .prepare(
+      `UPDATE auction_state
+          SET state_json = ?, phase = ?, updated_at = ?
+        WHERE auction_id = ?`
+    )
+    .run(
+      JSON.stringify(state),
+      state.phase,
+      state.updatedAt,
+      state.auctionId
+    );
+
+  void writeFile(snapshotPath, JSON.stringify(state, null, 2), "utf8").catch(() => {
+    // Snapshot refresh is best-effort during legacy migration.
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function markPersistenceFailure(
   database: Database.Database,
   auctionId: string,
-  failure: string
+  failure: string,
+  snapshotPath: string
 ): void {
-  const state = loadCurrentState(database);
-  const nextState = state
-    ? {
-        ...state,
-        persistenceFailure: failure
-      }
-    : null;
+  const state = loadCurrentState(database, snapshotPath);
+  if (!state) {
+    database
+      .prepare("UPDATE auction_state SET persistence_failure = ? WHERE auction_id = ?")
+      .run(failure, auctionId);
+    return;
+  }
+
+  const nextState = {
+    ...state,
+    persistenceFailure: failure
+  };
   database
     .prepare(
       "UPDATE auction_state SET persistence_failure = ?, state_json = ? WHERE auction_id = ?"
@@ -253,8 +373,16 @@ function markPersistenceFailure(
 }
 
 function assertMutationsAllowed(database: Database.Database): void {
-  const state = loadCurrentState(database);
-  if (state?.persistenceFailure) {
+  const row = database
+    .prepare(
+      `SELECT s.persistence_failure AS persistenceFailure
+         FROM current_auction c
+         JOIN auction_state s ON s.auction_id = c.auction_id
+        WHERE c.singleton = 1`
+    )
+    .get() as { persistenceFailure: string | null } | undefined;
+
+  if (row?.persistenceFailure) {
     throw new Error(
       "Cannot run mutating commands while persistence failure is uncleared."
     );

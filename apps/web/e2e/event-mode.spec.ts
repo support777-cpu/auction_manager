@@ -257,7 +257,29 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("current-player-panel")).toContainText(
     "No Current Player"
   );
+  await expect(page.getByTestId("phase1-progress")).toContainText(
+    "Phase 1 order ready"
+  );
+  await expect(page.getByTestId("phase1-current-category")).toContainText(
+    "Current category: Ace Men"
+  );
+  await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
   await expect(page.getByTestId("current-bid")).toContainText("No current bid");
   await expect(page.getByTestId("reveal-next")).toBeDisabled();
   await expect(page.locator(".team-board-grid .team-tile")).toHaveCount(4);
+  await expect(page.getByTestId("auction-board")).not.toContainText(
+    "private-player@example.com"
+  );
+  await expect(page.getByTestId("auction-board")).not.toContainText("UPI-PRIVATE");
+
+  await page.reload();
+
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("phase1-progress")).toContainText(
+    "Phase 1 order ready"
+  );
+  await expect(page.getByTestId("phase1-current-category")).toContainText(
+    "Current category: Ace Men"
+  );
+  await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
 });

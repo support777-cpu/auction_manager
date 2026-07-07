@@ -1,5 +1,5 @@
 # generated: 2026-07-06T21:32:18+0530
-# last_updated: 2026-07-07T16:54:24+0530
+# last_updated: 2026-07-07T17:36:30+0530
 # project: auction_manager
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-06T21:32:18+0530
-last_updated: 2026-07-07T16:54:24+0530
+last_updated: 2026-07-07T17:36:30+0530
 project: auction_manager
 project_key: NOKEY
 tracking_system: file-system
@@ -58,7 +58,7 @@ development_status:
   epic-1-retrospective: optional
 
   epic-2: in-progress
-  2-1-create-persisted-phase-1-player-order: ready-for-dev
+  2-1-create-persisted-phase-1-player-order: done
   2-2-reveal-current-player-on-the-live-board: backlog
   2-3-select-bidding-team-from-team-tiles: backlog
   2-4-increase-current-bid: backlog

@@ -38,6 +38,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSetupStaging } from "./setup-staging.js";
+import { toPhase1ProgressDto } from "./phase1-progress.js";
 
 export type AuctionManagerServerOptions = {
   logger?: boolean;
@@ -866,11 +867,11 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
           },
     currentBid: state.currentBid,
     selectedTeamId: state.selectedTeamId,
+    phase1Progress: toPhase1ProgressDto(state),
     canUndo: state.undoHistory.length > 0,
     persistenceFailure: state.persistenceFailure
   };
 }
-
 function getUploadKind(
   url: string
 ): "player-csv" | "team-csv" | "photo" | "logo" | "auction-start" | "state" {

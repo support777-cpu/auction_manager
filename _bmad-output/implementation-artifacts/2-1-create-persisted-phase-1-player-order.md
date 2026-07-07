@@ -5,7 +5,7 @@ created: 2026-07-07T16:54:24+0530
 
 # Story 2.1: Create Persisted Phase 1 Player Order
 
-Status: ready-for-dev
+Status: done
 
 Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
 
@@ -26,44 +26,44 @@ so that Players are revealed in the required role/gender sequence without spread
 
 ## Tasks / Subtasks
 
-- [ ] Add Phase 1 order contracts to shared state and board DTOs. (AC: 1, 3, 4)
-  - [ ] Extend `packages/shared/src/index.ts` with strict Zod schemas/types for persisted Phase 1 order state, using existing `phase1CategorySchema`, `phase1CategoryValues`, and opaque Player ids.
-  - [ ] Store the full persisted order in authoritative `AuctionState`, grouped by category and/or as an ordered Player id sequence. The structure must be enough for Story 2.2 to reveal the next Player without recalculating or reshuffling.
-  - [ ] Add board DTO progress fields that expose only category/progress metadata needed by the UI, such as current category, category counts, total ordered count, and revealed/pending counts. Do not expose private source fields. Do not expose source row numbers or source filenames.
-  - [ ] Preserve existing Start Auction response parsing by updating `startAuctionResponseSchema`, `appStateResponseSchema`, and test fixtures together.
+- [x] Add Phase 1 order contracts to shared state and board DTOs. (AC: 1, 3, 4)
+  - [x] Extend `packages/shared/src/index.ts` with strict Zod schemas/types for persisted Phase 1 order state, using existing `phase1CategorySchema`, `phase1CategoryValues`, and opaque Player ids.
+  - [x] Store the full persisted order in authoritative `AuctionState`, grouped by category and/or as an ordered Player id sequence. The structure must be enough for Story 2.2 to reveal the next Player without recalculating or reshuffling.
+  - [x] Add board DTO progress fields that expose only category/progress metadata needed by the UI, such as current category, category counts, total ordered count, and revealed/pending counts. Do not expose private source fields. Do not expose source row numbers or source filenames.
+  - [x] Preserve existing Start Auction response parsing by updating `startAuctionResponseSchema`, `appStateResponseSchema`, and test fixtures together.
 
-- [ ] Implement domain-owned Phase 1 order generation. (AC: 1, 2, 5)
-  - [ ] Add a domain function, for example `createPhase1Order` in `packages/domain/src/phase1-order.ts`, and re-export it from `packages/domain/src/index.ts`.
-  - [ ] Call the domain generator from `startAuctionFromSetup` after Players are normalized and ids are assigned, so a newly started Initial Auction already has its persisted Phase 1 order.
-  - [ ] Use the locked `AuctionParameters.phase1CategoryOrder` as the category sequence. Do not hard-code the default order inside the generator except through shared/default parameters.
-  - [ ] Randomize within each category only. Do not randomize category order, and do not move Players across categories.
-  - [ ] Inject deterministic randomness or a shuffle function for tests. Do not call `Math.random()` directly inside untestable domain logic.
-  - [ ] Validate that every normalized Player maps to exactly one configured Phase 1 category and that the generated order contains each Player id exactly once. Return a typed domain error if this invariant is violated.
-  - [ ] Keep this story scoped to order creation. Do not implement Reveal Next mutation, Current Player selection, Current Bid initialization, Mark Sold, Mark Unsold, or Undo behavior here.
+- [x] Implement domain-owned Phase 1 order generation. (AC: 1, 2, 5)
+  - [x] Add a domain function, for example `createPhase1Order` in `packages/domain/src/phase1-order.ts`, and re-export it from `packages/domain/src/index.ts`.
+  - [x] Call the domain generator from `startAuctionFromSetup` after Players are normalized and ids are assigned, so a newly started Initial Auction already has its persisted Phase 1 order.
+  - [x] Use the locked `AuctionParameters.phase1CategoryOrder` as the category sequence. Do not hard-code the default order inside the generator except through shared/default parameters.
+  - [x] Randomize within each category only. Do not randomize category order, and do not move Players across categories.
+  - [x] Inject deterministic randomness or a shuffle function for tests. Do not call `Math.random()` directly inside untestable domain logic.
+  - [x] Validate that every normalized Player maps to exactly one configured Phase 1 category and that the generated order contains each Player id exactly once. Return a typed domain error if this invariant is violated.
+  - [x] Keep this story scoped to order creation. Do not implement Reveal Next mutation, Current Player selection, Current Bid initialization, Mark Sold, Mark Unsold, or Undo behavior here.
 
-- [ ] Persist the generated order without reshuffle on resume. (AC: 3, 5)
-  - [ ] Extend `packages/persistence/src/index.ts` so `commitStartAuction` persists the new Phase 1 order fields as part of the authoritative state and writes them to `data/snapshots/latest.json` only after DB commit.
-  - [ ] Update reconstruction/loading tests to open a new repository instance and prove `loadCurrentState()` returns the exact same Phase 1 order after reopen.
-  - [ ] Keep `action_log` command `StartAuction` undoable false, but include Phase 1 order metadata in its payload where useful for audit/debugging. Prefer Player ids and category counts over names.
-  - [ ] If changing the `auctionStateSchema` would make old Story 1.6 `state_json` fail to parse, add explicit compatibility handling or migration behavior and test it. Do not silently reshuffle existing state on read.
-  - [ ] Preserve the existing persistence failure behavior: a snapshot write failure marks `persistenceFailure` and blocks further mutations.
+- [x] Persist the generated order without reshuffle on resume. (AC: 3, 5)
+  - [x] Extend `packages/persistence/src/index.ts` so `commitStartAuction` persists the new Phase 1 order fields as part of the authoritative state and writes them to `data/snapshots/latest.json` only after DB commit.
+  - [x] Update reconstruction/loading tests to open a new repository instance and prove `loadCurrentState()` returns the exact same Phase 1 order after reopen.
+  - [x] Keep `action_log` command `StartAuction` undoable false, but include Phase 1 order metadata in its payload where useful for audit/debugging. Prefer Player ids and category counts over names.
+  - [x] If changing the `auctionStateSchema` would make old Story 1.6 `state_json` fail to parse, add explicit compatibility handling or migration behavior and test it. Do not silently reshuffle existing state on read.
+  - [x] Preserve the existing persistence failure behavior: a snapshot write failure marks `persistenceFailure` and blocks further mutations.
 
-- [ ] Update API projection and initial board shell. (AC: 4)
-  - [ ] Update `toBoardStateDto` in `apps/server/src/app.ts` to derive Phase 1 progress from authoritative state. Route handlers must not duplicate category ordering or shuffle rules.
-  - [ ] Keep `POST /api/auction/start` as the entry point unless a separate initialization command is truly necessary. Any new mutating route must require `clientCommandId` and use the same content-type/status-code discipline.
-  - [ ] Update `GET /api/state` so resume returns the same progress metadata without exposing full private setup fields.
-  - [ ] In `apps/web/src/main.tsx`, show Initial Auction order readiness and category/progress on the board using stable selectors such as `phase1-progress` and `phase1-current-category`.
-  - [ ] Keep `reveal-next` disabled or clearly unavailable until Story 2.2 implements the command. Do not fake reveal behavior in React.
-  - [ ] Preserve existing selectors from Story 1.6: `auction-board`, `phase-indicator`, `current-player-panel`, `current-bid`, `reveal-next`, and setup import selectors.
+- [x] Update API projection and initial board shell. (AC: 4)
+  - [x] Update `toBoardStateDto` in `apps/server/src/app.ts` to derive Phase 1 progress from authoritative state. Route handlers must not duplicate category ordering or shuffle rules.
+  - [x] Keep `POST /api/auction/start` as the entry point unless a separate initialization command is truly necessary. Any new mutating route must require `clientCommandId` and use the same content-type/status-code discipline.
+  - [x] Update `GET /api/state` so resume returns the same progress metadata without exposing full private setup fields.
+  - [x] In `apps/web/src/main.tsx`, show Initial Auction order readiness and category/progress on the board using stable selectors such as `phase1-progress` and `phase1-current-category`.
+  - [x] Keep `reveal-next` disabled or clearly unavailable until Story 2.2 implements the command. Do not fake reveal behavior in React.
+  - [x] Preserve existing selectors from Story 1.6: `auction-board`, `phase-indicator`, `current-player-panel`, `current-bid`, `reveal-next`, and setup import selectors.
 
-- [ ] Add story-level acceptance and regression coverage. (AC: 5, 6)
-  - [ ] Unit: domain generator follows `parameters.phase1CategoryOrder`, randomizes within categories with deterministic test injection, rejects missing/duplicate category coverage, and includes every Player id exactly once.
-  - [ ] Contract: shared schemas accept the new order/progress state and reject private fields or unexpected DTO properties.
-  - [ ] Integration: persistence stores and reloads the exact generated order and snapshot. This is TEA `TD-015`.
-  - [ ] API: Start Auction response and `GET /api/state` include Phase 1 progress metadata and exclude private source fields.
-  - [ ] UI/E2E: valid setup starts auction, board displays Initial Auction plus Phase 1 order readiness/current category/progress, refresh/reopen keeps the same progress state, and private sample values are absent.
-  - [ ] Regression: Story 1.1-1.6 tests still pass, including setup import privacy, placeholder non-blocking behavior, parameter locking, Start Auction duplicate command behavior, and snapshot failure handling.
-  - [ ] Run the full Dev Gate and record results in the Dev Agent Record before marking tasks complete.
+- [x] Add story-level acceptance and regression coverage. (AC: 5, 6)
+  - [x] Unit: domain generator follows `parameters.phase1CategoryOrder`, randomizes within categories with deterministic test injection, rejects missing/duplicate category coverage, and includes every Player id exactly once.
+  - [x] Contract: shared schemas accept the new order/progress state and reject private fields or unexpected DTO properties.
+  - [x] Integration: persistence stores and reloads the exact generated order and snapshot. This is TEA `TD-015`.
+  - [x] API: Start Auction response and `GET /api/state` include Phase 1 progress metadata and exclude private source fields.
+  - [x] UI/E2E: valid setup starts auction, board displays Initial Auction plus Phase 1 order readiness/current category/progress, refresh/reopen keeps the same progress state, and private sample values are absent.
+  - [x] Regression: Story 1.1-1.6 tests still pass, including setup import privacy, placeholder non-blocking behavior, parameter locking, Start Auction duplicate command behavior, and snapshot failure handling.
+  - [x] Run the full Dev Gate and record results in the Dev Agent Record before marking tasks complete.
 
 ## Dev Notes
 
@@ -264,6 +264,57 @@ Review/Test Gate:
 
 ### Debug Log References
 
+- 2026-07-07T17:03:16+0530 `npm test -- packages/shared/src/auction-state-contracts.test.ts packages/domain/src/phase1-order.test.ts packages/domain/src/start-auction.test.ts` passed.
+- 2026-07-07T17:04:37+0530 `npm test -- packages/persistence/src/auction-repository.test.ts apps/server/src/app.test.ts` passed.
+- 2026-07-07T17:11:22+0530 `npm test` passed: 24 test files, 132 tests.
+- 2026-07-07T17:11:45+0530 Dev Gate passed: `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`, `npm run test:e2e:event`.
+
 ### Completion Notes List
 
+- Added strict shared contracts for persisted Phase 1 order state and board-safe Phase 1 progress DTOs.
+- Implemented domain-owned Phase 1 order generation using locked `AuctionParameters.phase1CategoryOrder`, category-local shuffle injection for tests, duplicate id validation, and configured-category validation.
+- Wired Start Auction to persist generated Phase 1 order in authoritative state and action-log diagnostics; reload returns the same stored order without reshuffle.
+- Added explicit legacy load compatibility for pre-Story-2.1 persisted auction state by deriving a non-random Phase 1 order through the domain generator with identity shuffle.
+- Projected Phase 1 progress in the server DTO and rendered Initial Auction order readiness/current category/progress in the board shell without implementing reveal behavior.
+- Added shared contract, domain, persistence, API, and event-mode E2E coverage; narrowed the Vite dev proxy to uploaded media asset paths so preview E2E serves built JS/CSS assets locally.
+
 ### File List
+
+- apps/server/src/app.ts
+- apps/server/src/app.test.ts
+- apps/web/e2e/event-mode.spec.ts
+- apps/web/src/main.tsx
+- apps/web/src/styles.css
+- apps/web/vite.config.ts
+- packages/domain/src/index.ts
+- packages/domain/src/format-phase1-order-error.ts
+- packages/domain/src/phase1-order.ts
+- packages/domain/src/phase1-order.test.ts
+- packages/domain/src/start-auction.ts
+- packages/domain/src/start-auction.test.ts
+- packages/persistence/src/index.ts
+- packages/persistence/src/auction-repository.test.ts
+- packages/shared/src/index.ts
+- packages/shared/src/auction-state-contracts.test.ts
+- apps/server/src/phase1-progress.ts
+- apps/server/src/phase1-progress.test.ts
+- _bmad-output/implementation-artifacts/2-1-create-persisted-phase-1-player-order.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-07-07: Implemented Story 2.1 Phase 1 persisted player order and moved story to review.
+- 2026-07-07: Code review completed; patched progress projection, schema invariants, legacy migration persistence, error messaging, UI status label, and test coverage. Story moved to done.
+
+### Review Findings
+
+- [x] [Review][Patch] Progress projection miscounts `Current` players and orphan order ids [`apps/server/src/phase1-progress.ts`] — fixed category/current/revealed counting
+- [x] [Review][Patch] `phase1Order` schema accepts structurally invalid persisted order [`packages/shared/src/index.ts`] — added `auctionStateSchema` cross-invariant refinement
+- [x] [Review][Patch] Legacy migration failure crashes load [`packages/persistence/src/index.ts`] — fail closed with `PersistenceStateLoadError`
+- [x] [Review][Patch] Legacy backfill not durably persisted on resume [`packages/persistence/src/index.ts`] — write back migrated order to `state_json`
+- [x] [Review][Patch] `markPersistenceFailure` can overwrite `state_json` with null [`packages/persistence/src/index.ts`] — guard null load path
+- [x] [Review][Patch] Start Auction hides Phase 1 order error context [`packages/domain/src/start-auction.ts`] — added formatted blocker messages
+- [x] [Review][Patch] Board shows hardcoded "Phase 1 order ready" [`apps/web/src/main.tsx`] — derive status label from progress
+- [x] [Review][Patch] Missing domain/persistence/progress tests for shuffle guards, duplicate ids, reload stability — added coverage in domain, persistence, and server tests
+- [x] [Review][Defer] Legacy Story 1.6 rows cannot recover original within-category shuffle [`packages/persistence/src/index.ts`] — identity backfill is the documented compatibility tradeoff; deferred, pre-existing limitation for upgraded in-flight auctions
+- [x] [Review][Defer] Domain order generation invoked from persistence for legacy migration [`packages/persistence/src/index.ts`] — deferred, accepted story-scoped compatibility seam per Dev Agent Record

@@ -2,6 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { createAuctionRepository, PersistenceSnapshotWriteError } from "./index.js";
 import type { AuctionState } from "@auction-manager/shared";
 
@@ -28,6 +29,21 @@ describe("auction repository", () => {
         undoable: false
       }
     ]);
+    expect(JSON.parse(repository.listActionLog()[0]?.payloadJson ?? "{}")).toEqual({
+      command: "StartAuction",
+      auctionId: "auction-1",
+      phase1Order: {
+        playerIds: ["player-1"],
+        categoryCounts: {
+          "Ace Men": 1,
+          "Ace Women": 0,
+          "Women All Rounders": 0,
+          "Men Bowlers": 0,
+          "Men Batsmen": 0,
+          "Men All Rounders": 0
+        }
+      }
+    });
     expect(JSON.parse(await readFile(join(directory, "snapshots/latest.json"), "utf8")))
       .toEqual(state);
 
@@ -49,6 +65,68 @@ describe("auction repository", () => {
 
     const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
     expect(reopenedRepository.loadCurrentState()).toEqual(state);
+    reopenedRepository.close();
+  });
+
+  it("loads legacy started state, persists backfilled Phase 1 order, and reloads it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const initializedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    initializedRepository.close();
+    const state = createState();
+    const { phase1Order: _phase1Order, ...legacyState } = state;
+    const database = new Database(databasePath);
+
+    database
+      .prepare(
+        `INSERT INTO auction_state
+          (auction_id, state_json, phase, created_at, updated_at, persistence_failure)
+          VALUES (?, ?, ?, ?, ?, NULL)`
+      )
+      .run(
+        legacyState.auctionId,
+        JSON.stringify(legacyState),
+        legacyState.phase,
+        legacyState.createdAt,
+        legacyState.updatedAt
+      );
+    database
+      .prepare("INSERT INTO current_auction (singleton, auction_id) VALUES (1, ?)")
+      .run(legacyState.auctionId);
+    database.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const migratedState = reopenedRepository.loadCurrentState();
+    expect(migratedState?.phase1Order).toEqual(state.phase1Order);
+
+    const persistedRow = new Database(databasePath)
+      .prepare("SELECT state_json AS stateJson FROM auction_state WHERE auction_id = ?")
+      .get(state.auctionId) as { stateJson: string };
+    expect(JSON.parse(persistedRow.stateJson).phase1Order).toEqual(state.phase1Order);
+
+    reopenedRepository.close();
+
+    const secondOpenRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(secondOpenRepository.loadCurrentState()?.phase1Order).toEqual(state.phase1Order);
+    secondOpenRepository.close();
+  });
+
+  it("preserves a multi-player shuffled order across repository reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const state = createMultiPlayerState();
+
+    await firstRepository.commitStartAuction({
+      state,
+      clientCommandId: "cmd-1"
+    });
+    firstRepository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()?.phase1Order).toEqual(state.phase1Order);
     reopenedRepository.close();
   });
 
@@ -190,6 +268,36 @@ function createState(): AuctionState {
         }
       }
     ],
+    phase1Order: {
+      categories: [
+        {
+          category: "Ace Men",
+          playerIds: ["player-1"]
+        },
+        {
+          category: "Ace Women",
+          playerIds: []
+        },
+        {
+          category: "Women All Rounders",
+          playerIds: []
+        },
+        {
+          category: "Men Bowlers",
+          playerIds: []
+        },
+        {
+          category: "Men Batsmen",
+          playerIds: []
+        },
+        {
+          category: "Men All Rounders",
+          playerIds: []
+        }
+      ],
+      playerIds: ["player-1"],
+      generatedAt: "2026-07-07T08:30:00.000Z"
+    },
     currentPlayerId: null,
     currentBid: null,
     selectedTeamId: null,
@@ -197,5 +305,73 @@ function createState(): AuctionState {
     createdAt: "2026-07-07T08:30:00.000Z",
     updatedAt: "2026-07-07T08:30:00.000Z",
     persistenceFailure: null
+  };
+}
+
+function createMultiPlayerState(): AuctionState {
+  return {
+    ...createState(),
+    players: [
+      {
+        id: "player-1",
+        name: "Aarav Menon",
+        gender: "Male",
+        role: "Ace",
+        phase1Category: "Ace Men",
+        basePrice: 10,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-2",
+        name: "Riya Shah",
+        gender: "Female",
+        role: "Ace",
+        phase1Category: "Ace Women",
+        basePrice: 10,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-3",
+        name: "Neha Allrounder",
+        gender: "Female",
+        role: "AllRounder",
+        phase1Category: "Women All Rounders",
+        basePrice: 6,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-4",
+        name: "Karan Allrounder",
+        gender: "Female",
+        role: "AllRounder",
+        phase1Category: "Women All Rounders",
+        basePrice: 6,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    phase1Order: {
+      categories: [
+        { category: "Ace Men", playerIds: ["player-1"] },
+        { category: "Ace Women", playerIds: ["player-2"] },
+        { category: "Women All Rounders", playerIds: ["player-4", "player-3"] },
+        { category: "Men Bowlers", playerIds: [] },
+        { category: "Men Batsmen", playerIds: [] },
+        { category: "Men All Rounders", playerIds: [] }
+      ],
+      playerIds: ["player-1", "player-2", "player-4", "player-3"],
+      generatedAt: "2026-07-07T08:30:00.000Z"
+    }
   };
 }

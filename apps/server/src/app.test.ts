@@ -61,8 +61,22 @@ describe("auction manager event server", () => {
       phase: "InitialAuction",
       currentPlayer: null,
       currentBid: null,
+      phase1Progress: {
+        currentCategory: "Ace Men",
+        orderedPlayerCount: 8,
+        pendingPlayerCount: 8,
+        revealedPlayerCount: 0
+      },
       canUndo: false
     });
+    expect(body.state.phase1Progress.categories).toEqual([
+      { category: "Ace Men", total: 1, pending: 1, completed: 0 },
+      { category: "Ace Women", total: 1, pending: 1, completed: 0 },
+      { category: "Women All Rounders", total: 2, pending: 2, completed: 0 },
+      { category: "Men Bowlers", total: 2, pending: 2, completed: 0 },
+      { category: "Men Batsmen", total: 1, pending: 1, completed: 0 },
+      { category: "Men All Rounders", total: 1, pending: 1, completed: 0 }
+    ]);
     expect(body.state.players).toHaveLength(8);
     expect(body.state.teams).toHaveLength(4);
     expect(JSON.stringify(body.state)).not.toContain("private-player@example.com");
@@ -74,7 +88,8 @@ describe("auction manager event server", () => {
       mode: "auction",
       state: {
         auctionId: body.state.auctionId,
-        phase: "InitialAuction"
+        phase: "InitialAuction",
+        phase1Progress: body.state.phase1Progress
       }
     });
 

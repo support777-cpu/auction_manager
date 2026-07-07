@@ -113,6 +113,36 @@ describe("startAuctionFromSetup", () => {
     expect(result.state).toMatchObject({
       auctionId: "auction-1",
       phase: "InitialAuction",
+      phase1Order: {
+        categories: [
+          {
+            category: "Ace Men",
+            playerIds: ["player-1"]
+          },
+          {
+            category: "Ace Women",
+            playerIds: []
+          },
+          {
+            category: "Women All Rounders",
+            playerIds: []
+          },
+          {
+            category: "Men Bowlers",
+            playerIds: []
+          },
+          {
+            category: "Men Batsmen",
+            playerIds: []
+          },
+          {
+            category: "Men All Rounders",
+            playerIds: []
+          }
+        ],
+        playerIds: ["player-1"],
+        generatedAt: "2026-07-07T08:30:00.000Z"
+      },
       currentPlayerId: null,
       currentBid: null,
       selectedTeamId: null,
@@ -167,6 +197,40 @@ describe("startAuctionFromSetup", () => {
     expect(result).toEqual({
       ok: false,
       blockers: ["Blocked: Player CSV must be imported before Start Auction."]
+    });
+  });
+
+  it("blocks when phase 1 order generation fails", () => {
+    const result = startAuctionFromSetup({
+      players: [
+        ...validPlayerReview.players,
+        {
+          sourceRowNumber: 3,
+          name: "Duplicate Aarav",
+          gender: "Male",
+          role: "Ace",
+          phase1Category: "Ace Men"
+        }
+      ],
+      playerPhotoReview: null,
+      teams: validTeamReview.teams,
+      teamLogoReview: null,
+      parameters,
+      setupReadiness: ready,
+      clientCommandId: "cmd-1",
+      ids: {
+        auctionId: () => "auction-1",
+        playerId: () => "player-1",
+        teamId: () => "team-1"
+      },
+      now: () => "2026-07-07T08:30:00.000Z"
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      blockers: [
+        "Phase 1 order could not be generated: duplicate player id player-1."
+      ]
     });
   });
 

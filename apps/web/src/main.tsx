@@ -26,7 +26,8 @@ import {
   type AuctionParameterReviewResponse,
   type AuctionParameterReviewParameters,
   type AuctionRole,
-  type BoardStateDto
+  type BoardStateDto,
+  type Phase1ProgressDto
 } from "@auction-manager/shared";
 import { AuctionParametersSection } from "./auction-parameters-section.js";
 import {
@@ -1339,6 +1340,19 @@ function App() {
   );
 }
 
+function getPhase1OrderStatusLabel(progress: Phase1ProgressDto): string {
+  if (progress.orderedPlayerCount === 0) {
+    return "No Phase 1 players ordered";
+  }
+  if (progress.pendingPlayerCount === progress.orderedPlayerCount) {
+    return "Phase 1 order ready";
+  }
+  if (progress.pendingPlayerCount === 0) {
+    return "Phase 1 order complete";
+  }
+  return "Phase 1 in progress";
+}
+
 function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
   return (
     <main className="app-shell" data-testid="app-shell">
@@ -1353,7 +1367,7 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
         </article>
         <article>
           <span className="status-label">Auction state</span>
-          <strong>{boardState.players.length} pending</strong>
+          <strong>{boardState.phase1Progress.pendingPlayerCount} pending</strong>
         </article>
         <article>
           <span className="status-label">Teams</span>
@@ -1400,6 +1414,9 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
             aria-labelledby="current-player-title"
           >
             <h2 id="current-player-title">No Current Player</h2>
+            <p data-testid="phase1-current-category">
+              Current category: {boardState.phase1Progress.currentCategory ?? "None"}
+            </p>
           </section>
 
           <section className="bid-panel" aria-label="Current bid">
@@ -1416,6 +1433,43 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
             </button>
           </section>
         </div>
+
+        <section
+          className="phase1-progress-panel"
+          data-testid="phase1-progress"
+          aria-label="Phase 1 order progress"
+        >
+          <div>
+            <span className="status-label">Phase 1 order</span>
+            <strong>{getPhase1OrderStatusLabel(boardState.phase1Progress)}</strong>
+          </div>
+          <dl className="phase1-progress-summary">
+            <div>
+              <dt>Ordered</dt>
+              <dd data-testid="phase1-ordered-count">
+                {boardState.phase1Progress.orderedPlayerCount}
+              </dd>
+            </div>
+            <div>
+              <dt>Pending</dt>
+              <dd>{boardState.phase1Progress.pendingPlayerCount}</dd>
+            </div>
+            <div>
+              <dt>Revealed</dt>
+              <dd>{boardState.phase1Progress.revealedPlayerCount}</dd>
+            </div>
+          </dl>
+          <div className="phase1-category-grid" aria-label="Phase 1 categories">
+            {boardState.phase1Progress.categories.map((category) => (
+              <article key={category.category}>
+                <strong>{category.category}</strong>
+                <span>
+                  {category.pending} pending of {category.total}
+                </span>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <section className="team-board" aria-label="Initialized Teams">
           <div className="subsection-heading">

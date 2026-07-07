@@ -18,3 +18,10 @@ export {
   type StartAuctionFromSetupInput,
   type StartAuctionFromSetupResult
 } from "./start-auction.js";
+export {
+  createPhase1Order,
+  type CreatePhase1OrderError,
+  type CreatePhase1OrderInput,
+  type CreatePhase1OrderResult
+} from "./phase1-order.js";
+export { formatCreatePhase1OrderError } from "./format-phase1-order-error.js";

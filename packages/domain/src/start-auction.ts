@@ -10,6 +10,8 @@ import {
   type SetupTeamPreview,
   type TeamLogoReviewResponse
 } from "@auction-manager/shared";
+import { formatCreatePhase1OrderError } from "./format-phase1-order-error.js";
+import { createPhase1Order } from "./phase1-order.js";
 
 export interface StartAuctionFromSetupInput {
   readonly players: readonly SetupPlayerPreview[];
@@ -69,6 +71,18 @@ export function startAuctionFromSetup(
       auctionRoleValues.map((role) => [role, 0])
     ) as AuctionTeam["roleCounts"]
   }));
+  const phase1Order = createPhase1Order({
+    players,
+    parameters: input.parameters,
+    generatedAt: timestamp
+  });
+
+  if (!phase1Order.ok) {
+    return {
+      ok: false,
+      blockers: [formatCreatePhase1OrderError(phase1Order.error)]
+    };
+  }
 
   return {
     ok: true,
@@ -78,6 +92,7 @@ export function startAuctionFromSetup(
       parameters: cloneParameters(input.parameters),
       players,
       teams,
+      phase1Order: phase1Order.order,
       currentPlayerId: null,
       currentBid: null,
       selectedTeamId: null,

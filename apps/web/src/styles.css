@@ -594,6 +594,7 @@ button:focus-visible {
 
 .current-player-panel,
 .bid-panel,
+.phase1-progress-panel,
 .team-board {
   border: 1px solid #d8dee6;
   border-radius: 8px;
@@ -632,6 +633,73 @@ button:focus-visible {
   color: #111827;
   font-size: 28px;
   line-height: 1.2;
+}
+
+.phase1-progress-panel {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 20px;
+}
+
+.phase1-progress-panel strong {
+  display: block;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.phase1-progress-summary,
+.phase1-category-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.phase1-progress-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.phase1-progress-summary div,
+.phase1-category-grid article {
+  min-height: 76px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.phase1-progress-summary dt,
+.phase1-progress-summary dd {
+  margin: 0;
+}
+
+.phase1-progress-summary dt {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.phase1-progress-summary dd {
+  margin-top: 6px;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.phase1-category-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.phase1-category-grid article span {
+  display: block;
+  margin-top: 6px;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .team-board {
@@ -724,6 +792,8 @@ button:focus-visible {
   .parameter-grid,
   .auction-parameters-summary,
   .board-main,
+  .phase1-progress-summary,
+  .phase1-category-grid,
   .team-board-grid {
     grid-template-columns: 1fr;
   }

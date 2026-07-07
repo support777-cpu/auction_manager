@@ -511,13 +511,110 @@ export const auctionTeamSchema = z
   })
   .strict();
 
-export const auctionStateSchema = z
+export const phase1OrderCategorySchema = z
+  .object({
+    category: phase1CategorySchema,
+    playerIds: z.array(opaqueIdSchema)
+  })
+  .strict();
+
+export const phase1OrderStateSchema = z
+  .object({
+    categories: z.array(phase1OrderCategorySchema),
+    playerIds: z.array(opaqueIdSchema),
+    generatedAt: z.string().trim().min(1)
+  })
+  .strict();
+
+function validatePhase1OrderInAuctionState(
+  state: {
+    players: z.infer<typeof auctionPlayerSchema>[];
+    parameters: z.infer<typeof auctionParametersSchema>;
+    phase1Order: z.infer<typeof phase1OrderStateSchema>;
+  },
+  context: z.RefinementCtx
+): void {
+  const configuredCategories = state.parameters.phase1CategoryOrder;
+  const { phase1Order } = state;
+
+  if (phase1Order.categories.length !== configuredCategories.length) {
+    context.addIssue({
+      code: "custom",
+      message: "phase1Order.categories must include every configured category",
+      path: ["phase1Order", "categories"]
+    });
+    return;
+  }
+
+  const seenCategories = new Set<string>();
+  for (let index = 0; index < configuredCategories.length; index += 1) {
+    const expectedCategory = configuredCategories[index];
+    const entry = phase1Order.categories[index];
+    if (!entry || entry.category !== expectedCategory) {
+      context.addIssue({
+        code: "custom",
+        message: `phase1Order.categories[${index}] must be ${expectedCategory}`,
+        path: ["phase1Order", "categories", index, "category"]
+      });
+    }
+    if (entry && seenCategories.has(entry.category)) {
+      context.addIssue({
+        code: "custom",
+        message: `duplicate phase1Order category ${entry.category}`,
+        path: ["phase1Order", "categories", index, "category"]
+      });
+    }
+    if (entry) {
+      seenCategories.add(entry.category);
+    }
+  }
+
+  const flattenedPlayerIds = phase1Order.categories.flatMap(
+    (entry) => entry.playerIds
+  );
+  if (
+    flattenedPlayerIds.length !== phase1Order.playerIds.length ||
+    flattenedPlayerIds.some(
+      (playerId, index) => playerId !== phase1Order.playerIds[index]
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "phase1Order.playerIds must match flattened category playerIds",
+      path: ["phase1Order", "playerIds"]
+    });
+  }
+
+  const rosterPlayerIds = new Set(state.players.map((player) => player.id));
+  const orderedPlayerIds = new Set(phase1Order.playerIds);
+  if (rosterPlayerIds.size !== orderedPlayerIds.size) {
+    context.addIssue({
+      code: "custom",
+      message: "phase1Order must include each roster player exactly once",
+      path: ["phase1Order", "playerIds"]
+    });
+    return;
+  }
+
+  for (const playerId of rosterPlayerIds) {
+    if (!orderedPlayerIds.has(playerId)) {
+      context.addIssue({
+        code: "custom",
+        message: `phase1Order missing roster player ${playerId}`,
+        path: ["phase1Order", "playerIds"]
+      });
+    }
+  }
+}
+
+export const auctionStateBaseSchema = z
   .object({
     auctionId: opaqueIdSchema,
     phase: auctionPhaseSchema,
     parameters: auctionParametersSchema,
     players: z.array(auctionPlayerSchema),
     teams: z.array(auctionTeamSchema),
+    phase1Order: phase1OrderStateSchema,
     currentPlayerId: nullableOpaqueIdSchema,
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
@@ -527,6 +624,10 @@ export const auctionStateSchema = z
     persistenceFailure: z.string().trim().min(1).nullable()
   })
   .strict();
+
+export const auctionStateSchema = auctionStateBaseSchema.superRefine(
+  validatePhase1OrderInAuctionState
+);
 
 export const boardPlayerDtoSchema = auctionPlayerSchema.pick({
   id: true,
@@ -552,6 +653,25 @@ export const boardTeamDtoSchema = auctionTeamSchema.pick({
   roleCounts: true
 });
 
+export const phase1ProgressCategoryDtoSchema = z
+  .object({
+    category: phase1CategorySchema,
+    total: nonnegativeIntegerSchema,
+    pending: nonnegativeIntegerSchema,
+    completed: nonnegativeIntegerSchema
+  })
+  .strict();
+
+export const phase1ProgressDtoSchema = z
+  .object({
+    currentCategory: phase1CategorySchema.nullable(),
+    orderedPlayerCount: nonnegativeIntegerSchema,
+    pendingPlayerCount: nonnegativeIntegerSchema,
+    revealedPlayerCount: nonnegativeIntegerSchema,
+    categories: z.array(phase1ProgressCategoryDtoSchema)
+  })
+  .strict();
+
 export const boardStateDtoSchema = z
   .object({
     auctionId: opaqueIdSchema,
@@ -562,6 +682,7 @@ export const boardStateDtoSchema = z
     currentPlayer: boardPlayerDtoSchema.nullable(),
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
+    phase1Progress: phase1ProgressDtoSchema,
     canUndo: z.boolean(),
     persistenceFailure: z.string().trim().min(1).nullable()
   })
@@ -652,7 +773,13 @@ export type AuctionParameterReviewParameters = z.infer<
 export type SetupReadinessResponse = z.infer<typeof setupReadinessResponseSchema>;
 export type AuctionPlayer = z.infer<typeof auctionPlayerSchema>;
 export type AuctionTeam = z.infer<typeof auctionTeamSchema>;
+export type Phase1OrderCategory = z.infer<typeof phase1OrderCategorySchema>;
+export type Phase1OrderState = z.infer<typeof phase1OrderStateSchema>;
 export type AuctionState = z.infer<typeof auctionStateSchema>;
+export type Phase1ProgressCategoryDto = z.infer<
+  typeof phase1ProgressCategoryDtoSchema
+>;
+export type Phase1ProgressDto = z.infer<typeof phase1ProgressDtoSchema>;
 export type BoardStateDto = z.infer<typeof boardStateDtoSchema>;
 export type StartAuctionRequest = z.infer<typeof startAuctionRequestSchema>;
 export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
