@@ -176,3 +176,83 @@ test("uploads Team logos in event mode and keeps missing logos non-blocking", as
   await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
   await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/logo/i);
 });
+
+test("reviews and saves auction parameters before Start Auction readiness", async ({
+  page
+}) => {
+  await page.goto("/");
+
+  await expect(page.getByTestId("setup-auction-parameters")).toBeVisible();
+  await expect(page.getByTestId("auction-parameters-summary")).toContainText("Ace 10", {
+    timeout: 10000
+  });
+  await expect(page.getByTestId("auction-parameters-summary")).toContainText(
+    "Increment 2; Team budget 170"
+  );
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("team-csv-input").setInputFiles({
+    name: "teams-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validTeamCsvPath)
+  });
+  await expect(page.getByTestId("team-csv-summary")).toContainText("4 imported");
+
+  await page.getByTestId("bid-increment-input").fill("0");
+  await page.getByTestId("auction-parameters-save").click();
+
+  await expect(page.locator(".parameter-errors")).toContainText(
+    "Bid increment must be a positive integer."
+  );
+  await expect(page.getByTestId("start-auction-blocker")).toContainText(
+    "Blocked: Auction Parameters need attention."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+
+  await page.getByTestId("bid-increment-input").fill("5");
+  await page.getByTestId("team-budget-input").fill("200");
+  await page.getByTestId("auction-parameters-save").click();
+
+  await expect(page.getByTestId("auction-parameters-summary")).toContainText(
+    "Increment 5; Team budget 200"
+  );
+  await expect(page.getByTestId("start-auction-blocker")).toContainText(
+    "Ready: setup prerequisites are valid. Start Auction command arrives in Story 1.6."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+});
+
+test("blocks Start Auction when an imported role base price is missing", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("team-csv-input").setInputFiles({
+    name: "teams-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validTeamCsvPath)
+  });
+  await expect(page.getByTestId("team-csv-summary")).toContainText("4 imported");
+
+  await page.getByTestId("role-base-price-Bowling").fill("");
+  await page.getByTestId("auction-parameters-save").click();
+
+  await expect(page.locator(".parameter-errors")).toContainText(
+    "Base price is missing for Bowling."
+  );
+  await expect(page.getByTestId("start-auction-blocker")).toContainText(
+    "Blocked: Auction Parameters need attention."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+});

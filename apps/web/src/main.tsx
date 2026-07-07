@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   CheckCircle2,
   Circle,
@@ -12,14 +12,27 @@ import {
 import {
   playerCsvImportReviewResponseSchema,
   playerPhotoReviewResponseSchema,
+  getSetupReadiness,
   teamCsvImportReviewResponseSchema,
   teamLogoReviewResponseSchema,
+  auctionParameterReviewResponseSchema,
+  auctionRoleValues,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
   type PlayerPhotoReviewResponse,
   type TeamCsvImportReviewResponse,
-  type TeamLogoReviewResponse
+  type TeamLogoReviewResponse,
+  type AuctionParameterReviewResponse,
+  type AuctionParameterReviewParameters,
+  type AuctionRole
 } from "@auction-manager/shared";
+import { AuctionParametersSection } from "./auction-parameters-section.js";
+import {
+  buildSubmittedParameters,
+  createParameterNumberFields,
+  parsePhase1CategoryOrderTextStrict,
+  type ParameterNumberFields
+} from "./auction-parameters-helpers.js";
 import "./styles.css";
 
 const phases = [
@@ -54,11 +67,28 @@ const emptyIssueGroups: PlayerCsvImportReviewResponse["issueGroups"] = [
   }
 ];
 
+function createEmptyNumberFields(): ParameterNumberFields {
+  const emptyRoleValues = Object.fromEntries(
+    auctionRoleValues.map((role) => [role, ""])
+  ) as Record<AuctionRole, string>;
+
+  return {
+    bidIncrement: "",
+    teamBudget: "",
+    maxSquadSize: "",
+    roleBasePrices: { ...emptyRoleValues },
+    roleTargets: { ...emptyRoleValues }
+  };
+}
+
 function App() {
   const uploadGenerationRef = useRef(0);
   const photoUploadGenerationRef = useRef(0);
   const teamUploadGenerationRef = useRef(0);
   const logoUploadGenerationRef = useRef(0);
+  const parameterSaveGenerationRef = useRef(0);
+  const parameterLoadGenerationRef = useRef(0);
+  const parameterPreviewGenerationRef = useRef(0);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -67,6 +97,18 @@ function App() {
   const [photoReview, setPhotoReview] = useState<PlayerPhotoReviewResponse | null>(null);
   const [teamReview, setTeamReview] = useState<TeamCsvImportReviewResponse | null>(null);
   const [logoReview, setLogoReview] = useState<TeamLogoReviewResponse | null>(null);
+  const [parameterReview, setParameterReview] =
+    useState<AuctionParameterReviewResponse | null>(null);
+  const [parameterDraft, setParameterDraft] =
+    useState<AuctionParameterReviewParameters | null>(null);
+  const [numberFields, setNumberFields] = useState<ParameterNumberFields>(
+    createEmptyNumberFields()
+  );
+  const [phase1OrderText, setPhase1OrderText] = useState("");
+  const [phase1OrderError, setPhase1OrderError] = useState<string | null>(null);
+  const [parameterLoadState, setParameterLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [uploadState, setUploadState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
@@ -83,6 +125,67 @@ function App() {
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [teamUploadError, setTeamUploadError] = useState<string | null>(null);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [parameterSaveState, setParameterSaveState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [parameterErrors, setParameterErrors] = useState<
+    AuctionParameterReviewResponse["blockingReasons"]
+  >([]);
+  const [draftPreviewReasons, setDraftPreviewReasons] = useState<
+    AuctionParameterReviewResponse["blockingReasons"]
+  >([]);
+  const [parameterSaveError, setParameterSaveError] = useState<string | null>(null);
+
+  const applyParameterReviewToForm = useCallback(
+    (review: AuctionParameterReviewResponse) => {
+      setParameterReview(review);
+      setParameterDraft(review.parameters);
+      setNumberFields(createParameterNumberFields(review.parameters));
+      setPhase1OrderText(review.parameters.phase1CategoryOrder.join(", "));
+      setPhase1OrderError(null);
+      setDraftPreviewReasons(review.blockingReasons);
+      setParameterErrors([]);
+    },
+    []
+  );
+
+  const loadAuctionParameters = useCallback(async (options?: { force?: boolean }) => {
+    const loadGeneration = ++parameterLoadGenerationRef.current;
+    setParameterLoadState("loading");
+
+    try {
+      const response = await fetch("/api/setup/auction-parameters");
+      const parsedReview = auctionParameterReviewResponseSchema.safeParse(
+        await response.json()
+      );
+
+      if (!options?.force && loadGeneration !== parameterLoadGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok || !parsedReview.success) {
+        setParameterLoadState("error");
+        return;
+      }
+
+      applyParameterReviewToForm(parsedReview.data);
+      setParameterLoadState("ready");
+    } catch {
+      if (!options?.force && loadGeneration !== parameterLoadGenerationRef.current) {
+        return;
+      }
+
+      setParameterLoadState("error");
+    }
+  }, [applyParameterReviewToForm]);
+
+  const markParameterDraftEdited = useCallback(() => {
+    parameterLoadGenerationRef.current += 1;
+  }, []);
+
+  useEffect(() => {
+    void loadAuctionParameters();
+  }, [loadAuctionParameters]);
   const issueGroups = mergeIssueGroups(
     review?.issueGroups,
     photoReview?.issueGroups,
@@ -93,6 +196,100 @@ function App() {
     !review || review.summary.startAuctionBlocked || review.summary.importedPlayers === 0;
   const logoUploadDisabled =
     !teamReview || teamReview.summary.startAuctionBlocked || teamReview.summary.importedTeams === 0;
+  const parameterBlockingReasons =
+    parameterErrors.length > 0 ? parameterErrors : draftPreviewReasons;
+
+  const parameterReviewForReadiness = useMemo(() => {
+    if (parameterLoadState !== "ready" || !parameterDraft) {
+      return null;
+    }
+
+    return {
+      parameters: parameterDraft,
+      blockingReasons: parameterBlockingReasons,
+      reasonsByField: {},
+      startAuctionBlocked: parameterBlockingReasons.length > 0
+    } satisfies AuctionParameterReviewResponse;
+  }, [
+    parameterBlockingReasons,
+    parameterDraft,
+    parameterLoadState
+  ]);
+
+  const setupReadiness = useMemo(
+    () =>
+      getSetupReadiness({
+        playerCsvReview: review,
+        teamCsvReview: teamReview,
+        parameterReview: parameterReviewForReadiness
+      }),
+    [parameterReviewForReadiness, review, teamReview]
+  );
+
+  const blockerText = setupReadiness.primaryBlockerMessage;
+
+  useEffect(() => {
+    if (parameterLoadState !== "ready" || !parameterDraft) {
+      return;
+    }
+
+    const phase1Parse = parsePhase1CategoryOrderTextStrict(phase1OrderText);
+    if (phase1Parse.invalidTokens.length > 0) {
+      setPhase1OrderError(
+        `Unknown Phase 1 categories: ${phase1Parse.invalidTokens.join(", ")}.`
+      );
+      setDraftPreviewReasons([
+        {
+          id: "invalid-phase1-category-order-client",
+          code: "invalid_phase1_category_order",
+          field: "phase1CategoryOrder",
+          message: "Phase 1 category order must include every category exactly once."
+        }
+      ]);
+      return;
+    }
+
+    setPhase1OrderError(null);
+    const previewGeneration = ++parameterPreviewGenerationRef.current;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/setup/auction-parameters/preview", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(
+            buildSubmittedParameters(
+              numberFields,
+              phase1OrderText,
+              parameterDraft.manualAssignmentBudgetBehavior
+            )
+          )
+        });
+
+        const parsedReview = auctionParameterReviewResponseSchema.safeParse(
+          await response.json()
+        );
+
+        if (
+          previewGeneration !== parameterPreviewGenerationRef.current ||
+          !parsedReview.success
+        ) {
+          return;
+        }
+
+        setDraftPreviewReasons(parsedReview.data.blockingReasons);
+        setParameterDraft(parsedReview.data.parameters);
+      } catch {
+        // Preview failures keep the last known validation state.
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [numberFields, parameterDraft, parameterLoadState, phase1OrderText]);
+
   const reviewStatus = useMemo(() => {
     if (!review) {
       return {
@@ -133,35 +330,6 @@ function App() {
       label: "Team CSV reviewed"
     };
   }, [teamReview]);
-  const blockerText = useMemo(() => {
-    if (!review) {
-      return "Blocked: Player CSV must be imported before Start Auction.";
-    }
-
-    if (review.summary.startAuctionBlocked) {
-      if (review.summary.mustFixCount > 0) {
-        const issueLabel = review.summary.mustFixCount === 1 ? "issue" : "issues";
-        return `Blocked: ${review.summary.mustFixCount} Player CSV ${issueLabel} must be fixed in the source CSV and reimported.`;
-      }
-
-      return "Blocked: Player CSV must include at least one valid Player row.";
-    }
-
-    if (!teamReview) {
-      return "Blocked: Team CSV must be imported before Start Auction.";
-    }
-
-    if (teamReview.summary.startAuctionBlocked) {
-      if (teamReview.summary.mustFixCount > 0) {
-        const issueLabel = teamReview.summary.mustFixCount === 1 ? "issue" : "issues";
-        return `Blocked: ${teamReview.summary.mustFixCount} Team CSV ${issueLabel} must be fixed in the source CSV and reimported.`;
-      }
-
-      return "Blocked: Team CSV must include at least one valid Team row.";
-    }
-
-    return "Start Auction stays disabled until auction parameters are added in the next setup step.";
-  }, [review, teamReview]);
 
   async function handlePlayerCsvChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -220,6 +388,7 @@ function App() {
       setReview(parsedReview.data);
       setPhotoReview(null);
       setUploadState("ready");
+      await loadAuctionParameters({ force: true });
     } catch {
       if (uploadGeneration !== uploadGenerationRef.current) {
         return;
@@ -354,6 +523,7 @@ function App() {
       setTeamReview(parsedReview.data);
       setLogoReview(null);
       setTeamUploadState("ready");
+      await loadAuctionParameters({ force: true });
     } catch {
       if (uploadGeneration !== teamUploadGenerationRef.current) {
         return;
@@ -366,6 +536,93 @@ function App() {
     } finally {
       event.currentTarget.value = "";
     }
+  }
+
+  async function handleAuctionParametersSave() {
+    if (!parameterDraft) {
+      return;
+    }
+
+    const previousReview = parameterReview;
+    const saveGeneration = ++parameterSaveGenerationRef.current;
+    const phase1Parse = parsePhase1CategoryOrderTextStrict(phase1OrderText);
+    if (phase1Parse.invalidTokens.length > 0) {
+      setPhase1OrderError(
+        `Unknown Phase 1 categories: ${phase1Parse.invalidTokens.join(", ")}.`
+      );
+      setParameterSaveState("error");
+      setParameterSaveError("Auction Parameters could not be saved.");
+      return;
+    }
+
+    const submittedParameters = buildSubmittedParameters(
+      numberFields,
+      phase1OrderText,
+      parameterDraft.manualAssignmentBudgetBehavior
+    );
+
+    setParameterSaveState("loading");
+    setParameterSaveError(null);
+    setParameterErrors([]);
+
+    try {
+      const response = await fetch("/api/setup/auction-parameters", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(submittedParameters)
+      });
+
+      if (saveGeneration !== parameterSaveGenerationRef.current) {
+        return;
+      }
+
+      const parsedReview = auctionParameterReviewResponseSchema.safeParse(
+        await response.json()
+      );
+
+      if (!parsedReview.success) {
+        setParameterReview(previousReview);
+        setParameterSaveState("error");
+        setParameterSaveError("Auction Parameters returned an unexpected response. Try again.");
+        return;
+      }
+
+      if (!response.ok || parsedReview.data.startAuctionBlocked) {
+        setParameterReview(previousReview);
+        setParameterErrors(parsedReview.data.blockingReasons);
+        setDraftPreviewReasons(parsedReview.data.blockingReasons);
+        setParameterSaveState("error");
+        setParameterSaveError("Auction Parameters could not be saved.");
+        return;
+      }
+
+      applyParameterReviewToForm(parsedReview.data);
+      setParameterSaveState("ready");
+    } catch {
+      if (saveGeneration !== parameterSaveGenerationRef.current) {
+        return;
+      }
+
+      setParameterReview(previousReview);
+      setParameterSaveState("error");
+      setParameterSaveError("Auction Parameters could not be saved. Try again.");
+    }
+  }
+
+  function updateRoleNumberField(
+    group: "roleBasePrices" | "roleTargets",
+    role: AuctionRole,
+    value: string
+  ) {
+    setNumberFields((current) => ({
+      ...current,
+      [group]: {
+        ...current[group],
+        [role]: value
+      }
+    }));
   }
 
   async function handleTeamLogosChange(event: ChangeEvent<HTMLInputElement>) {
@@ -915,6 +1172,55 @@ function App() {
           </article>
         </div>
       </section>
+
+      <AuctionParametersSection
+        numberFields={numberFields}
+        onBidIncrementChange={(value) => {
+          markParameterDraftEdited();
+          setNumberFields((current) => ({ ...current, bidIncrement: value }));
+        }}
+        onManualAssignmentBehaviorChange={(value) => {
+          markParameterDraftEdited();
+          setParameterDraft((current) =>
+            current
+              ? {
+                  ...current,
+                  manualAssignmentBudgetBehavior: value
+                }
+              : current
+          );
+        }}
+        onMaxSquadSizeChange={(value) => {
+          markParameterDraftEdited();
+          setNumberFields((current) => ({ ...current, maxSquadSize: value }));
+        }}
+        onPhase1OrderChange={(value) => {
+          markParameterDraftEdited();
+          setPhase1OrderText(value);
+        }}
+        onRoleBasePriceChange={(role, value) => {
+          markParameterDraftEdited();
+          updateRoleNumberField("roleBasePrices", role, value);
+        }}
+        onRoleTargetChange={(role, value) => {
+          markParameterDraftEdited();
+          updateRoleNumberField("roleTargets", role, value);
+        }}
+        onSave={() => {
+          void handleAuctionParametersSave();
+        }}
+        onTeamBudgetChange={(value) => {
+          markParameterDraftEdited();
+          setNumberFields((current) => ({ ...current, teamBudget: value }));
+        }}
+        parameterBlockingReasons={parameterBlockingReasons}
+        parameterDraft={parameterDraft}
+        parameterLoadState={parameterLoadState}
+        parameterSaveError={parameterSaveError}
+        parameterSaveState={parameterSaveState}
+        phase1OrderError={phase1OrderError}
+        phase1OrderText={phase1OrderText}
+      />
 
       <div className="start-auction-row">
         <p data-testid="start-auction-blocker">{blockerText}</p>

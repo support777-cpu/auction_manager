@@ -13,6 +13,11 @@ import {
   importIssueSeverityValues,
   auctionRoleValues,
   phase1CategoryValues
+  ,
+  auctionParametersSchema,
+  auctionParameterValidationIssueSchema,
+  auctionParameterReviewResponseSchema,
+  manualAssignmentBudgetBehaviorValues
 } from "./index.js";
 import { privateSourceFieldNames } from "@auction-manager/test-fixtures";
 import { describe, expect, it } from "vitest";
@@ -246,6 +251,122 @@ describe("Player CSV import shared contracts", () => {
 
     expect(review.summary.startAuctionBlocked).toBe(false);
     expect(review.summary.placeholderPhotos).toBe(1);
+  });
+});
+
+describe("Auction parameter shared contracts", () => {
+  const validParameters = {
+    roleBasePrices: {
+      Ace: 10,
+      Batting: 8,
+      Bowling: 6,
+      AllRounder: 6,
+      Girls: 6
+    },
+    bidIncrement: 2,
+    teamBudget: 170,
+    maxSquadSize: 13,
+    roleTargets: {
+      Ace: 2,
+      Batting: 3,
+      Bowling: 2,
+      AllRounder: 2,
+      Girls: 2
+    },
+    phase1CategoryOrder: [
+      "Ace Men",
+      "Ace Women",
+      "Women All Rounders",
+      "Men Bowlers",
+      "Men Batsmen",
+      "Men All Rounders"
+    ],
+    manualAssignmentBudgetBehavior: "NoBudgetImpact"
+  } as const;
+
+  it("uses canonical roles, categories, and the v1 manual-assignment behavior", () => {
+    expect(manualAssignmentBudgetBehaviorValues).toEqual(["NoBudgetImpact"]);
+    expect(auctionParametersSchema.parse(validParameters)).toEqual(validParameters);
+  });
+
+  it("keeps parameter schemas strict and integer-only", () => {
+    expect(() =>
+      auctionParametersSchema.parse({
+        ...validParameters,
+        teamBudget: 170.5
+      })
+    ).toThrow();
+
+    expect(() =>
+      auctionParametersSchema.parse({
+        ...validParameters,
+        roleBasePrices: {
+          ...validParameters.roleBasePrices,
+          Bowling: 0
+        }
+      })
+    ).toThrow();
+
+    expect(() =>
+      auctionParametersSchema.parse({
+        ...validParameters,
+        futureBudgetRule: "DeductManualAssignments"
+      })
+    ).toThrow();
+  });
+
+  it("requires exact role maps and exact Phase 1 category permutations", () => {
+    expect(() =>
+      auctionParametersSchema.parse({
+        ...validParameters,
+        roleTargets: {
+          Ace: 2,
+          Batting: 3,
+          Bowling: 2,
+          AllRounder: 2
+        }
+      })
+    ).toThrow();
+
+    expect(() =>
+      auctionParametersSchema.parse({
+        ...validParameters,
+        phase1CategoryOrder: [
+          "Ace Men",
+          "Ace Women",
+          "Women All Rounders",
+          "Men Bowlers",
+          "Men Bowlers",
+          "Men All Rounders"
+        ]
+      })
+    ).toThrow();
+  });
+
+  it("validates setup review blocker semantics", () => {
+    const issue = auctionParameterValidationIssueSchema.parse({
+      id: "missing-role-price-bowling",
+      code: "missing_role_base_price",
+      field: "roleBasePrices.Bowling",
+      message: "Base price is missing for Bowling."
+    });
+
+    const review = auctionParameterReviewResponseSchema.parse({
+      parameters: validParameters,
+      blockingReasons: [issue],
+      reasonsByField: {
+        "roleBasePrices.Bowling": [issue]
+      },
+      startAuctionBlocked: true
+    });
+
+    expect(review.startAuctionBlocked).toBe(true);
+    expect(() =>
+      auctionParameterReviewResponseSchema.parse({
+        ...review,
+        startAuctionBlocked: false
+      })
+    ).toThrow();
   });
 });
 

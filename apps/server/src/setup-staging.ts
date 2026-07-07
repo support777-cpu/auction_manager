@@ -1,5 +1,10 @@
 import type { PlayerCsvSetupStaging, TeamCsvSetupStaging } from "@auction-manager/imports";
-import type { PlayerPhotoReviewResponse, TeamLogoReviewResponse } from "@auction-manager/shared";
+import type {
+  AuctionParameterReviewResponse,
+  AuctionParameters,
+  PlayerPhotoReviewResponse,
+  TeamLogoReviewResponse
+} from "@auction-manager/shared";
 
 export interface SetupStaging {
   readonly getPlayerCsv: () => PlayerCsvSetupStaging | null;
@@ -12,6 +17,10 @@ export interface SetupStaging {
   readonly clearTeamCsv: () => void;
   readonly getTeamLogos: () => TeamLogoReviewResponse | null;
   readonly setTeamLogos: (review: TeamLogoReviewResponse) => void;
+  readonly getAuctionParameters: () => AuctionParameters | null;
+  readonly setAuctionParameters: (parameters: AuctionParameters) => void;
+  readonly getAuctionParameterReview: () => AuctionParameterReviewResponse | null;
+  readonly setAuctionParameterReview: (review: AuctionParameterReviewResponse) => void;
 }
 
 export function createSetupStaging(): SetupStaging {
@@ -19,6 +28,8 @@ export function createSetupStaging(): SetupStaging {
   let playerPhotos: PlayerPhotoReviewResponse | null = null;
   let teamCsv: TeamCsvSetupStaging | null = null;
   let teamLogos: TeamLogoReviewResponse | null = null;
+  let auctionParameters: AuctionParameters | null = null;
+  let auctionParameterReview: AuctionParameterReviewResponse | null = null;
 
   return {
     getPlayerCsv: () => playerCsv,
@@ -50,6 +61,14 @@ export function createSetupStaging(): SetupStaging {
     getTeamLogos: () => teamLogos,
     setTeamLogos: (review) => {
       teamLogos = review;
+    },
+    getAuctionParameters: () => auctionParameters,
+    setAuctionParameters: (parameters) => {
+      auctionParameters = parameters;
+    },
+    getAuctionParameterReview: () => auctionParameterReview,
+    setAuctionParameterReview: (review) => {
+      auctionParameterReview = review;
     }
   };
 }

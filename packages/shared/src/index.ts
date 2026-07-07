@@ -21,6 +21,21 @@ export const phase1CategoryValues = [
   "Men All Rounders"
 ] as const;
 
+export const manualAssignmentBudgetBehaviorValues = ["NoBudgetImpact"] as const;
+
+export const auctionParameterValidationIssueCodeValues = [
+  "missing_role_base_price",
+  "invalid_role_base_price",
+  "invalid_bid_increment",
+  "invalid_team_budget",
+  "invalid_max_squad_size",
+  "invalid_role_target",
+  "role_targets_exceed_max_squad_size",
+  "invalid_phase1_category_order",
+  "unsupported_manual_assignment_budget_behavior",
+  "no_imported_teams"
+] as const;
+
 export const importIssueSeverityValues = [
   "must_fix",
   "can_proceed_with_placeholder",
@@ -64,10 +79,173 @@ export const mediaMatchStatusValues = photoMatchStatusValues;
 export const genderSchema = z.enum(genderValues);
 export const auctionRoleSchema = z.enum(auctionRoleValues);
 export const phase1CategorySchema = z.enum(phase1CategoryValues);
+export const manualAssignmentBudgetBehaviorSchema = z.enum(
+  manualAssignmentBudgetBehaviorValues
+);
+export const auctionParameterValidationIssueCodeSchema = z.enum(
+  auctionParameterValidationIssueCodeValues
+);
 export const importIssueSeveritySchema = z.enum(importIssueSeverityValues);
 export const importIssueCodeSchema = z.enum(importIssueCodeValues);
 export const photoMatchStatusSchema = z.enum(photoMatchStatusValues);
 export const mediaMatchStatusSchema = photoMatchStatusSchema;
+
+const positiveIntegerSchema = z.number().int().positive();
+const nonnegativeIntegerSchema = z.number().int().nonnegative();
+
+const roleBasePricesSchema = z
+  .object(
+    Object.fromEntries(
+      auctionRoleValues.map((role) => [role, positiveIntegerSchema])
+    ) as Record<(typeof auctionRoleValues)[number], typeof positiveIntegerSchema>
+  )
+  .strict();
+
+const roleTargetsSchema = z
+  .object(
+    Object.fromEntries(
+      auctionRoleValues.map((role) => [role, nonnegativeIntegerSchema])
+    ) as Record<
+      (typeof auctionRoleValues)[number],
+      typeof nonnegativeIntegerSchema
+    >
+  )
+  .strict();
+
+export const auctionParametersSchema = z
+  .object({
+    roleBasePrices: roleBasePricesSchema,
+    bidIncrement: positiveIntegerSchema,
+    teamBudget: positiveIntegerSchema,
+    maxSquadSize: positiveIntegerSchema,
+    roleTargets: roleTargetsSchema,
+    phase1CategoryOrder: z.array(phase1CategorySchema),
+    manualAssignmentBudgetBehavior: manualAssignmentBudgetBehaviorSchema
+  })
+  .strict()
+  .superRefine((parameters, context) => {
+    if (parameters.phase1CategoryOrder.length !== phase1CategoryValues.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["phase1CategoryOrder"],
+        message: "Phase 1 category order must include every category exactly once."
+      });
+    }
+
+    for (const category of phase1CategoryValues) {
+      const occurrences = parameters.phase1CategoryOrder.filter(
+        (candidate) => candidate === category
+      ).length;
+      if (occurrences !== 1) {
+        context.addIssue({
+          code: "custom",
+          path: ["phase1CategoryOrder"],
+          message: "Phase 1 category order must include every category exactly once."
+        });
+        break;
+      }
+    }
+
+    const targetTotal = Object.values(parameters.roleTargets).reduce(
+      (total, target) => total + target,
+      0
+    );
+    if (targetTotal > parameters.maxSquadSize) {
+      context.addIssue({
+        code: "custom",
+        path: ["roleTargets"],
+        message: "Role targets total must not exceed max squad size."
+      });
+    }
+  });
+
+export const auctionParameterValidationIssueSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    code: auctionParameterValidationIssueCodeSchema,
+    field: z.string().trim().min(1),
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+const reviewIntegerSchema = z.number();
+const reviewRoleNumberMapSchema = z
+  .object(
+    Object.fromEntries(
+      auctionRoleValues.map((role) => [role, reviewIntegerSchema])
+    ) as Record<(typeof auctionRoleValues)[number], typeof reviewIntegerSchema>
+  )
+  .strict();
+
+export const auctionParameterReviewParametersSchema = z
+  .object({
+    roleBasePrices: reviewRoleNumberMapSchema,
+    bidIncrement: reviewIntegerSchema,
+    teamBudget: reviewIntegerSchema,
+    maxSquadSize: reviewIntegerSchema,
+    roleTargets: reviewRoleNumberMapSchema,
+    phase1CategoryOrder: z.array(z.string()),
+    manualAssignmentBudgetBehavior: z.string()
+  })
+  .strict();
+
+export const auctionParameterReviewResponseSchema = z
+  .object({
+    parameters: auctionParameterReviewParametersSchema,
+    blockingReasons: z.array(auctionParameterValidationIssueSchema),
+    reasonsByField: z.record(
+      z.string().trim().min(1),
+      z.array(auctionParameterValidationIssueSchema)
+    ),
+    startAuctionBlocked: z.boolean()
+  })
+  .strict()
+  .superRefine((review, context) => {
+    if (review.startAuctionBlocked !== review.blockingReasons.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["startAuctionBlocked"],
+        message: "startAuctionBlocked must be driven only by blocking reasons."
+      });
+    }
+
+    if (!review.startAuctionBlocked) {
+      const strictParse = auctionParametersSchema.safeParse(review.parameters);
+      if (!strictParse.success) {
+        context.addIssue({
+          code: "custom",
+          path: ["parameters"],
+          message: "Unblocked parameter reviews must satisfy strict Auction Parameters."
+        });
+      }
+    }
+  });
+
+export const setupReadinessResponseSchema = z
+  .object({
+    startAuctionBlocked: z.boolean(),
+    primaryBlockerMessage: z.string().trim().min(1),
+    blockerMessages: z.array(z.string().trim().min(1)),
+    story16Ready: z.boolean()
+  })
+  .strict()
+  .superRefine((readiness, context) => {
+    if (readiness.startAuctionBlocked !== readiness.blockerMessages.length > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["startAuctionBlocked"],
+        message: "startAuctionBlocked must match blockerMessages."
+      });
+    }
+
+    if (readiness.story16Ready && readiness.startAuctionBlocked) {
+      context.addIssue({
+        code: "custom",
+        path: ["story16Ready"],
+        message: "story16Ready requires an unblocked setup state."
+      });
+    }
+  });
 
 export const setupPlayerPreviewSchema = z
   .object({
@@ -266,6 +444,12 @@ export const teamLogoReviewResponseSchema = z
 export type Gender = z.infer<typeof genderSchema>;
 export type AuctionRole = z.infer<typeof auctionRoleSchema>;
 export type Phase1Category = z.infer<typeof phase1CategorySchema>;
+export type ManualAssignmentBudgetBehavior = z.infer<
+  typeof manualAssignmentBudgetBehaviorSchema
+>;
+export type AuctionParameterValidationIssueCode = z.infer<
+  typeof auctionParameterValidationIssueCodeSchema
+>;
 export type ImportIssueSeverity = z.infer<typeof importIssueSeveritySchema>;
 export type ImportIssueCode = z.infer<typeof importIssueCodeSchema>;
 export type PhotoMatchStatus = z.infer<typeof photoMatchStatusSchema>;
@@ -296,3 +480,19 @@ export type TeamLogoReviewSummary = z.infer<typeof teamLogoReviewSummarySchema>;
 export type TeamLogoReviewResponse = z.infer<
   typeof teamLogoReviewResponseSchema
 >;
+export type AuctionParameters = z.infer<typeof auctionParametersSchema>;
+export type AuctionParameterValidationIssue = z.infer<
+  typeof auctionParameterValidationIssueSchema
+>;
+export type AuctionParameterReviewResponse = z.infer<
+  typeof auctionParameterReviewResponseSchema
+>;
+export type AuctionParameterReviewParameters = z.infer<
+  typeof auctionParameterReviewParametersSchema
+>;
+export type SetupReadinessResponse = z.infer<typeof setupReadinessResponseSchema>;
+
+export {
+  getSetupReadiness,
+  type SetupReadinessInput
+} from "./setup-readiness.js";

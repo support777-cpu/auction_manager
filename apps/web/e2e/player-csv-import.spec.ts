@@ -1,4 +1,117 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const defaultParameters = {
+  roleBasePrices: {
+    Ace: 10,
+    Batting: 8,
+    Bowling: 6,
+    AllRounder: 6,
+    Girls: 6
+  },
+  bidIncrement: 2,
+  teamBudget: 170,
+  maxSquadSize: 13,
+  roleTargets: {
+    Ace: 2,
+    Batting: 3,
+    Bowling: 2,
+    AllRounder: 2,
+    Girls: 2
+  },
+  phase1CategoryOrder: [
+    "Ace Men",
+    "Ace Women",
+    "Women All Rounders",
+    "Men Bowlers",
+    "Men Batsmen",
+    "Men All Rounders"
+  ],
+  manualAssignmentBudgetBehavior: "NoBudgetImpact"
+};
+
+async function mockSetupSupportRoutes(page: Page) {
+  let playerCsvReview: typeof validReview | typeof invalidReview | null = null;
+
+  await page.route("**/api/setup/auction-parameters", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          parameters: defaultParameters,
+          blockingReasons: [
+            {
+              id: "no-imported-teams",
+              code: "no_imported_teams",
+              field: "teamBudget",
+              message:
+                "Team CSV must be imported before Auction Parameters can be validated."
+            }
+          ],
+          reasonsByField: {},
+          startAuctionBlocked: true
+        }
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+
+  await page.route("**/api/setup/auction-parameters/preview", async (route) => {
+    await route.fulfill({
+      json: {
+        parameters: defaultParameters,
+        blockingReasons: [],
+        reasonsByField: {},
+        startAuctionBlocked: false
+      }
+    });
+  });
+
+  await page.route("**/api/setup/readiness", async (route) => {
+    if (!playerCsvReview) {
+      await route.fulfill({
+        json: {
+          startAuctionBlocked: true,
+          primaryBlockerMessage:
+            "Blocked: Player CSV must be imported before Start Auction.",
+          blockerMessages: [
+            "Blocked: Player CSV must be imported before Start Auction."
+          ],
+          story16Ready: false
+        }
+      });
+      return;
+    }
+
+    if (playerCsvReview.summary.startAuctionBlocked) {
+      const message = `Blocked: ${playerCsvReview.summary.mustFixCount} Player CSV issue must be fixed in the source CSV and reimported.`;
+      await route.fulfill({
+        json: {
+          startAuctionBlocked: true,
+          primaryBlockerMessage: message,
+          blockerMessages: [message],
+          story16Ready: false
+        }
+      });
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        startAuctionBlocked: true,
+        primaryBlockerMessage: "Blocked: Team CSV must be imported before Start Auction.",
+        blockerMessages: ["Blocked: Team CSV must be imported before Start Auction."],
+        story16Ready: false
+      }
+    });
+  });
+
+  await page.route("**/api/setup/player-csv/preview", async (route) => {
+    const body = route.request().postData() ?? "";
+    playerCsvReview = body.includes("Aarav Menon") ? validReview : invalidReview;
+    await route.fulfill({ json: playerCsvReview });
+  });
+}
 
 const validReview = {
   players: [
@@ -167,11 +280,7 @@ const photoReview = {
 };
 
 test("reviews a valid Player CSV without rendering private fields", async ({ page }) => {
-  await page.route("**/api/setup/player-csv/preview", async (route) => {
-    expect(route.request().headers()["content-type"]).toContain("text/csv");
-    expect(route.request().postData()).toContain("Aarav Menon");
-    await route.fulfill({ json: validReview });
-  });
+  await mockSetupSupportRoutes(page);
 
   await page.goto("/");
   await page.getByTestId("player-csv-input").setInputFiles({
@@ -202,9 +311,7 @@ test("reviews a valid Player CSV without rendering private fields", async ({ pag
 });
 
 test("keeps Start Auction blocked for invalid Player CSV must_fix issues", async ({ page }) => {
-  await page.route("**/api/setup/player-csv/preview", async (route) => {
-    await route.fulfill({ json: invalidReview });
-  });
+  await mockSetupSupportRoutes(page);
 
   await page.goto("/");
   await page.getByTestId("player-csv-input").setInputFiles({
@@ -230,9 +337,7 @@ test("keeps Start Auction blocked for invalid Player CSV must_fix issues", async
 test("uploads Player photos after CSV review without treating missing photos as blockers", async ({
   page
 }) => {
-  await page.route("**/api/setup/player-csv/preview", async (route) => {
-    await route.fulfill({ json: validReview });
-  });
+  await mockSetupSupportRoutes(page);
   await page.route("**/api/setup/player-photos", async (route) => {
     expect(route.request().headers()["content-type"]).toContain("multipart/form-data");
     await route.fulfill({ json: photoReview });

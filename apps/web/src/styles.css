@@ -89,6 +89,7 @@ button:focus-visible {
 .setup-player-photos,
 .setup-team-csv,
 .setup-team-logos,
+.setup-auction-parameters,
 .start-auction-row {
   max-width: 1120px;
   margin: 0 auto 16px;
@@ -211,7 +212,8 @@ button:focus-visible {
 .setup-player-csv,
 .setup-player-photos,
 .setup-team-csv,
-.setup-team-logos {
+.setup-team-logos,
+.setup-auction-parameters {
   border: 1px solid #d8dee6;
   border-radius: 8px;
   padding: 24px;
@@ -460,6 +462,109 @@ button:focus-visible {
   margin-top: 6px;
 }
 
+.parameter-editor {
+  display: grid;
+  gap: 18px;
+}
+
+.parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.parameter-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.parameter-field input,
+.parameter-field select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-weight: 700;
+}
+
+.parameter-field input:focus,
+.parameter-field select:focus {
+  outline: 3px solid #f5b841;
+  outline-offset: 2px;
+}
+
+.parameter-field .field-error {
+  color: #b42318;
+  font-size: 0.85rem;
+}
+
+.parameter-field-wide {
+  margin-bottom: 4px;
+}
+
+.auction-parameters-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.auction-parameters-summary article {
+  min-height: 82px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fafb;
+}
+
+.auction-parameters-summary strong {
+  display: block;
+  color: #111827;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.parameter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.parameter-actions p {
+  margin: 0;
+  color: #4b5563;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.parameter-errors {
+  align-items: flex-start;
+}
+
+.parameter-errors strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.parameter-errors ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .start-auction-row {
   margin-top: 16px;
   border: 1px solid #bae6fd;
@@ -499,12 +604,15 @@ button:focus-visible {
   }
 
   .csv-summary-grid,
-  .review-layout {
+  .review-layout,
+  .parameter-grid,
+  .auction-parameters-summary {
     grid-template-columns: 1fr;
   }
 
   .section-heading,
   .csv-upload-row,
+  .parameter-actions,
   .start-auction-row {
     align-items: stretch;
     flex-direction: column;

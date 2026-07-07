@@ -1,6 +1,13 @@
 import fastifyStatic from "@fastify/static";
 import fastifyMultipart from "@fastify/multipart";
 import {
+  applyAuctionParameterDraft,
+  getDefaultAuctionParameters,
+  getSetupReadiness,
+  validateAuctionParametersForSetup,
+  type AuctionParameterSetupContext
+} from "@auction-manager/domain";
+import {
   matchPlayerPhotosForSetup,
   matchTeamLogosForSetup,
   parsePlayerCsvForSetupStaging,
@@ -10,6 +17,8 @@ import {
   type UploadedPlayerPhotoDescriptor,
   type UploadedTeamLogoDescriptor
 } from "@auction-manager/imports";
+import type { AuctionRole } from "@auction-manager/shared";
+import { auctionRoleValues } from "@auction-manager/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import { access, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -191,6 +200,82 @@ export async function createAuctionManagerServer(
       }
     }
   );
+
+  app.get("/api/setup/auction-parameters", async () => {
+    return buildAuctionParameterReview(setupStaging);
+  });
+
+  app.post("/api/setup/auction-parameters/preview", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Preview Auction Parameters as application/json."
+      });
+    }
+
+    if (!isObjectRecord(request.body)) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Auction Parameters must be submitted as a JSON object."
+      });
+    }
+
+    const previous =
+      setupStaging.getAuctionParameters() ?? getDefaultAuctionParameters();
+    return applyAuctionParameterDraft(
+      previous,
+      request.body,
+      getAuctionParameterSetupContext(setupStaging)
+    );
+  });
+
+  app.post("/api/setup/auction-parameters", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Save Auction Parameters as application/json."
+      });
+    }
+
+    if (!isObjectRecord(request.body)) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Auction Parameters must be submitted as a JSON object."
+      });
+    }
+
+    const previous =
+      setupStaging.getAuctionParameters() ?? getDefaultAuctionParameters();
+    const review = applyAuctionParameterDraft(
+      previous,
+      request.body,
+      getAuctionParameterSetupContext(setupStaging)
+    );
+
+    if (review.startAuctionBlocked) {
+      return reply.code(400).send(review);
+    }
+
+    setupStaging.setAuctionParameters(
+      review.parameters as Parameters<typeof setupStaging.setAuctionParameters>[0]
+    );
+    setupStaging.setAuctionParameterReview(review);
+    return review;
+  });
+
+  app.get("/api/setup/readiness", async () => {
+    return getSetupReadiness({
+      playerCsvReview: setupStaging.getPlayerCsv()?.review ?? null,
+      teamCsvReview: setupStaging.getTeamCsv()?.review ?? null,
+      parameterReview:
+        setupStaging.getAuctionParameterReview() ??
+        buildAuctionParameterReview(setupStaging)
+    });
+  });
 
   await app.register(async (setupRoutes) => {
     await setupRoutes.register(fastifyMultipart, {
@@ -513,6 +598,44 @@ function hasFileExtension(url: string): boolean {
 
 function isSetupCsvContentType(contentTypeHeader: string | undefined): boolean {
   return contentTypeHeader?.toLowerCase().split(";")[0]?.trim() === "text/csv";
+}
+
+function isJsonContentType(contentTypeHeader: string | undefined): boolean {
+  return contentTypeHeader?.toLowerCase().split(";")[0]?.trim() === "application/json";
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getAuctionParameterSetupContext(
+  setupStaging: ReturnType<typeof createSetupStaging>
+): AuctionParameterSetupContext {
+  const importedPlayerRoles = Array.from(
+    new Set(
+      (setupStaging
+        .getPlayerCsv()
+        ?.players.map((record) => record.player.role) ?? []).filter(
+        (role): role is AuctionRole => auctionRoleValues.includes(role as AuctionRole)
+      )
+    )
+  );
+
+  return {
+    importedPlayerRoles,
+    importedTeamCount: setupStaging.getTeamCsv()?.teams.length ?? 0
+  };
+}
+
+function buildAuctionParameterReview(
+  setupStaging: ReturnType<typeof createSetupStaging>
+) {
+  const parameters =
+    setupStaging.getAuctionParameters() ?? getDefaultAuctionParameters();
+  return validateAuctionParametersForSetup(
+    parameters,
+    getAuctionParameterSetupContext(setupStaging)
+  );
 }
 
 function getUploadKind(url: string): "player-csv" | "team-csv" | "photo" | "logo" {
