@@ -17,6 +17,7 @@
     "dev:web": "npm run dev --workspace @auction-manager/web",
     "dev:server": "npm run dev --workspace @auction-manager/server",
     "start:event": "npm run build && npm run start --workspace @auction-manager/server",
+    "reset:data": "node scripts/reset-event-data.mjs",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc -b",
     "test": "vitest run",
