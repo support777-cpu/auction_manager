@@ -21,3 +21,12 @@ export function canRevealNextPlayer(boardState: BoardStateDto): boolean {
     boardState.persistenceFailure === null
   );
 }
+
+export function canSelectTeam(boardState: BoardStateDto): boolean {
+  return (
+    boardState.phase === "InitialAuction" &&
+    boardState.currentPlayer !== null &&
+    boardState.currentBid !== null &&
+    boardState.persistenceFailure === null
+  );
+}

@@ -4,7 +4,9 @@ import {
   applyAuctionParameterDraft,
   getDefaultAuctionParameters,
   getSetupReadiness,
+  getCurrentPlayerTeamCapacity,
   revealNextPlayer,
+  selectTeam,
   startAuctionFromSetup,
   validateAuctionParametersForSetup,
   type AuctionParameterSetupContext
@@ -23,6 +25,7 @@ import type { AuctionRole } from "@auction-manager/shared";
 import {
   auctionRoleValues,
   revealNextPlayerRequestSchema,
+  selectTeamRequestSchema,
   startAuctionRequestSchema,
   type AuctionState,
   type BoardStateDto
@@ -573,6 +576,135 @@ export async function createAuctionManagerServer(
     };
   });
 
+  app.post("/api/auction/select-team", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Select Team as application/json."
+      });
+    }
+
+    const parsedRequest = selectTeamRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message:
+          "Select Team requires clientCommandId and teamId (use null to clear selection)."
+      });
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send({
+        ok: false,
+        error: "auction_not_active",
+        message: "Start an auction before selecting a Team."
+      });
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send({
+        ok: false,
+        error: "persistence_failure_uncleared",
+        message: "Resolve local persistence recovery before selecting a Team."
+      });
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send({
+        ok: false,
+        error: "duplicate_client_command_id",
+        message: "Select Team was already submitted with this command id."
+      });
+    }
+
+    const result = selectTeam({
+      state: currentState,
+      teamId: parsedRequest.data.teamId,
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send({
+        ok: false,
+        error: result.error,
+        message: result.message
+      });
+    }
+
+    if (!result.undoRecorded) {
+      return {
+        state: toBoardStateDto(result.state),
+        result: {
+          command: "SelectTeam",
+          clientCommandId: parsedRequest.data.clientCommandId,
+          message: result.summary
+        }
+      };
+    }
+
+    try {
+      await auctionRepository.commitSelectTeam({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        summary: result.summary,
+        undoRecorded: result.undoRecorded
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Select Team was already submitted with this command id."
+        });
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        const persistedState = auctionRepository.loadCurrentState();
+        if (persistedState) {
+          return {
+            state: toBoardStateDto(persistedState),
+            result: {
+              command: "SelectTeam",
+              clientCommandId: parsedRequest.data.clientCommandId,
+              message:
+                "Team selection changed, but local recovery snapshot could not be written."
+            }
+          };
+        }
+      }
+
+      const message =
+        error instanceof Error &&
+        error.message.includes("persistence failure is uncleared")
+          ? "Persistence recovery is required before further commands."
+          : "Select Team could not be persisted. Try again.";
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message
+      });
+    }
+
+    return {
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "SelectTeam",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.summary
+      }
+    };
+  });
+
   await app.register(async (setupRoutes) => {
     await setupRoutes.register(fastifyMultipart, {
       limits: {
@@ -956,16 +1088,20 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
       winningTeamId: player.winningTeamId,
       acquisitionType: player.acquisitionType
     })),
-    teams: state.teams.map((team) => ({
-      id: team.id,
-      name: team.name,
-      captain: team.captain,
-      ...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {}),
-      budget: team.budget,
-      remainingBudget: team.remainingBudget,
-      squadCount: team.squadCount,
-      roleCounts: team.roleCounts
-    })),
+    teams: state.teams.map((team) => {
+      const currentPlayerCapacity = getCurrentPlayerTeamCapacity(state, team.id);
+      return {
+        id: team.id,
+        name: team.name,
+        captain: team.captain,
+        ...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {}),
+        budget: team.budget,
+        remainingBudget: team.remainingBudget,
+        squadCount: team.squadCount,
+        roleCounts: team.roleCounts,
+        ...(currentPlayerCapacity ? { currentPlayerCapacity } : {})
+      };
+    }),
     currentPlayer:
       currentPlayer === null
         ? null

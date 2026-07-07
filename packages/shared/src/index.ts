@@ -538,8 +538,21 @@ export const revealNextPlayerUndoHistoryEntrySchema = z
   })
   .strict();
 
-export const liveActionUndoHistoryEntrySchema =
-  revealNextPlayerUndoHistoryEntrySchema;
+export const selectTeamUndoHistoryEntrySchema = z
+  .object({
+    command: z.literal("SelectTeam"),
+    previousSelectedTeamId: nullableOpaqueIdSchema,
+    nextSelectedTeamId: nullableOpaqueIdSchema,
+    currentPlayerId: opaqueIdSchema,
+    currentBid: positiveIntegerSchema,
+    timestamp: z.string().trim().min(1)
+  })
+  .strict();
+
+export const liveActionUndoHistoryEntrySchema = z.discriminatedUnion("command", [
+  revealNextPlayerUndoHistoryEntrySchema,
+  selectTeamUndoHistoryEntrySchema
+]);
 
 function validatePhase1OrderInAuctionState(
   state: {
@@ -657,6 +670,14 @@ export const boardPlayerDtoSchema = auctionPlayerSchema.pick({
   acquisitionType: true
 });
 
+export const teamCurrentPlayerCapacityDtoSchema = z
+  .object({
+    teamId: opaqueIdSchema,
+    canBuy: z.boolean(),
+    reasons: z.array(z.string().trim().min(1))
+  })
+  .strict();
+
 export const boardTeamDtoSchema = auctionTeamSchema.pick({
   id: true,
   name: true,
@@ -666,6 +687,8 @@ export const boardTeamDtoSchema = auctionTeamSchema.pick({
   remainingBudget: true,
   squadCount: true,
   roleCounts: true
+}).extend({
+  currentPlayerCapacity: teamCurrentPlayerCapacityDtoSchema.optional()
 });
 
 export const phase1ProgressCategoryDtoSchema = z
@@ -715,6 +738,13 @@ export const revealNextPlayerRequestSchema = z
   })
   .strict();
 
+export const selectTeamRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1),
+    teamId: opaqueIdSchema.nullable()
+  })
+  .strict();
+
 export const commandResultSummarySchema = z
   .object({
     command: z.string().trim().min(1),
@@ -737,6 +767,15 @@ export const revealNextPlayerResponseSchema = z
     state: boardStateDtoSchema,
     result: commandResultSummarySchema.extend({
       command: z.literal("RevealNextPlayer")
+    })
+  })
+  .strict();
+
+export const selectTeamResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("SelectTeam")
     })
   })
   .strict();
@@ -808,6 +847,9 @@ export type Phase1OrderState = z.infer<typeof phase1OrderStateSchema>;
 export type RevealNextPlayerUndoHistoryEntry = z.infer<
   typeof revealNextPlayerUndoHistoryEntrySchema
 >;
+export type SelectTeamUndoHistoryEntry = z.infer<
+  typeof selectTeamUndoHistoryEntrySchema
+>;
 export type LiveActionUndoHistoryEntry = z.infer<
   typeof liveActionUndoHistoryEntrySchema
 >;
@@ -816,16 +858,21 @@ export type Phase1ProgressCategoryDto = z.infer<
   typeof phase1ProgressCategoryDtoSchema
 >;
 export type Phase1ProgressDto = z.infer<typeof phase1ProgressDtoSchema>;
+export type TeamCurrentPlayerCapacityDto = z.infer<
+  typeof teamCurrentPlayerCapacityDtoSchema
+>;
 export type BoardStateDto = z.infer<typeof boardStateDtoSchema>;
 export type StartAuctionRequest = z.infer<typeof startAuctionRequestSchema>;
 export type RevealNextPlayerRequest = z.infer<
   typeof revealNextPlayerRequestSchema
 >;
+export type SelectTeamRequest = z.infer<typeof selectTeamRequestSchema>;
 export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
 export type StartAuctionResponse = z.infer<typeof startAuctionResponseSchema>;
 export type RevealNextPlayerResponse = z.infer<
   typeof revealNextPlayerResponseSchema
 >;
+export type SelectTeamResponse = z.infer<typeof selectTeamResponseSchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

@@ -298,6 +298,31 @@ test("reviews and saves auction parameters before starting the auction", async (
     "private-player@example.com"
   );
   await expect(page.getByTestId("auction-board")).not.toContainText("UPI-PRIVATE");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("team-logo-placeholder").first()).toContainText(
+    "Team logo placeholder"
+  );
+  await expect(page.getByTestId("team-tile").first()).toContainText("0 of 2");
+
+  const teamTiles = page.locator(".team-board-grid .team-tile");
+  await teamTiles.first().click();
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("team-tile-selected")).toContainText("Falcons");
+
+  await teamTiles.nth(1).click();
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers");
+  await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
+
+  await page.reload();
+
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("current-bid")).toContainText("10");
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers");
+  await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
+
+  await page.getByTestId("clear-selected-team").click();
+  await expect(page.getByTestId("selected-team")).toContainText("None");
 
   await page.reload();
 
@@ -311,4 +336,5 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
   await expect(page.getByTestId("current-bid")).toContainText("10");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
 });

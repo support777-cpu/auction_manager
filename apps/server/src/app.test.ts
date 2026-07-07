@@ -327,6 +327,189 @@ describe("auction manager event server", () => {
 
     await app.close();
   });
+
+  it("selects, changes, clears, and resumes selected Team state", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const teamOneId = revealed.state.teams[0].id;
+    const teamTwoId = revealed.state.teams[1].id;
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-1", teamId: teamOneId }
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.json()).toMatchObject({
+      result: {
+        command: "SelectTeam",
+        clientCommandId: "cmd-select-1"
+      },
+      state: {
+        selectedTeamId: teamOneId
+      }
+    });
+    expect(selected.json().result.message).toMatch(/^Selected .+ for .+\.$/);
+    expect(selected.json().state.teams[0].currentPlayerCapacity).toMatchObject({
+      teamId: teamOneId,
+      canBuy: true,
+      reasons: []
+    });
+    expect(JSON.stringify(selected.json())).not.toContain("private-player@example.com");
+    expect(JSON.stringify(selected.json())).not.toContain("UPI-PRIVATE");
+
+    const changed = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-2", teamId: teamTwoId }
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().state.selectedTeamId).toBe(teamTwoId);
+
+    const cleared = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-clear-1", teamId: null }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      result: {
+        command: "SelectTeam",
+        message: "Cleared selected Team."
+      },
+      state: {
+        selectedTeamId: null
+      }
+    });
+
+    const stateResponse = await app.inject({ method: "GET", url: "/api/state" });
+    expect(stateResponse.statusCode).toBe(200);
+    expect(stateResponse.json().state.selectedTeamId).toBeNull();
+    expect(stateResponse.json().state.currentPlayer.id).toBe(
+      revealed.state.currentPlayer.id
+    );
+    expect(stateResponse.json().state.currentBid).toBe(revealed.state.currentBid);
+
+    await app.close();
+  });
+
+  it("validates Select Team content type, request body, duplicate id, and conflicts", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "text/plain" },
+      payload: "select"
+    });
+    expect(unsupported.statusCode).toBe(415);
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-1" }
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    await stageValidSetup(app);
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-1" }
+    });
+    expect(start.statusCode).toBe(200);
+
+    const noCurrentPlayer = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: {
+        clientCommandId: "cmd-select-no-player",
+        teamId: start.json().state.teams[0].id
+      }
+    });
+    expect(noCurrentPlayer.statusCode).toBe(409);
+    expect(noCurrentPlayer.json()).toMatchObject({
+      error: "current_player_required"
+    });
+
+    const reveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-1" }
+    });
+    expect(reveal.statusCode).toBe(200);
+
+    const unknownTeam = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: {
+        clientCommandId: "cmd-select-unknown",
+        teamId: "team-unknown"
+      }
+    });
+    expect(unknownTeam.statusCode).toBe(409);
+    expect(unknownTeam.json()).toMatchObject({
+      error: "team_not_found"
+    });
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: {
+        clientCommandId: "cmd-select-1",
+        teamId: reveal.json().state.teams[0].id
+      }
+    });
+    expect(selected.statusCode).toBe(200);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: {
+        clientCommandId: "cmd-select-1",
+        teamId: reveal.json().state.teams[0].id
+      }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: "duplicate_client_command_id"
+    });
+
+    const sameTeamReselect = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: {
+        clientCommandId: "cmd-select-same",
+        teamId: reveal.json().state.teams[0].id
+      }
+    });
+    expect(sameTeamReselect.statusCode).toBe(200);
+    expect(sameTeamReselect.json().result.message).toContain("already selected");
+    expect(
+      (await app.inject({ method: "GET", url: "/api/state" })).json().state
+        .selectedTeamId
+    ).toBe(reveal.json().state.teams[0].id);
+
+    await app.close();
+  });
 });
 
 async function createWebDistFixture() {
@@ -399,4 +582,26 @@ async function stageValidSetup(app: Awaited<ReturnType<typeof createAuctionManag
     }
   });
   expect(parameterResponse.statusCode).toBe(200);
+}
+
+async function startAndReveal(
+  app: Awaited<ReturnType<typeof createAuctionManagerServer>>
+) {
+  const start = await app.inject({
+    method: "POST",
+    url: "/api/auction/start",
+    headers: { "content-type": "application/json" },
+    payload: { clientCommandId: "cmd-start-1" }
+  });
+  expect(start.statusCode).toBe(200);
+
+  const reveal = await app.inject({
+    method: "POST",
+    url: "/api/auction/reveal-next",
+    headers: { "content-type": "application/json" },
+    payload: { clientCommandId: "cmd-reveal-1" }
+  });
+  expect(reveal.statusCode).toBe(200);
+
+  return reveal.json();
 }

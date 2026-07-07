@@ -4,6 +4,8 @@ import {
   boardStateDtoSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
+  selectTeamRequestSchema,
+  selectTeamResponseSchema,
   startAuctionRequestSchema,
   startAuctionResponseSchema
 } from "./index.js";
@@ -24,6 +26,30 @@ describe("auction state contracts", () => {
       revealNextPlayerRequestSchema.safeParse({
         clientCommandId: "cmd-1",
         sourceRowNumber: 2
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires strict Select Team requests with nullable teamId", () => {
+    expect(
+      selectTeamRequestSchema.safeParse({
+        clientCommandId: "cmd-select-1",
+        teamId: "team-1"
+      }).success
+    ).toBe(true);
+    expect(
+      selectTeamRequestSchema.safeParse({
+        clientCommandId: "cmd-clear-1",
+        teamId: null
+      }).success
+    ).toBe(true);
+    expect(selectTeamRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success)
+      .toBe(false);
+    expect(
+      selectTeamRequestSchema.safeParse({
+        clientCommandId: "cmd-1",
+        teamId: "team-1",
+        sourceFilename: "private.csv"
       }).success
     ).toBe(false);
   });
@@ -107,6 +133,69 @@ describe("auction state contracts", () => {
         }
       }).success
     ).toBe(true);
+  });
+
+  it("validates Select Team response shape with capacity and rejects private fields", () => {
+    const boardState = {
+      ...createBoardState(),
+      players: [
+        {
+          ...createBoardState().players[0],
+          status: "Current" as const
+        }
+      ],
+      teams: [
+        {
+          ...createBoardState().teams[0],
+          currentPlayerCapacity: {
+            teamId: "team-1",
+            canBuy: true,
+            reasons: []
+          }
+        }
+      ],
+      currentPlayer: {
+        ...createBoardState().players[0],
+        status: "Current" as const
+      },
+      currentBid: 10,
+      selectedTeamId: "team-1"
+    };
+
+    expect(
+      selectTeamResponseSchema.safeParse({
+        state: boardState,
+        result: {
+          command: "SelectTeam",
+          clientCommandId: "cmd-select-1",
+          message: "Selected Falcons for Aarav Menon."
+        }
+      }).success
+    ).toBe(true);
+
+    expect(
+      selectTeamResponseSchema.safeParse({
+        state: {
+          ...boardState,
+          teams: [
+            {
+              ...boardState.teams[0],
+              currentPlayerCapacity: {
+                teamId: "team-1",
+                canBuy: false,
+                reasons: ["Falcons has 0 remaining; current bid is 10."],
+                actionLogPayload: { private: true }
+              }
+            }
+          ]
+        },
+        result: {
+          command: "SelectTeam",
+          clientCommandId: "cmd-select-1",
+          message: "Selected Falcons for Aarav Menon."
+        }
+      }).success
+    ).toBe(false);
   });
 
   it("validates Reveal Next Player response shape and rejects private fields", () => {
@@ -251,6 +340,99 @@ describe("auction state contracts", () => {
             previousCurrentBid: null,
             previousSelectedTeamId: null,
             previousPlayerStatus: "Pending",
+            timestamp: "2026-07-07T08:31:00.000Z",
+            sourceRowNumber: 2
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates Select Team undo-history entries in auction state", () => {
+    const boardState = createBoardState();
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: "team-1",
+        undoHistory: [
+          {
+            command: "SelectTeam",
+            previousSelectedTeamId: null,
+            nextSelectedTeamId: "team-1",
+            currentPlayerId: "player-1",
+            currentBid: 10,
+            timestamp: "2026-07-07T08:31:00.000Z"
+          }
+        ],
+        createdAt: "2026-07-07T08:30:00.000Z",
+        updatedAt: "2026-07-07T08:31:00.000Z",
+        persistenceFailure: null
+      }).success
+    ).toBe(true);
+
+    expect(
+      auctionStateSchema.safeParse({
+        auctionId: boardState.auctionId,
+        phase: boardState.phase,
+        parameters: boardState.parameters,
+        players: [
+          {
+            ...boardState.players[0],
+            gender: "Male",
+            status: "Current"
+          }
+        ],
+        teams: boardState.teams,
+        phase1Order: {
+          categories: [
+            { category: "Ace Men", playerIds: ["player-1"] },
+            { category: "Ace Women", playerIds: [] },
+            { category: "Women All Rounders", playerIds: [] },
+            { category: "Men Bowlers", playerIds: [] },
+            { category: "Men Batsmen", playerIds: [] },
+            { category: "Men All Rounders", playerIds: [] }
+          ],
+          playerIds: ["player-1"],
+          generatedAt: "2026-07-07T08:30:00.000Z"
+        },
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: "team-1",
+        undoHistory: [
+          {
+            command: "SelectTeam",
+            previousSelectedTeamId: null,
+            nextSelectedTeamId: "team-1",
+            currentPlayerId: "player-1",
+            currentBid: 10,
             timestamp: "2026-07-07T08:31:00.000Z",
             sourceRowNumber: 2
           }

@@ -209,6 +209,25 @@ button:focus-visible {
   cursor: not-allowed;
 }
 
+.secondary-action {
+  min-height: 44px;
+  margin-top: 12px;
+  border: 1px solid #9ca3af;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .setup-player-csv,
 .setup-player-photos,
 .setup-team-csv,
@@ -795,11 +814,33 @@ button:focus-visible {
 }
 
 .team-tile {
+  appearance: none;
+  width: 100%;
   min-height: 150px;
   border: 1px solid #d8dee6;
   border-radius: 8px;
   padding: 14px;
   background: #f9fafb;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.team-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.team-tile:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+
+.team-tile-selected {
+  border-color: #166534;
+  background: #166534;
+  color: #ffffff;
 }
 
 .team-tile strong,
@@ -813,11 +854,51 @@ button:focus-visible {
   line-height: 1.25;
 }
 
+.team-tile-selected strong,
+.team-tile-selected span,
+.team-tile-selected dt,
+.team-tile-selected dd {
+  color: #ffffff;
+}
+
 .team-tile span {
   margin-top: 4px;
   color: #4b5563;
   font-size: 13px;
   font-weight: 700;
+}
+
+.team-tile-heading {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+}
+
+.team-logo,
+.team-logo-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.team-logo-placeholder {
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8dee6;
+  background: #eef2f7;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.team-tile-selected .team-logo-placeholder {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
 .team-tile dl {
@@ -844,6 +925,35 @@ button:focus-visible {
   font-size: 18px;
   font-weight: 800;
   line-height: 1.25;
+}
+
+.team-capacity-text {
+  min-height: 38px;
+  margin-top: 12px;
+  line-height: 1.35;
+}
+
+.selected-team-panel {
+  width: 100%;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+}
+
+.selected-team-panel strong {
+  display: block;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.selected-team-panel ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 @media (max-width: 760px) {

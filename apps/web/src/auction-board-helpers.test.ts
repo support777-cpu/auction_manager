@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoardStateDto } from "@auction-manager/shared";
 import {
+  canSelectTeam,
   canRevealNextPlayer,
   getPhase1OrderStatusLabel
 } from "./auction-board-helpers.js";
@@ -127,6 +128,40 @@ describe("auction board helpers", () => {
     expect(
       canRevealNextPlayer(
         createBoardState({
+          persistenceFailure: "snapshot_write_failed"
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("enables Team selection only with a current player, current bid, and no blockers", () => {
+    const currentPlayer = {
+      id: "player-1",
+      name: "Aarav Menon",
+      role: "Ace" as const,
+      basePrice: 10,
+      status: "Current" as const,
+      phase1Category: "Ace Men" as const,
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    };
+
+    expect(
+      canSelectTeam(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10
+        })
+      )
+    ).toBe(true);
+    expect(canSelectTeam(createBoardState({ currentBid: 10 }))).toBe(false);
+    expect(canSelectTeam(createBoardState({ currentPlayer }))).toBe(false);
+    expect(
+      canSelectTeam(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
           persistenceFailure: "snapshot_write_failed"
         })
       )

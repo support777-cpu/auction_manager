@@ -19,6 +19,7 @@ import {
   appStateResponseSchema,
   auctionRoleValues,
   revealNextPlayerResponseSchema,
+  selectTeamResponseSchema,
   startAuctionResponseSchema,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
@@ -39,6 +40,7 @@ import {
 } from "./auction-parameters-helpers.js";
 import {
   canRevealNextPlayer,
+  canSelectTeam,
   getPhase1OrderStatusLabel
 } from "./auction-board-helpers.js";
 import "./styles.css";
@@ -101,6 +103,8 @@ function App() {
   const startAuctionGenerationRef = useRef(0);
   const revealNextGenerationRef = useRef(0);
   const revealNextInFlightRef = useRef(false);
+  const selectTeamGenerationRef = useRef(0);
+  const selectTeamInFlightRef = useRef(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -159,6 +163,10 @@ function App() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [revealNextError, setRevealNextError] = useState<string | null>(null);
+  const [selectTeamState, setSelectTeamState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [selectTeamError, setSelectTeamError] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -816,6 +824,62 @@ function App() {
     }
   }
 
+  async function handleSelectTeam(teamId: string | null) {
+    if (
+      !boardState ||
+      !canSelectTeam(boardState) ||
+      selectTeamState === "loading" ||
+      selectTeamInFlightRef.current
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++selectTeamGenerationRef.current;
+    selectTeamInFlightRef.current = true;
+    setSelectTeamState("loading");
+    setSelectTeamError(null);
+
+    try {
+      const response = await fetch("/api/auction/select-team", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("select"),
+          teamId
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = selectTeamResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== selectTeamGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok || !parsedResponse.success) {
+        setSelectTeamState("error");
+        setSelectTeamError(readSelectTeamErrorMessage(response, responseBody));
+        await refreshBoardState();
+        return;
+      }
+
+      setBoardState(parsedResponse.data.state);
+      setSelectTeamState("ready");
+    } catch {
+      if (commandGeneration !== selectTeamGenerationRef.current) {
+        return;
+      }
+      setSelectTeamState("error");
+      setSelectTeamError("Select Team could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === selectTeamGenerationRef.current) {
+        selectTeamInFlightRef.current = false;
+      }
+    }
+  }
+
   function updateRoleNumberField(
     group: "roleBasePrices" | "roleTargets",
     role: AuctionRole,
@@ -899,8 +963,13 @@ function App() {
         onRevealNext={() => {
           void handleRevealNext();
         }}
+        onSelectTeam={(teamId) => {
+          void handleSelectTeam(teamId);
+        }}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
+        selectTeamError={selectTeamError}
+        selectTeamState={selectTeamState}
       />
     );
   }
@@ -1435,17 +1504,31 @@ function App() {
 function AuctionBoard({
   boardState,
   onRevealNext,
+  onSelectTeam,
   revealNextError,
-  revealNextState
+  revealNextState,
+  selectTeamError,
+  selectTeamState
 }: {
   readonly boardState: BoardStateDto;
   readonly onRevealNext: () => void;
+  readonly onSelectTeam: (teamId: string | null) => void;
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
+  readonly selectTeamError: string | null;
+  readonly selectTeamState: "idle" | "loading" | "ready" | "error";
 }) {
   const currentPlayer = boardState.currentPlayer;
   const revealDisabled =
     !canRevealNextPlayer(boardState) || revealNextState === "loading";
+  const selectionEnabled =
+    canSelectTeam(boardState) && selectTeamState !== "loading";
+  const selectedTeam =
+    boardState.selectedTeamId === null
+      ? null
+      : boardState.teams.find((team) => team.id === boardState.selectedTeamId) ??
+        null;
+  const selectedTeamCapacity = selectedTeam?.currentPlayerCapacity ?? null;
 
   return (
     <main className="app-shell" data-testid="app-shell">
@@ -1592,10 +1675,45 @@ function AuctionBoard({
                   : "Reveal Next Player"}
               </span>
             </button>
+            <div className="selected-team-panel" data-testid="selected-team">
+              <span className="status-label">Selected Team</span>
+              <strong>
+                {selectTeamState === "loading"
+                  ? "Selecting Team..."
+                  : (selectedTeam?.name ??
+                    (boardState.selectedTeamId !== null ? "Unknown Team" : "None"))}
+              </strong>
+              {selectedTeamCapacity && !selectedTeamCapacity.canBuy ? (
+                <ul>
+                  {selectedTeamCapacity.reasons.map((reason, index) => (
+                    <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {boardState.selectedTeamId !== null ? (
+                <button
+                  className="secondary-action"
+                  data-testid="clear-selected-team"
+                  disabled={!selectionEnabled}
+                  onClick={() => onSelectTeam(null)}
+                  type="button"
+                >
+                  Clear selected Team
+                </button>
+              ) : null}
+            </div>
             {revealNextError ? (
               <p className="command-error" role="alert">
                 <AlertCircle aria-hidden="true" size={18} />
                 <span>{revealNextError}</span>
+              </p>
+            ) : null}
+            {selectTeamError ? (
+              <p className="command-error" role="alert">
+                <AlertCircle aria-hidden="true" size={18} />
+                <span>{selectTeamError}</span>
               </p>
             ) : null}
           </section>
@@ -1642,34 +1760,117 @@ function AuctionBoard({
           </div>
         </section>
 
-        <section className="team-board" aria-label="Initialized Teams">
+        <section
+          aria-busy={selectTeamState === "loading"}
+          className="team-board"
+          aria-label="Initialized Teams"
+        >
           <div className="subsection-heading">
             <h3>Teams</h3>
             <span>{boardState.teams.length}</span>
           </div>
           <div className="team-board-grid">
-            {boardState.teams.map((team) => (
-              <article className="team-tile" key={team.id}>
-                <div>
-                  <strong>{team.name}</strong>
-                  <span>{team.captain}</span>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Budget</dt>
-                    <dd>{team.budget}</dd>
+            {boardState.teams.map((team) => {
+              const isSelected = team.id === boardState.selectedTeamId;
+              const capacity = team.currentPlayerCapacity;
+              const roleCount =
+                currentPlayer === null
+                  ? undefined
+                  : team.roleCounts[currentPlayer.role];
+              const roleTarget =
+                currentPlayer === null
+                  ? undefined
+                  : boardState.parameters.roleTargets[currentPlayer.role];
+              const roleCapacityLabel =
+                roleCount === undefined || roleTarget === undefined
+                  ? "Unknown"
+                  : capacity?.canBuy
+                    ? `${roleCount} of ${roleTarget}`
+                    : "Blocked";
+              const capacityText =
+                capacity && currentPlayer
+                  ? capacity.canBuy
+                    ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${currentPlayer.role} slots available`
+                    : capacity.reasons.join(" ")
+                  : "Capacity pending Current Player";
+              return (
+                <button
+                  aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
+                  aria-pressed={isSelected}
+                  className={isSelected ? "team-tile team-tile-selected" : "team-tile"}
+                  data-testid={isSelected ? "team-tile-selected" : "team-tile"}
+                  disabled={!selectionEnabled}
+                  key={team.id}
+                  onClick={() => onSelectTeam(team.id)}
+                  type="button"
+                >
+                  <div className="team-tile-heading">
+                    {team.logoAssetId ? (
+                      <>
+                        <img
+                          alt={`${team.name} logo`}
+                          className="team-logo"
+                          onError={(event) => {
+                            event.currentTarget.hidden = true;
+                            const fallback = event.currentTarget.parentElement?.querySelector(
+                              ".team-logo-fallback"
+                            );
+                            if (fallback instanceof HTMLElement) {
+                              fallback.hidden = false;
+                            }
+                          }}
+                          src={`/assets/teams/${team.logoAssetId}.webp`}
+                        />
+                        <span
+                          aria-label="Team logo placeholder"
+                          className="team-logo-placeholder team-logo-fallback"
+                          data-testid="team-logo-placeholder"
+                          hidden
+                          role="img"
+                        >
+                          Team logo placeholder
+                        </span>
+                      </>
+                    ) : (
+                      <span
+                        aria-label="Team logo placeholder"
+                        className="team-logo-placeholder"
+                        data-testid="team-logo-placeholder"
+                        role="img"
+                      >
+                        Team logo placeholder
+                      </span>
+                    )}
+                    <span>
+                      <strong>{team.name}</strong>
+                      <span>{team.captain}</span>
+                    </span>
                   </div>
-                  <div>
-                    <dt>Remaining</dt>
-                    <dd>{team.remainingBudget}</dd>
-                  </div>
-                  <div>
-                    <dt>Squad</dt>
-                    <dd>{team.squadCount}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
+                  <dl>
+                    <div>
+                      <dt>Remaining</dt>
+                      <dd>{team.remainingBudget}</dd>
+                    </div>
+                    <div>
+                      <dt>Squad</dt>
+                      <dd>{team.squadCount}</dd>
+                    </div>
+                    <div>
+                      <dt>{currentPlayer ? currentPlayer.role : "Role"}</dt>
+                      <dd>{roleCapacityLabel}</dd>
+                    </div>
+                  </dl>
+                  <span
+                    className="team-capacity-text"
+                    data-testid={
+                      capacity && !capacity.canBuy ? "team-capacity-reason" : undefined
+                    }
+                  >
+                    {capacityText}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
       </section>
@@ -1839,7 +2040,27 @@ function readRevealNextErrorMessage(
   return "Reveal Next Player could not be completed. Try again.";
 }
 
-function createClientCommandId(command: "start" | "reveal"): string {
+function readSelectTeamErrorMessage(
+  response: Response,
+  body: unknown
+): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (response.status === 409) {
+    return "Select Team is blocked by the current auction state.";
+  }
+
+  return "Select Team could not be completed. Try again.";
+}
+
+function createClientCommandId(command: "start" | "reveal" | "select"): string {
   if ("crypto" in window && "randomUUID" in window.crypto) {
     return `${command}_${window.crypto.randomUUID()}`;
   }

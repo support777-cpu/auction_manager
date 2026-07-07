@@ -25,6 +25,13 @@ export {
   type RevealNextPlayerResult
 } from "./reveal-next-player.js";
 export {
+  getCurrentPlayerTeamCapacity,
+  selectTeam,
+  type SelectTeamErrorCode,
+  type SelectTeamInput,
+  type SelectTeamResult
+} from "./select-team.js";
+export {
   createPhase1Order,
   type CreatePhase1OrderError,
   type CreatePhase1OrderInput,

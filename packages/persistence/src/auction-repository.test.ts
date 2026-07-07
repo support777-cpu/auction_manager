@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { createAuctionRepository, PersistenceSnapshotWriteError } from "./index.js";
 import type { AuctionState } from "@auction-manager/shared";
-import { revealNextPlayer } from "@auction-manager/domain";
+import { revealNextPlayer, selectTeam } from "@auction-manager/domain";
 
 describe("auction repository", () => {
   it("commits current state, action log, and latest snapshot", async () => {
@@ -403,6 +403,238 @@ describe("auction repository", () => {
     ).rejects.toThrow("persistence failure");
     repository.close();
   });
+
+  it("commits Select Team state, undoable action log, and latest snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const startedState = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state: startedState,
+      clientCommandId: "cmd-start-1"
+    });
+    const revealedState = createRevealedState(startedState);
+    await repository.commitRevealNextPlayer({
+      previousState: startedState,
+      state: revealedState,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: "player-1",
+      summary: "Revealed Aarav Menon at base price 10."
+    });
+    const selection = selectTeam({
+      state: revealedState,
+      teamId: "team-1",
+      now: () => "2026-07-07T09:10:00.000Z"
+    });
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitSelectTeam({
+      previousState: revealedState,
+      state: selection.state,
+      clientCommandId: "cmd-select-1",
+      summary: selection.summary,
+      undoRecorded: selection.undoRecorded
+    });
+
+    expect(repository.loadCurrentState()).toEqual(selection.state);
+    expect(JSON.parse(await readFile(join(directory, "snapshots/latest.json"), "utf8")))
+      .toEqual(selection.state);
+    expect(repository.listActionLog()).toMatchObject([
+      { command: "StartAuction", clientCommandId: "cmd-start-1" },
+      { command: "RevealNextPlayer", clientCommandId: "cmd-reveal-1" },
+      {
+        command: "SelectTeam",
+        clientCommandId: "cmd-select-1",
+        summary: "Selected Falcons for Aarav Menon.",
+        undoable: true
+      }
+    ]);
+    expect(JSON.parse(repository.listActionLog()[2]?.payloadJson ?? "{}")).toEqual({
+      command: "SelectTeam",
+      currentPlayerId: "player-1",
+      currentBid: 10,
+      previous: {
+        selectedTeamId: null
+      },
+      next: {
+        selectedTeamId: "team-1"
+      },
+      undo: {
+        command: "SelectTeam",
+        previousSelectedTeamId: null,
+        nextSelectedTeamId: "team-1",
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        timestamp: "2026-07-07T09:10:00.000Z"
+      }
+    });
+
+    repository.close();
+  });
+
+  it("commits cleared selection and resumes it after reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const revealedState = createRevealedState(createMultiPlayerState());
+    const selectedState = {
+      ...revealedState,
+      selectedTeamId: "team-1",
+      undoHistory: [
+        ...revealedState.undoHistory,
+        {
+          command: "SelectTeam" as const,
+          previousSelectedTeamId: null,
+          nextSelectedTeamId: "team-1",
+          currentPlayerId: "player-1",
+          currentBid: 10,
+          timestamp: "2026-07-07T09:10:00.000Z"
+        }
+      ],
+      updatedAt: "2026-07-07T09:10:00.000Z"
+    };
+    await firstRepository.commitStartAuction({
+      state: createMultiPlayerState(),
+      clientCommandId: "cmd-start-1"
+    });
+    await firstRepository.commitSelectTeam({
+      previousState: revealedState,
+      state: selectedState,
+      clientCommandId: "cmd-select-1",
+      summary: "Selected Falcons for Aarav Menon.",
+      undoRecorded: true
+    });
+    const cleared = selectTeam({
+      state: selectedState,
+      teamId: null,
+      now: () => "2026-07-07T09:12:00.000Z"
+    });
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitSelectTeam({
+      previousState: selectedState,
+      state: cleared.state,
+      clientCommandId: "cmd-clear-1",
+      summary: cleared.summary,
+      undoRecorded: cleared.undoRecorded
+    });
+    firstRepository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()?.selectedTeamId).toBeNull();
+    expect(reopenedRepository.loadCurrentState()?.undoHistory.at(-1)).toMatchObject({
+      command: "SelectTeam",
+      previousSelectedTeamId: "team-1",
+      nextSelectedTeamId: null
+    });
+    reopenedRepository.close();
+  });
+
+  it("rejects duplicate Select Team command id without a second selection action", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const state = createRevealedState(createMultiPlayerState());
+    const selection = selectTeam({
+      state,
+      teamId: "team-1",
+      now: () => "2026-07-07T09:10:00.000Z"
+    });
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) {
+      repository.close();
+      return;
+    }
+    await repository.commitStartAuction({
+      state: createMultiPlayerState(),
+      clientCommandId: "cmd-start-1"
+    });
+    await repository.commitSelectTeam({
+      previousState: state,
+      state: selection.state,
+      clientCommandId: "cmd-select-1",
+      summary: selection.summary,
+      undoRecorded: selection.undoRecorded
+    });
+    await expect(
+      repository.commitSelectTeam({
+        previousState: state,
+        state: selection.state,
+        clientCommandId: "cmd-select-1",
+        summary: selection.summary,
+        undoRecorded: selection.undoRecorded
+      })
+    ).rejects.toThrow("Duplicate clientCommandId");
+
+    expect(repository.listActionLog().filter((entry) => entry.command === "SelectTeam"))
+      .toHaveLength(1);
+    repository.close();
+  });
+
+  it("marks snapshot failure after Select Team and blocks later live mutations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const validSnapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({
+      databasePath,
+      snapshotPath: validSnapshotPath
+    });
+    const state = createRevealedState(createMultiPlayerState());
+    await firstRepository.commitStartAuction({
+      state: createMultiPlayerState(),
+      clientCommandId: "cmd-start-1"
+    });
+    firstRepository.close();
+
+    const repository = createAuctionRepository({
+      databasePath,
+      snapshotPath: directory
+    });
+    const selection = selectTeam({
+      state,
+      teamId: "team-1",
+      now: () => "2026-07-07T09:10:00.000Z"
+    });
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) {
+      repository.close();
+      return;
+    }
+
+    await expect(
+      repository.commitSelectTeam({
+        previousState: state,
+        state: selection.state,
+        clientCommandId: "cmd-select-1",
+        summary: selection.summary,
+        undoRecorded: selection.undoRecorded
+      })
+    ).rejects.toBeInstanceOf(PersistenceSnapshotWriteError);
+
+    expect(repository.loadCurrentState()?.persistenceFailure).toContain("snapshot");
+    await expect(
+      repository.commitSelectTeam({
+        previousState: state,
+        state: selection.state,
+        clientCommandId: "cmd-select-2",
+        summary: selection.summary,
+        undoRecorded: selection.undoRecorded
+      })
+    ).rejects.toThrow("persistence failure");
+    repository.close();
+  });
 });
 
 function createState(): AuctionState {
@@ -575,5 +807,29 @@ function createMultiPlayerState(): AuctionState {
       playerIds: ["player-1", "player-2", "player-4", "player-3"],
       generatedAt: "2026-07-07T08:30:00.000Z"
     }
+  };
+}
+
+function createRevealedState(state: AuctionState): AuctionState {
+  return {
+    ...state,
+    players: state.players.map((player) =>
+      player.id === "player-1" ? { ...player, status: "Current" } : player
+    ),
+    currentPlayerId: "player-1",
+    currentBid: 10,
+    updatedAt: "2026-07-07T09:00:00.000Z",
+    undoHistory: [
+      ...state.undoHistory,
+      {
+        command: "RevealNextPlayer",
+        playerId: "player-1",
+        previousCurrentPlayerId: null,
+        previousCurrentBid: null,
+        previousSelectedTeamId: null,
+        previousPlayerStatus: "Pending",
+        timestamp: "2026-07-07T09:00:00.000Z"
+      }
+    ]
   };
 }

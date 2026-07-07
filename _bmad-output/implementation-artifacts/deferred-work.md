@@ -18,3 +18,9 @@
 - Concurrent reveal lost-update race without optimistic concurrency — matches existing Start Auction pattern until concurrent live commands land
 - Application-level duplicate clientCommandId pre-check is racy and O(n) — consistent with Start Auction idempotency pattern
 - Strict undoHistory schema will need widening for future live commands — intentional for Story 2.2 scope
+
+## Deferred from: code review of 2-3-select-bidding-team-from-team-tiles (2026-07-07)
+
+- Concurrent select-team stale-state protection — matches existing Start Auction / Reveal Next pattern until optimistic concurrency lands
+- Full UI/component test suite for tile accessibility and keyboard — helper and E2E tests cover primary flow; dedicated component tests deferred
+- Blocked-capacity E2E scenario — domain and DTO tests cover capacity reasons; Story 2.5 owns sale blocking UX
