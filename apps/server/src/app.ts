@@ -7,6 +7,7 @@ import {
   getCurrentPlayerTeamCapacity,
   increaseBid,
   markSold,
+  markUnsold,
   revealNextPlayer,
   selectTeam,
   startAuctionFromSetup,
@@ -30,6 +31,9 @@ import {
   markSoldAcceptedResponseSchema,
   markSoldRejectedResponseSchema,
   markSoldRequestSchema,
+  markUnsoldAcceptedResponseSchema,
+  markUnsoldRejectedResponseSchema,
+  markUnsoldRequestSchema,
   revealNextPlayerRequestSchema,
   selectTeamRequestSchema,
   startAuctionRequestSchema,
@@ -1010,6 +1014,151 @@ export async function createAuctionManagerServer(
     return reply.code(200).send(acceptedPayload.data);
   });
 
+  app.post("/api/auction/mark-unsold", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Mark Unsold as application/json."
+      });
+    }
+
+    const parsedRequest = markUnsoldRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send(
+        markUnsoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "invalid_request",
+          message: "Mark Unsold requires clientCommandId."
+        })
+      );
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send(
+        markUnsoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "auction_not_active",
+          message: "Start an auction before marking a Player unsold."
+        })
+      );
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send(
+        markUnsoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "persistence_failure_uncleared",
+          message: "Resolve local persistence recovery before marking unsold."
+        })
+      );
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send(
+        markUnsoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Mark Unsold was already submitted with this command id."
+        })
+      );
+    }
+
+    const result = markUnsold({
+      state: currentState,
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      const rejectedPayload = markUnsoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: result.error,
+        message: result.message
+      });
+      if (!rejectedPayload.success) {
+        request.log.error(rejectedPayload.error);
+        return reply.code(500).send({
+          ok: false,
+          error: "internal_error",
+          message: "Mark Unsold response could not be built."
+        });
+      }
+
+      return reply.code(409).send(rejectedPayload.data);
+    }
+
+    const unsoldPlayerId = currentState.currentPlayerId;
+    if (unsoldPlayerId === null) {
+      return reply.code(500).send({
+        ok: false,
+        error: "internal_error",
+        message: "Mark Unsold could not be completed. Try again."
+      });
+    }
+
+    try {
+      await auctionRepository.commitMarkUnsold({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        summary: result.message,
+        playerId: unsoldPlayerId
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send(
+          markUnsoldRejectedResponseSchema.parse({
+            ok: false,
+            error: "duplicate_client_command_id",
+            message: "Mark Unsold was already submitted with this command id."
+          })
+        );
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        return reply.code(500).send({
+          ok: false,
+          error: "snapshot_write_failed",
+          message:
+            "Mark Unsold was saved, but the latest snapshot could not be written."
+        });
+      }
+
+      request.log.error(error);
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message: "Mark Unsold could not be saved. Try again."
+      });
+    }
+
+    const acceptedPayload = markUnsoldAcceptedResponseSchema.safeParse({
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "MarkUnsold",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.message
+      }
+    });
+    if (!acceptedPayload.success) {
+      request.log.error(acceptedPayload.error);
+      return reply.code(500).send({
+        ok: false,
+        error: "internal_error",
+        message: "Mark Unsold response could not be built."
+      });
+    }
+
+    return reply.code(200).send(acceptedPayload.data);
+  });
+
   await app.register(async (setupRoutes) => {
     await setupRoutes.register(fastifyMultipart, {
       limits: {
@@ -1426,6 +1575,7 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
           },
     currentBid: state.currentBid,
     selectedTeamId: state.selectedTeamId,
+    phase2PoolCount: new Set(state.phase2Pool).size,
     phase1Progress: toPhase1ProgressDto(state),
     canUndo: state.undoHistory.length > 0,
     persistenceFailure: state.persistenceFailure

@@ -979,6 +979,400 @@ describe("auction manager event server", () => {
 
     await app.close();
   });
+
+  it("marks the current player unsold into the Phase 2 pool and persists board-ready state", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const playerId = revealed.state.currentPlayer.id;
+    const teamsBefore = revealed.state.teams;
+    expect(revealed.state.phase2PoolCount).toBe(0);
+
+    const unsold = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-accepted" }
+    });
+
+    expect(unsold.statusCode).toBe(200);
+    const body = unsold.json();
+    expect(body.result).toEqual({
+      command: "MarkUnsold",
+      clientCommandId: "cmd-mark-unsold-accepted",
+      message: `Marked unsold. ${revealed.state.currentPlayer.name} moves to Phase 2 rebid.`
+    });
+    expect(body.state).toMatchObject({
+      phase: "InitialAuction",
+      currentPlayer: null,
+      currentBid: null,
+      selectedTeamId: null,
+      phase2PoolCount: 1,
+      canUndo: true
+    });
+    expect(body.state.players.find((player: { id: string }) => player.id === playerId))
+      .toMatchObject({
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      });
+    expect(
+      body.state.teams.map(
+        (team: {
+          id: string;
+          remainingBudget: number;
+          squadCount: number;
+          roleCounts: Record<string, number>;
+        }) => ({
+          id: team.id,
+          remainingBudget: team.remainingBudget,
+          squadCount: team.squadCount,
+          roleCounts: team.roleCounts
+        })
+      )
+    ).toEqual(
+      teamsBefore.map(
+        (team: {
+          id: string;
+          remainingBudget: number;
+          squadCount: number;
+          roleCounts: Record<string, number>;
+        }) => ({
+          id: team.id,
+          remainingBudget: team.remainingBudget,
+          squadCount: team.squadCount,
+          roleCounts: team.roleCounts
+        })
+      )
+    );
+    expect(JSON.stringify(body)).not.toContain("private-player@example.com");
+    expect(JSON.stringify(body)).not.toContain("UPI-PRIVATE");
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const markUnsoldEntries = repository
+      .listActionLog()
+      .filter((entry) => entry.command === "MarkUnsold");
+    expect(markUnsoldEntries).toHaveLength(1);
+    expect(markUnsoldEntries[0]).toMatchObject({
+      clientCommandId: "cmd-mark-unsold-accepted",
+      summary: body.result.message,
+      undoable: true
+    });
+    expect(JSON.parse(markUnsoldEntries[0]?.payloadJson ?? "{}")).toMatchObject({
+      command: "MarkUnsold",
+      playerId,
+      previous: {
+        playerStatus: "Current",
+        currentPlayerId: playerId,
+        phase2Pool: []
+      },
+      next: {
+        playerStatus: "Unsold",
+        currentPlayerId: null,
+        currentBid: null,
+        selectedTeamId: null,
+        phase2Pool: [playerId]
+      },
+      undo: {
+        command: "MarkUnsold",
+        playerId,
+        previousPlayerStatus: "Current"
+      }
+    });
+    expect(JSON.parse(await readFile(join(dataDirectory, "snapshots/latest.json"), "utf8")))
+      .toMatchObject({
+        currentPlayerId: null,
+        currentBid: null,
+        selectedTeamId: null,
+        phase2Pool: [playerId]
+      });
+
+    const nextReveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-after-unsold" }
+    });
+    expect(nextReveal.statusCode).toBe(200);
+    expect(nextReveal.json().state.currentPlayer).toMatchObject({
+      status: "Current"
+    });
+
+    repository.close();
+    await app.close();
+  });
+
+  it("marks unsold with a selected team and raised bid, discarding both without team mutation", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const playerId = revealed.state.currentPlayer.id;
+    const team = revealed.state.teams[0];
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-before-unsold", teamId: team.id }
+    });
+    expect(selected.statusCode).toBe(200);
+
+    const increased = await app.inject({
+      method: "POST",
+      url: "/api/auction/increase-bid",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-increase-before-unsold" }
+    });
+    expect(increased.statusCode).toBe(200);
+    const raisedBid = increased.json().state.currentBid;
+
+    const unsold = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-discard" }
+    });
+
+    expect(unsold.statusCode).toBe(200);
+    const body = unsold.json();
+    expect(body.state).toMatchObject({
+      currentPlayer: null,
+      currentBid: null,
+      selectedTeamId: null,
+      phase2PoolCount: 1
+    });
+    expect(body.state.players.find((player: { id: string }) => player.id === playerId))
+      .toMatchObject({
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      });
+    expect(body.state.teams.find((candidate: { id: string }) => candidate.id === team.id))
+      .toMatchObject({
+        remainingBudget: team.remainingBudget,
+        squadCount: team.squadCount,
+        roleCounts: team.roleCounts
+      });
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const entry = repository
+      .listActionLog()
+      .find((candidate) => candidate.command === "MarkUnsold");
+    expect(JSON.parse(entry?.payloadJson ?? "{}")).toMatchObject({
+      previous: {
+        currentBid: raisedBid,
+        selectedTeamId: team.id
+      },
+      undo: {
+        previousCurrentBid: raisedBid,
+        previousSelectedTeamId: team.id
+      }
+    });
+
+    repository.close();
+    await app.close();
+  });
+
+  it("rejects duplicate Mark Unsold command id with exactly one action-log row", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    await startAndReveal(app);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-dup" }
+    });
+    expect(first.statusCode).toBe(200);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-dup" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toEqual({
+      ok: false,
+      error: "duplicate_client_command_id",
+      message: "Mark Unsold was already submitted with this command id."
+    });
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    expect(
+      repository.listActionLog().filter((entry) => entry.command === "MarkUnsold")
+    ).toHaveLength(1);
+    expect(repository.loadCurrentState()?.phase2Pool).toHaveLength(1);
+
+    repository.close();
+    await app.close();
+  });
+
+  it("validates Mark Unsold content type, request body, and prerequisite conflicts without mutation", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "text/plain" },
+      payload: "mark unsold"
+    });
+    expect(unsupported.statusCode).toBe(415);
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: {}
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toMatchObject({ error: "invalid_request" });
+
+    const inactive = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-inactive" }
+    });
+    expect(inactive.statusCode).toBe(409);
+    expect(inactive.json()).toMatchObject({
+      error: "auction_not_active"
+    });
+
+    await stageValidSetup(app);
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-1" }
+    });
+    expect(start.statusCode).toBe(200);
+
+    const beforeState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const beforeSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const beforeActionLog = repository.listActionLog();
+
+    const noCurrentPlayer = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-no-player" }
+    });
+    expect(noCurrentPlayer.statusCode).toBe(409);
+    expect(noCurrentPlayer.json()).toEqual({
+      ok: false,
+      error: "current_player_required",
+      message: "Reveal a Current Player before marking unsold."
+    });
+
+    const afterState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const afterSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    expect(afterState).toEqual(beforeState);
+    expect(afterSnapshot).toBe(beforeSnapshot);
+    expect(repository.listActionLog()).toEqual(beforeActionLog);
+    expect(
+      repository.listActionLog().some((entry) => entry.command === "MarkUnsold")
+    ).toBe(false);
+
+    repository.close();
+    await app.close();
+  });
+
+  it("keeps InitialAuction phase with zero pending players after the last player is marked unsold", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const orderedPlayerCount = revealed.state.phase1Progress.orderedPlayerCount;
+
+    let latestState = revealed.state;
+    for (let index = 0; index < orderedPlayerCount; index += 1) {
+      if (latestState.currentPlayer === null) {
+        const reveal = await app.inject({
+          method: "POST",
+          url: "/api/auction/reveal-next",
+          headers: { "content-type": "application/json" },
+          payload: { clientCommandId: `cmd-reveal-last-${index}` }
+        });
+        expect(reveal.statusCode).toBe(200);
+        latestState = reveal.json().state;
+      }
+
+      const unsold = await app.inject({
+        method: "POST",
+        url: "/api/auction/mark-unsold",
+        headers: { "content-type": "application/json" },
+        payload: { clientCommandId: `cmd-mark-unsold-last-${index}` }
+      });
+      expect(unsold.statusCode).toBe(200);
+      latestState = unsold.json().state;
+    }
+
+    expect(latestState).toMatchObject({
+      phase: "InitialAuction",
+      currentPlayer: null,
+      phase2PoolCount: orderedPlayerCount,
+      phase1Progress: {
+        pendingPlayerCount: 0
+      }
+    });
+
+    const blockedReveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-after-complete" }
+    });
+    expect(blockedReveal.statusCode).toBe(409);
+    expect(blockedReveal.json()).toMatchObject({
+      error: "no_pending_phase1_players"
+    });
+
+    await app.close();
+  });
 });
 
 async function createWebDistFixture() {

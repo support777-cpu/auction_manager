@@ -584,11 +584,24 @@ export const markSoldUndoHistoryEntrySchema = z
   })
   .strict();
 
+export const markUnsoldUndoHistoryEntrySchema = z
+  .object({
+    command: z.literal("MarkUnsold"),
+    playerId: opaqueIdSchema,
+    previousPlayerStatus: playerStatusSchema,
+    previousCurrentPlayerId: nullableOpaqueIdSchema,
+    previousCurrentBid: nullableMoneySchema,
+    previousSelectedTeamId: nullableOpaqueIdSchema,
+    timestamp: z.string().trim().min(1)
+  })
+  .strict();
+
 export const liveActionUndoHistoryEntrySchema = z.discriminatedUnion("command", [
   revealNextPlayerUndoHistoryEntrySchema,
   selectTeamUndoHistoryEntrySchema,
   increaseBidUndoHistoryEntrySchema,
-  markSoldUndoHistoryEntrySchema
+  markSoldUndoHistoryEntrySchema,
+  markUnsoldUndoHistoryEntrySchema
 ]);
 
 function validatePhase1OrderInAuctionState(
@@ -683,6 +696,8 @@ export const auctionStateBaseSchema = z
     currentPlayerId: nullableOpaqueIdSchema,
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
+    // Defaulted so pre-2.7 persisted states and snapshots without the field still parse.
+    phase2Pool: z.array(opaqueIdSchema).default([]),
     undoHistory: z.array(liveActionUndoHistoryEntrySchema),
     createdAt: z.string().trim().min(1),
     updatedAt: z.string().trim().min(1),
@@ -757,6 +772,7 @@ export const boardStateDtoSchema = z
     currentPlayer: boardPlayerDtoSchema.nullable(),
     currentBid: nullableMoneySchema,
     selectedTeamId: nullableOpaqueIdSchema,
+    phase2PoolCount: nonnegativeIntegerSchema,
     phase1Progress: phase1ProgressDtoSchema,
     canUndo: z.boolean(),
     persistenceFailure: z.string().trim().min(1).nullable()
@@ -789,6 +805,12 @@ export const increaseBidRequestSchema = z
   .strict();
 
 export const markSoldRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
+export const markUnsoldRequestSchema = z
   .object({
     clientCommandId: z.string().trim().min(1)
   })
@@ -883,6 +905,39 @@ export const markSoldAcceptedResponseSchema = z
 export const markSoldResponseSchema = z.union([
   markSoldAcceptedResponseSchema,
   markSoldRejectedResponseSchema
+]);
+
+export const markUnsoldConflictReasonCodeSchema = z.enum([
+  "auction_not_in_initial_phase",
+  "current_player_required",
+  "current_player_not_found",
+  "player_already_in_phase2_pool",
+  "auction_not_active",
+  "persistence_failure_uncleared",
+  "duplicate_client_command_id",
+  "invalid_request"
+]);
+
+export const markUnsoldRejectedResponseSchema = z
+  .object({
+    ok: z.literal(false),
+    error: markUnsoldConflictReasonCodeSchema,
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+export const markUnsoldAcceptedResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("MarkUnsold")
+    })
+  })
+  .strict();
+
+export const markUnsoldResponseSchema = z.union([
+  markUnsoldAcceptedResponseSchema,
+  markUnsoldRejectedResponseSchema
 ]);
 
 export const soldRosterRowSchema = z
@@ -990,6 +1045,9 @@ export type SelectTeamUndoHistoryEntry = z.infer<
 export type IncreaseBidUndoHistoryEntry = z.infer<
   typeof increaseBidUndoHistoryEntrySchema
 >;
+export type MarkUnsoldUndoHistoryEntry = z.infer<
+  typeof markUnsoldUndoHistoryEntrySchema
+>;
 export type LiveActionUndoHistoryEntry = z.infer<
   typeof liveActionUndoHistoryEntrySchema
 >;
@@ -1027,6 +1085,17 @@ export type MarkSoldRejectedResponse = z.infer<
   typeof markSoldRejectedResponseSchema
 >;
 export type MarkSoldResponse = z.infer<typeof markSoldResponseSchema>;
+export type MarkUnsoldRequest = z.infer<typeof markUnsoldRequestSchema>;
+export type MarkUnsoldConflictReasonCode = z.infer<
+  typeof markUnsoldConflictReasonCodeSchema
+>;
+export type MarkUnsoldAcceptedResponse = z.infer<
+  typeof markUnsoldAcceptedResponseSchema
+>;
+export type MarkUnsoldRejectedResponse = z.infer<
+  typeof markUnsoldRejectedResponseSchema
+>;
+export type MarkUnsoldResponse = z.infer<typeof markUnsoldResponseSchema>;
 export type SoldRosterRow = z.infer<typeof soldRosterRowSchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 

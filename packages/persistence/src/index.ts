@@ -57,6 +57,14 @@ export interface CommitMarkSoldInput {
   readonly soldPrice: number;
 }
 
+export interface CommitMarkUnsoldInput {
+  readonly previousState: AuctionState;
+  readonly state: AuctionState;
+  readonly clientCommandId: string;
+  readonly summary: string;
+  readonly playerId: string;
+}
+
 export interface ActionLogEntry {
   readonly actionId: number;
   readonly auctionId: string;
@@ -65,7 +73,8 @@ export interface ActionLogEntry {
     | "RevealNextPlayer"
     | "SelectTeam"
     | "IncreaseBid"
-    | "MarkSold";
+    | "MarkSold"
+    | "MarkUnsold";
   readonly clientCommandId: string;
   readonly timestamp: string;
   readonly summary: string;
@@ -81,6 +90,7 @@ export interface AuctionRepository {
   readonly commitSelectTeam: (input: CommitSelectTeamInput) => Promise<void>;
   readonly commitIncreaseBid: (input: CommitIncreaseBidInput) => Promise<void>;
   readonly commitMarkSold: (input: CommitMarkSoldInput) => Promise<void>;
+  readonly commitMarkUnsold: (input: CommitMarkUnsoldInput) => Promise<void>;
   readonly loadCurrentState: () => AuctionState | null;
   readonly listActionLog: () => readonly ActionLogEntry[];
   readonly close: () => void;
@@ -495,6 +505,98 @@ export function createAuctionRepository(
       );
   });
 
+  const markUnsoldTransaction = database.transaction(
+    (input: CommitMarkUnsoldInput) => {
+      assertMutationsAllowed(database);
+      const duplicateCommand = database
+        .prepare("SELECT 1 AS found FROM action_log WHERE client_command_id = ?")
+        .get(input.clientCommandId) as { found: 1 } | undefined;
+      if (duplicateCommand) {
+        throw new DuplicateClientCommandError(input.clientCommandId);
+      }
+
+      const currentAuction = database
+        .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
+        .get() as { auctionId: string } | undefined;
+      if (!currentAuction || currentAuction.auctionId !== input.state.auctionId) {
+        throw new Error("Cannot commit Mark Unsold without an active matching auction.");
+      }
+
+      if (input.previousState.currentPlayerId !== input.playerId) {
+        throw new Error(
+          "Mark Unsold player id does not match the previous current player."
+        );
+      }
+
+      const nextPlayer =
+        input.state.players.find((player) => player.id === input.playerId) ?? null;
+      if (
+        !nextPlayer ||
+        nextPlayer.status !== "Unsold" ||
+        nextPlayer.winningTeamId !== null ||
+        nextPlayer.soldPrice !== null ||
+        nextPlayer.acquisitionType !== null ||
+        input.state.phase2Pool.filter((playerId) => playerId === input.playerId)
+          .length !== 1
+      ) {
+        throw new Error("Mark Unsold commit metadata does not match committed state.");
+      }
+
+      database
+        .prepare(
+          `UPDATE auction_state
+              SET state_json = @stateJson,
+                  phase = @phase,
+                  updated_at = @updatedAt,
+                  persistence_failure = NULL
+            WHERE auction_id = @auctionId`
+        )
+        .run({
+          auctionId: input.state.auctionId,
+          stateJson: JSON.stringify(input.state),
+          phase: input.state.phase,
+          updatedAt: input.state.updatedAt
+        });
+
+      const previousPlayer =
+        input.previousState.players.find(
+          (player) => player.id === input.playerId
+        ) ?? null;
+
+      database
+        .prepare(
+          `INSERT INTO action_log
+            (auction_id, command, client_command_id, timestamp, summary, payload_json, undoable)
+            VALUES (?, 'MarkUnsold', ?, ?, ?, ?, 1)`
+        )
+        .run(
+          input.state.auctionId,
+          input.clientCommandId,
+          input.state.updatedAt,
+          input.summary,
+          JSON.stringify({
+            command: "MarkUnsold",
+            playerId: input.playerId,
+            previous: {
+              playerStatus: previousPlayer?.status ?? null,
+              currentPlayerId: input.previousState.currentPlayerId,
+              currentBid: input.previousState.currentBid,
+              selectedTeamId: input.previousState.selectedTeamId,
+              phase2Pool: input.previousState.phase2Pool
+            },
+            next: {
+              playerStatus: nextPlayer.status,
+              currentPlayerId: input.state.currentPlayerId,
+              currentBid: input.state.currentBid,
+              selectedTeamId: input.state.selectedTeamId,
+              phase2Pool: input.state.phase2Pool
+            },
+            undo: input.state.undoHistory.at(-1) ?? null
+          })
+        );
+    }
+  );
+
   return {
     commitStartAuction: async (input) => {
       const parsed = auctionStateSchema.parse(input.state);
@@ -622,6 +724,32 @@ export function createAuctionRepository(
         );
         throw new PersistenceSnapshotWriteError(
           "Mark Sold committed, but latest snapshot could not be written.",
+          { cause: error }
+        );
+      }
+    },
+    commitMarkUnsold: async (input) => {
+      const parsed = auctionStateSchema.parse(input.state);
+      try {
+        markUnsoldTransaction({ ...input, state: parsed });
+      } catch (error) {
+        if (isDuplicateClientCommandError(error, input.clientCommandId)) {
+          throw new DuplicateClientCommandError(input.clientCommandId);
+        }
+        throw error;
+      }
+      try {
+        await mkdir(dirname(options.snapshotPath), { recursive: true });
+        await writeFile(options.snapshotPath, JSON.stringify(parsed, null, 2), "utf8");
+      } catch (error) {
+        markPersistenceFailure(
+          database,
+          parsed.auctionId,
+          "snapshot_write_failed",
+          options.snapshotPath
+        );
+        throw new PersistenceSnapshotWriteError(
+          "Mark Unsold committed, but latest snapshot could not be written.",
           { cause: error }
         );
       }

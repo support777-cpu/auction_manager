@@ -8,6 +8,7 @@ import type { AuctionState } from "@auction-manager/shared";
 import {
   increaseBid,
   markSold,
+  markUnsold,
   revealNextPlayer,
   selectTeam
 } from "@auction-manager/domain";
@@ -1118,6 +1119,289 @@ describe("auction repository", () => {
     ).rejects.toThrow("persistence failure");
     repository.close();
   });
+
+  it("commits Mark Unsold state, pool entry, action log payload, and latest snapshot with teams unchanged", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitMarkUnsold({
+      previousState,
+      state: unsold.state,
+      clientCommandId: "cmd-mark-unsold-1",
+      summary: unsold.message,
+      playerId: "player-1"
+    });
+
+    const committedState = repository.loadCurrentState();
+    expect(committedState).toEqual(unsold.state);
+    expect(
+      committedState?.players.find((player) => player.id === "player-1")
+    ).toMatchObject({
+      status: "Unsold",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    });
+    expect(committedState?.phase2Pool).toEqual(["player-1"]);
+    expect(committedState?.teams).toEqual(previousState.teams);
+    expect(committedState?.phase).toBe("InitialAuction");
+    expect(JSON.parse(await readFile(join(directory, "snapshots/latest.json"), "utf8")))
+      .toEqual(unsold.state);
+    expect(repository.listActionLog()).toMatchObject([
+      { command: "StartAuction", clientCommandId: "cmd-start-1" },
+      {
+        command: "MarkUnsold",
+        clientCommandId: "cmd-mark-unsold-1",
+        summary: "Marked unsold. Aarav Menon moves to Phase 2 rebid.",
+        undoable: true
+      }
+    ]);
+    expect(JSON.parse(repository.listActionLog()[1]?.payloadJson ?? "{}")).toEqual({
+      command: "MarkUnsold",
+      playerId: "player-1",
+      previous: {
+        playerStatus: "Current",
+        currentPlayerId: "player-1",
+        currentBid: 10,
+        selectedTeamId: "team-1",
+        phase2Pool: []
+      },
+      next: {
+        playerStatus: "Unsold",
+        currentPlayerId: null,
+        currentBid: null,
+        selectedTeamId: null,
+        phase2Pool: ["player-1"]
+      },
+      undo: {
+        command: "MarkUnsold",
+        playerId: "player-1",
+        previousPlayerStatus: "Current",
+        previousCurrentPlayerId: "player-1",
+        previousCurrentBid: 10,
+        previousSelectedTeamId: "team-1",
+        timestamp: "2026-07-07T09:25:00.000Z"
+      }
+    });
+    repository.close();
+  });
+
+  it("reopens and resumes unsold player and pool state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await firstRepository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitMarkUnsold({
+      previousState,
+      state: unsold.state,
+      clientCommandId: "cmd-mark-unsold-1",
+      summary: unsold.message,
+      playerId: "player-1"
+    });
+    firstRepository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const resumedState = reopenedRepository.loadCurrentState();
+    expect(resumedState).toEqual(unsold.state);
+    expect(resumedState?.phase2Pool).toEqual(["player-1"]);
+    expect(resumedState?.teams).toEqual(previousState.teams);
+    reopenedRepository.close();
+  });
+
+  it("rejects duplicate Mark Unsold command id without a second pool append", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      repository.close();
+      return;
+    }
+    const input = {
+      previousState,
+      state: unsold.state,
+      clientCommandId: "cmd-mark-unsold-1",
+      summary: unsold.message,
+      playerId: "player-1"
+    };
+    await repository.commitMarkUnsold(input);
+    await expect(repository.commitMarkUnsold(input)).rejects.toThrow(
+      "Duplicate clientCommandId"
+    );
+
+    expect(
+      repository.listActionLog().filter((entry) => entry.command === "MarkUnsold")
+    ).toHaveLength(1);
+    expect(repository.loadCurrentState()?.phase2Pool).toEqual(["player-1"]);
+    repository.close();
+  });
+
+  it("rejects Mark Unsold commit metadata that does not match committed state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      repository.close();
+      return;
+    }
+
+    await expect(
+      repository.commitMarkUnsold({
+        previousState,
+        state: unsold.state,
+        clientCommandId: "cmd-mark-unsold-1",
+        summary: unsold.message,
+        playerId: "player-2"
+      })
+    ).rejects.toThrow("does not match the previous current player");
+
+    expect(
+      repository.listActionLog().filter((entry) => entry.command === "MarkUnsold")
+    ).toHaveLength(0);
+    expect(repository.loadCurrentState()?.phase2Pool).toEqual([]);
+    repository.close();
+  });
+
+  it("marks snapshot failure after Mark Unsold and blocks later live mutations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const validSnapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({
+      databasePath,
+      snapshotPath: validSnapshotPath
+    });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await firstRepository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    firstRepository.close();
+
+    const repository = createAuctionRepository({
+      databasePath,
+      snapshotPath: directory
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      repository.close();
+      return;
+    }
+
+    await expect(
+      repository.commitMarkUnsold({
+        previousState,
+        state: unsold.state,
+        clientCommandId: "cmd-mark-unsold-1",
+        summary: unsold.message,
+        playerId: "player-1"
+      })
+    ).rejects.toBeInstanceOf(PersistenceSnapshotWriteError);
+
+    expect(repository.loadCurrentState()?.persistenceFailure).toContain("snapshot");
+    await expect(
+      repository.commitMarkUnsold({
+        previousState,
+        state: unsold.state,
+        clientCommandId: "cmd-mark-unsold-2",
+        summary: unsold.message,
+        playerId: "player-1"
+      })
+    ).rejects.toThrow("persistence failure");
+    repository.close();
+  });
+
+  it("loads pre-2.7 persisted state without phase2Pool by defaulting it to empty", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const initializedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    initializedRepository.close();
+    const state = createState();
+    const { phase2Pool: _phase2Pool, ...legacyState } = state;
+    const database = new Database(databasePath);
+
+    database
+      .prepare(
+        `INSERT INTO auction_state
+          (auction_id, state_json, phase, created_at, updated_at, persistence_failure)
+          VALUES (?, ?, ?, ?, ?, NULL)`
+      )
+      .run(
+        legacyState.auctionId,
+        JSON.stringify(legacyState),
+        legacyState.phase,
+        legacyState.createdAt,
+        legacyState.updatedAt
+      );
+    database
+      .prepare("INSERT INTO current_auction (singleton, auction_id) VALUES (1, ?)")
+      .run(legacyState.auctionId);
+    database.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    const loadedState = reopenedRepository.loadCurrentState();
+    expect(loadedState?.phase2Pool).toEqual([]);
+    expect(loadedState?.players).toEqual(state.players);
+    reopenedRepository.close();
+  });
 });
 
 function createState(): AuctionState {
@@ -1218,6 +1502,7 @@ function createState(): AuctionState {
     currentPlayerId: null,
     currentBid: null,
     selectedTeamId: null,
+    phase2Pool: [],
     undoHistory: [],
     createdAt: "2026-07-07T08:30:00.000Z",
     updatedAt: "2026-07-07T08:30:00.000Z",

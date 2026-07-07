@@ -207,6 +207,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   page,
   request
 }) => {
+  test.setTimeout(120_000);
   await page.goto("/");
 
   await expect(page.getByTestId("setup-auction-parameters")).toBeVisible();
@@ -429,4 +430,51 @@ test("reviews and saves auction parameters before starting the auction", async (
   );
   await expect(page.getByTestId("current-bid")).toContainText(blockedBid ?? "");
   await expect(page.getByTestId("selected-team")).toContainText("None");
+
+  const falconsTile = page.locator(".team-board-grid .team-tile").first();
+  await expect(falconsTile).toContainText("180");
+  await expect(falconsTile).toContainText("1");
+
+  await page.getByTestId("mark-unsold").click();
+  await expect(page.getByTestId("mark-unsold-success")).toHaveText(
+    /Marked unsold\..+ moves to Phase 2 rebid\./
+  );
+  await expect(page.getByTestId("current-player-panel")).toContainText(
+    "No Current Player"
+  );
+  await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("reveal-next")).toBeEnabled();
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
+    "Unsold (Phase 2 rebid): 1"
+  );
+  await expect(falconsTile).toContainText("180");
+  await expect(falconsTile).toContainText("1");
+  await expect(falconsTile).not.toContainText("2 of 2");
+
+  await page.reload();
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
+    "Unsold (Phase 2 rebid): 1"
+  );
+  await expect(page.getByTestId("current-player-panel")).toContainText(
+    "No Current Player"
+  );
+  await expect(page.getByTestId("reveal-next")).toBeEnabled();
+
+  for (let playerIndex = 0; playerIndex < 6; playerIndex += 1) {
+    await page.getByTestId("reveal-next").click();
+    await expect(page.getByTestId("current-player-name")).toBeVisible();
+    await page.getByTestId("mark-unsold").click();
+    await expect(page.getByTestId("mark-unsold-success")).toBeVisible();
+  }
+
+  await expect(page.getByTestId("phase1-complete")).toContainText("Phase 1 complete.");
+  await expect(page.getByTestId("start-unsold-bidding-preview")).toBeDisabled();
+  await expect(page.getByTestId("start-unsold-bidding-preview")).toContainText(
+    "Start Unsold Bidding will rebid 7 unsold players."
+  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
+    "Unsold (Phase 2 rebid): 7"
+  );
 });

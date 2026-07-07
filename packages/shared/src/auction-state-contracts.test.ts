@@ -10,6 +10,10 @@ import {
   markSoldRejectedResponseSchema,
   markSoldRequestSchema,
   markSoldResponseSchema,
+  markUnsoldAcceptedResponseSchema,
+  markUnsoldRejectedResponseSchema,
+  markUnsoldRequestSchema,
+  markUnsoldResponseSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
   selectTeamRequestSchema,
@@ -204,6 +208,209 @@ describe("auction state contracts", () => {
             }
           ]
         }
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires a strict clientCommandId request for Mark Unsold", () => {
+    expect(markUnsoldRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success)
+      .toBe(true);
+    expect(markUnsoldRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      markUnsoldRequestSchema.safeParse({
+        clientCommandId: "cmd-1",
+        sourceRowNumber: 2
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates strict Mark Unsold rejected responses", () => {
+    expect(
+      markUnsoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: "current_player_required",
+        message: "Reveal a Current Player before marking unsold."
+      }).success
+    ).toBe(true);
+    expect(
+      markUnsoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: "unknown_private_reason",
+        message: "Blocked."
+      }).success
+    ).toBe(false);
+    expect(
+      markUnsoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: "current_player_required",
+        message: "Reveal a Current Player before marking unsold.",
+        sourceRowNumber: 2
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates accepted and union Mark Unsold responses without private fields", () => {
+    const boardState = {
+      ...createBoardState(),
+      players: [
+        {
+          ...createBoardState().players[0],
+          status: "Unsold" as const
+        }
+      ],
+      phase2PoolCount: 1,
+      phase1Progress: {
+        ...createBoardState().phase1Progress,
+        pendingPlayerCount: 0,
+        revealedPlayerCount: 1,
+        categories: [
+          {
+            category: "Ace Men",
+            total: 1,
+            pending: 0,
+            completed: 1
+          }
+        ]
+      }
+    };
+
+    const accepted = {
+      state: boardState,
+      result: {
+        command: "MarkUnsold",
+        clientCommandId: "cmd-mark-unsold-1",
+        message: "Marked unsold. Aarav Menon moves to Phase 2 rebid."
+      }
+    };
+
+    expect(markUnsoldAcceptedResponseSchema.safeParse(accepted).success).toBe(true);
+    expect(markUnsoldResponseSchema.safeParse(accepted).success).toBe(true);
+    expect(
+      markUnsoldResponseSchema.safeParse({
+        ok: false,
+        error: "auction_not_active",
+        message: "Start an auction before marking a Player unsold."
+      }).success
+    ).toBe(true);
+    expect(
+      markUnsoldAcceptedResponseSchema.safeParse({
+        ...accepted,
+        state: {
+          ...accepted.state,
+          players: [
+            {
+              ...accepted.state.players[0],
+              sourceFilename: "private.csv"
+            }
+          ]
+        }
+      }).success
+    ).toBe(false);
+  });
+
+  it("parses phase2Pool when present and defaults it when absent", () => {
+    const boardState = createBoardState();
+    const baseState = {
+      auctionId: boardState.auctionId,
+      phase: boardState.phase,
+      parameters: boardState.parameters,
+      players: [
+        {
+          ...boardState.players[0],
+          gender: "Male" as const,
+          status: "Unsold" as const
+        }
+      ],
+      teams: boardState.teams,
+      phase1Order: {
+        categories: [
+          { category: "Ace Men", playerIds: ["player-1"] },
+          { category: "Ace Women", playerIds: [] },
+          { category: "Women All Rounders", playerIds: [] },
+          { category: "Men Bowlers", playerIds: [] },
+          { category: "Men Batsmen", playerIds: [] },
+          { category: "Men All Rounders", playerIds: [] }
+        ],
+        playerIds: ["player-1"],
+        generatedAt: "2026-07-07T08:30:00.000Z"
+      },
+      currentPlayerId: null,
+      currentBid: null,
+      selectedTeamId: null,
+      undoHistory: [],
+      createdAt: "2026-07-07T08:30:00.000Z",
+      updatedAt: "2026-07-07T08:35:00.000Z",
+      persistenceFailure: null
+    };
+
+    const withPool = auctionStateSchema.safeParse({
+      ...baseState,
+      phase2Pool: ["player-1"]
+    });
+    expect(withPool.success).toBe(true);
+    expect(withPool.success && withPool.data.phase2Pool).toEqual(["player-1"]);
+
+    const withoutPool = auctionStateSchema.safeParse(baseState);
+    expect(withoutPool.success).toBe(true);
+    expect(withoutPool.success && withoutPool.data.phase2Pool).toEqual([]);
+  });
+
+  it("validates Mark Unsold undo-history entries in auction state", () => {
+    const boardState = createBoardState();
+    const auctionState = {
+      auctionId: boardState.auctionId,
+      phase: boardState.phase,
+      parameters: boardState.parameters,
+      players: [
+        {
+          ...boardState.players[0],
+          gender: "Male" as const,
+          status: "Unsold" as const
+        }
+      ],
+      teams: boardState.teams,
+      phase1Order: {
+        categories: [
+          { category: "Ace Men", playerIds: ["player-1"] },
+          { category: "Ace Women", playerIds: [] },
+          { category: "Women All Rounders", playerIds: [] },
+          { category: "Men Bowlers", playerIds: [] },
+          { category: "Men Batsmen", playerIds: [] },
+          { category: "Men All Rounders", playerIds: [] }
+        ],
+        playerIds: ["player-1"],
+        generatedAt: "2026-07-07T08:30:00.000Z"
+      },
+      currentPlayerId: null,
+      currentBid: null,
+      selectedTeamId: null,
+      phase2Pool: ["player-1"],
+      undoHistory: [
+        {
+          command: "MarkUnsold",
+          playerId: "player-1",
+          previousPlayerStatus: "Current",
+          previousCurrentPlayerId: "player-1",
+          previousCurrentBid: 12,
+          previousSelectedTeamId: "team-1",
+          timestamp: "2026-07-07T08:35:00.000Z"
+        }
+      ],
+      createdAt: "2026-07-07T08:30:00.000Z",
+      updatedAt: "2026-07-07T08:35:00.000Z",
+      persistenceFailure: null
+    };
+
+    expect(auctionStateSchema.safeParse(auctionState).success).toBe(true);
+    expect(
+      auctionStateSchema.safeParse({
+        ...auctionState,
+        undoHistory: [
+          {
+            ...auctionState.undoHistory[0],
+            sourceRowNumber: 2
+          }
+        ]
       }).success
     ).toBe(false);
   });
@@ -934,6 +1141,7 @@ function createBoardState() {
     currentPlayer: null,
     currentBid: null,
     selectedTeamId: null,
+    phase2PoolCount: 0,
     phase1Progress: {
       currentCategory: "Ace Men",
       orderedPlayerCount: 1,

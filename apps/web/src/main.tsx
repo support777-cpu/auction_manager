@@ -21,6 +21,8 @@ import {
   increaseBidResponseSchema,
   markSoldResponseSchema,
   markSoldAcceptedResponseSchema,
+  markUnsoldResponseSchema,
+  markUnsoldAcceptedResponseSchema,
   revealNextPlayerResponseSchema,
   selectTeamResponseSchema,
   startAuctionResponseSchema,
@@ -43,6 +45,7 @@ import {
 } from "./auction-parameters-helpers.js";
 import {
   canAttemptMarkSold,
+  canAttemptMarkUnsold,
   canRevealNextPlayer,
   canIncreaseBid,
   canSelectTeam,
@@ -115,6 +118,8 @@ function App() {
   const increaseBidInFlightRef = useRef(false);
   const markSoldGenerationRef = useRef(0);
   const markSoldInFlightRef = useRef(false);
+  const markUnsoldGenerationRef = useRef(0);
+  const markUnsoldInFlightRef = useRef(false);
   const handleIncreaseBidRef = useRef<() => Promise<void>>(async () => {});
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
@@ -187,6 +192,23 @@ function App() {
   >("idle");
   const [markSoldError, setMarkSoldError] = useState<string | null>(null);
   const [markSoldSummary, setMarkSoldSummary] = useState<string | null>(null);
+  const [markUnsoldState, setMarkUnsoldState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [markUnsoldError, setMarkUnsoldError] = useState<string | null>(null);
+  const [markUnsoldSummary, setMarkUnsoldSummary] = useState<string | null>(null);
+
+  function clearMarkSoldOutcome() {
+    setMarkSoldError(null);
+    setMarkSoldSummary(null);
+    setMarkSoldState("idle");
+  }
+
+  function clearMarkUnsoldOutcome() {
+    setMarkUnsoldError(null);
+    setMarkUnsoldSummary(null);
+    setMarkUnsoldState("idle");
+  }
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -779,9 +801,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
-      setMarkSoldError(null);
-      setMarkSoldSummary(null);
-      setMarkSoldState("idle");
+      clearMarkSoldOutcome();
+      clearMarkUnsoldOutcome();
       setStartAuctionState("ready");
     } catch {
       if (commandGeneration !== startAuctionGenerationRef.current) {
@@ -832,9 +853,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
-      setMarkSoldError(null);
-      setMarkSoldSummary(null);
-      setMarkSoldState("idle");
+      clearMarkSoldOutcome();
+      clearMarkUnsoldOutcome();
       setRevealNextState("ready");
     } catch {
       if (commandGeneration !== revealNextGenerationRef.current) {
@@ -891,9 +911,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
-      setMarkSoldError(null);
-      setMarkSoldSummary(null);
-      setMarkSoldState("idle");
+      clearMarkSoldOutcome();
+      clearMarkUnsoldOutcome();
       setSelectTeamState("ready");
     } catch {
       if (commandGeneration !== selectTeamGenerationRef.current) {
@@ -949,9 +968,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
-      setMarkSoldError(null);
-      setMarkSoldSummary(null);
-      setMarkSoldState("idle");
+      clearMarkSoldOutcome();
+      clearMarkUnsoldOutcome();
       setIncreaseBidState("ready");
     } catch {
       if (commandGeneration !== increaseBidGenerationRef.current) {
@@ -1067,6 +1085,7 @@ function App() {
         );
         if (acceptedResponse.success) {
           setBoardState(acceptedResponse.data.state);
+          clearMarkUnsoldOutcome();
           setMarkSoldError(null);
           setMarkSoldSummary(acceptedResponse.data.result.message);
           setMarkSoldState("ready");
@@ -1088,6 +1107,96 @@ function App() {
     } finally {
       if (commandGeneration === markSoldGenerationRef.current) {
         markSoldInFlightRef.current = false;
+      }
+    }
+  }
+
+  async function handleMarkUnsold() {
+    if (
+      !boardState ||
+      !canAttemptMarkUnsold(boardState) ||
+      markUnsoldState === "loading" ||
+      markUnsoldInFlightRef.current
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++markUnsoldGenerationRef.current;
+    markUnsoldInFlightRef.current = true;
+    setMarkUnsoldState("loading");
+    setMarkUnsoldError(null);
+
+    try {
+      const response = await fetch("/api/auction/mark-unsold", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("mark-unsold")
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = markUnsoldResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== markUnsoldGenerationRef.current) {
+        return;
+      }
+
+      if (
+        !response.ok &&
+        typeof responseBody === "object" &&
+        responseBody !== null &&
+        "error" in responseBody &&
+        responseBody.error === "snapshot_write_failed"
+      ) {
+        const snapshotFailureMessage =
+          "message" in responseBody &&
+          typeof responseBody.message === "string"
+            ? responseBody.message
+            : "Mark Unsold was saved, but the latest snapshot could not be written.";
+        await refreshBoardState();
+        setMarkUnsoldError(snapshotFailureMessage);
+        setMarkUnsoldState("ready");
+        return;
+      }
+
+      if (!response.ok && parsedResponse.success && "ok" in parsedResponse.data) {
+        setMarkUnsoldState("error");
+        setMarkUnsoldSummary(null);
+        setMarkUnsoldError(parsedResponse.data.message);
+        await refreshBoardState();
+        return;
+      }
+
+      if (response.ok && parsedResponse.success) {
+        const acceptedResponse = markUnsoldAcceptedResponseSchema.safeParse(
+          parsedResponse.data
+        );
+        if (acceptedResponse.success) {
+          setBoardState(acceptedResponse.data.state);
+          clearMarkSoldOutcome();
+          setMarkUnsoldError(null);
+          setMarkUnsoldSummary(acceptedResponse.data.result.message);
+          setMarkUnsoldState("ready");
+          return;
+        }
+      }
+
+      setMarkUnsoldState("error");
+      setMarkUnsoldSummary(null);
+      setMarkUnsoldError(readMarkUnsoldErrorMessage(response, responseBody));
+      await refreshBoardState();
+    } catch {
+      if (commandGeneration !== markUnsoldGenerationRef.current) {
+        return;
+      }
+      setMarkUnsoldState("error");
+      setMarkUnsoldError("Mark Unsold could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === markUnsoldGenerationRef.current) {
+        markUnsoldInFlightRef.current = false;
       }
     }
   }
@@ -1209,11 +1318,17 @@ function App() {
         onMarkSold={() => {
           void handleMarkSold();
         }}
+        onMarkUnsold={() => {
+          void handleMarkUnsold();
+        }}
         increaseBidError={increaseBidError}
         increaseBidState={increaseBidState}
         markSoldError={markSoldError}
         markSoldState={markSoldState}
         markSoldSummary={markSoldSummary}
+        markUnsoldError={markUnsoldError}
+        markUnsoldState={markUnsoldState}
+        markUnsoldSummary={markUnsoldSummary}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
         selectTeamError={selectTeamError}
@@ -1755,11 +1870,15 @@ function AuctionBoard({
   onSelectTeam,
   onIncreaseBid,
   onMarkSold,
+  onMarkUnsold,
   increaseBidError,
   increaseBidState,
   markSoldError,
   markSoldState,
   markSoldSummary,
+  markUnsoldError,
+  markUnsoldState,
+  markUnsoldSummary,
   revealNextError,
   revealNextState,
   selectTeamError,
@@ -1770,11 +1889,15 @@ function AuctionBoard({
   readonly onSelectTeam: (teamId: string | null) => void;
   readonly onIncreaseBid: () => void;
   readonly onMarkSold: () => void;
+  readonly onMarkUnsold: () => void;
   readonly increaseBidError: string | null;
   readonly increaseBidState: "idle" | "loading" | "ready" | "error";
   readonly markSoldError: string | null;
   readonly markSoldState: "idle" | "loading" | "ready" | "error";
   readonly markSoldSummary: string | null;
+  readonly markUnsoldError: string | null;
+  readonly markUnsoldState: "idle" | "loading" | "ready" | "error";
+  readonly markUnsoldSummary: string | null;
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
   readonly selectTeamError: string | null;
@@ -1801,6 +1924,13 @@ function AuctionBoard({
     !canAttemptMarkSold(boardState) ||
     markSoldState === "loading" ||
     markSoldBlockedReasons.length > 0;
+  const markUnsoldDisabled =
+    !canAttemptMarkUnsold(boardState) || markUnsoldState === "loading";
+  const showPhase1Complete =
+    boardState.phase === "InitialAuction" &&
+    boardState.currentPlayer === null &&
+    boardState.phase1Progress.pendingPlayerCount === 0 &&
+    boardState.phase2PoolCount > 0;
 
   return (
     <main className="app-shell" data-testid="app-shell">
@@ -2015,51 +2145,91 @@ function AuctionBoard({
                 <span>{increaseBidError}</span>
               </p>
             ) : null}
-            <div className="mark-sold-panel" aria-live="polite">
-              <button
-                aria-busy={markSoldState === "loading"}
-                className={
-                  markSoldDisabled
-                    ? "live-action live-action-disabled"
-                    : "live-action"
-                }
-                data-testid="mark-sold"
-                disabled={markSoldDisabled}
-                onClick={onMarkSold}
-                type="button"
-              >
-                <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
-              </button>
-              {markSoldBlockedReasons.length > 0 ? (
-                <div
-                  className="blocked-reason-panel"
-                  data-testid="mark-sold-blocked-reason"
-                  role="alert"
+            <div className="outcome-controls" aria-label="Player outcome controls">
+              <div className="mark-sold-panel" aria-live="polite">
+                <button
+                  aria-busy={markSoldState === "loading"}
+                  className={
+                    markSoldDisabled
+                      ? "live-action live-action-disabled"
+                      : "live-action"
+                  }
+                  data-testid="mark-sold"
+                  disabled={markSoldDisabled}
+                  onClick={onMarkSold}
+                  type="button"
                 >
-                  {markSoldBlockedReasons.map((reason, index) => (
-                    <p key={`${reason}-${index}`}>{reason}</p>
-                  ))}
-                </div>
-              ) : null}
-              {markSoldError ? (
-                <p
-                  className="command-error"
-                  data-testid="mark-sold-error"
-                  role="alert"
+                  <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
+                </button>
+                {markSoldBlockedReasons.length > 0 ? (
+                  <div
+                    className="blocked-reason-panel"
+                    data-testid="mark-sold-blocked-reason"
+                    role="alert"
+                  >
+                    {markSoldBlockedReasons.map((reason, index) => (
+                      <p key={`${reason}-${index}`}>{reason}</p>
+                    ))}
+                  </div>
+                ) : null}
+                {markSoldError ? (
+                  <p
+                    className="command-error"
+                    data-testid="mark-sold-error"
+                    role="alert"
+                  >
+                    <AlertCircle aria-hidden="true" size={18} />
+                    <span>{markSoldError}</span>
+                  </p>
+                ) : null}
+                {markSoldSummary ? (
+                  <p
+                    className="sale-summary"
+                    data-testid="mark-sold-success"
+                    role="status"
+                  >
+                    {markSoldSummary}
+                  </p>
+                ) : null}
+              </div>
+              <div className="mark-unsold-panel" aria-live="polite">
+                <button
+                  aria-busy={markUnsoldState === "loading"}
+                  aria-label="Mark Unsold"
+                  className={
+                    markUnsoldDisabled
+                      ? "live-action live-action-disabled"
+                      : "live-action"
+                  }
+                  data-testid="mark-unsold"
+                  disabled={markUnsoldDisabled}
+                  onClick={onMarkUnsold}
+                  type="button"
                 >
-                  <AlertCircle aria-hidden="true" size={18} />
-                  <span>{markSoldError}</span>
-                </p>
-              ) : null}
-              {markSoldSummary ? (
-                <p
-                  className="sale-summary"
-                  data-testid="mark-sold-success"
-                  role="status"
-                >
-                  {markSoldSummary}
-                </p>
-              ) : null}
+                  <span>
+                    {markUnsoldState === "loading" ? "Marking Unsold..." : "Mark Unsold"}
+                  </span>
+                </button>
+                {markUnsoldError ? (
+                  <p
+                    className="command-error"
+                    data-testid="mark-unsold-error"
+                    role="alert"
+                  >
+                    <AlertCircle aria-hidden="true" size={18} />
+                    <span>{markUnsoldError}</span>
+                  </p>
+                ) : null}
+                {markUnsoldSummary ? (
+                  <p
+                    className="unsold-summary"
+                    data-testid="mark-unsold-success"
+                    role="status"
+                  >
+                    {markUnsoldSummary}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </section>
         </div>
@@ -2103,6 +2273,23 @@ function AuctionBoard({
               </article>
             ))}
           </div>
+          <p className="unsold-pool-summary" data-testid="unsold-pool-summary">
+            Unsold (Phase 2 rebid): {boardState.phase2PoolCount}
+          </p>
+          {showPhase1Complete ? (
+            <div className="phase1-complete-panel" data-testid="phase1-complete">
+              <p>Phase 1 complete.</p>
+              <button
+                className="live-action live-action-disabled start-unsold-bidding-preview"
+                data-testid="start-unsold-bidding-preview"
+                disabled
+                type="button"
+              >
+                Start Unsold Bidding will rebid {boardState.phase2PoolCount} unsold
+                {boardState.phase2PoolCount === 1 ? " player" : " players"}.
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section
@@ -2456,8 +2643,25 @@ function readMarkSoldErrorMessage(response: Response, body: unknown): string {
   return "Mark Sold could not be completed. Try again.";
 }
 
+function readMarkUnsoldErrorMessage(response: Response, body: unknown): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (response.status === 409) {
+    return "Mark Unsold is blocked by the current auction state.";
+  }
+
+  return "Mark Unsold could not be completed. Try again.";
+}
+
 function createClientCommandId(
-  command: "start" | "reveal" | "select" | "increase" | "mark-sold"
+  command: "start" | "reveal" | "select" | "increase" | "mark-sold" | "mark-unsold"
 ): string {
   if ("crypto" in window && "randomUUID" in window.crypto) {
     return `${command}_${window.crypto.randomUUID()}`;

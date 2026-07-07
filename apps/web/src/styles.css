@@ -1014,6 +1014,64 @@ button:focus-visible {
   min-height: 104px;
 }
 
+.outcome-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.mark-unsold-panel {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-height: 104px;
+}
+
+.unsold-summary {
+  margin: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.unsold-pool-summary {
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.phase1-complete-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.phase1-complete-panel p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.start-unsold-bidding-preview {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
 .blocked-reason-panel {
   border: 1px solid #fecaca;
   border-radius: 6px;

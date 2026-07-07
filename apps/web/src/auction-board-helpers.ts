@@ -52,6 +52,14 @@ export function canAttemptMarkSold(boardState: BoardStateDto): boolean {
   );
 }
 
+export function canAttemptMarkUnsold(boardState: BoardStateDto): boolean {
+  return (
+    boardState.phase === "InitialAuction" &&
+    boardState.currentPlayer !== null &&
+    boardState.persistenceFailure === null
+  );
+}
+
 export function isEditableShortcutTarget(target: EventTarget | null): boolean {
   if (typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) {
     return false;

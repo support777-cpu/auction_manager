@@ -148,6 +148,259 @@ describe("AuctionBoard Mark Sold blocked state", () => {
   });
 });
 
+describe("AuctionBoard Mark Unsold", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="root"></div>';
+  });
+
+  it("applies accepted Mark Unsold state, shows unsold summary, and enables Reveal Next", async () => {
+    const acceptedState = createUnsoldBoardState();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse({
+          mode: "auction",
+          state: createEligibleBoardState()
+        });
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/mark-unsold" && init?.method === "POST") {
+        return jsonResponse({
+          state: acceptedState,
+          result: {
+            command: "MarkUnsold",
+            clientCommandId: "cmd-mark-unsold-1",
+            message: "Marked unsold. Aarav Menon moves to Phase 2 rebid."
+          }
+        });
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+
+    fireEvent.click(await screen.findByTestId("mark-unsold"));
+
+    expect(await screen.findByTestId("mark-unsold-success")).toHaveTextContent(
+      "Marked unsold. Aarav Menon moves to Phase 2 rebid."
+    );
+    expect(screen.getByTestId("current-player-panel")).toHaveTextContent(
+      "No Current Player"
+    );
+    expect(screen.getByTestId("current-bid")).toHaveTextContent("No current bid");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("None");
+    expect(screen.getByTestId("reveal-next")).toBeEnabled();
+    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
+      "Unsold (Phase 2 rebid): 1"
+    );
+    expect(screen.getByTestId("team-tile")).toHaveTextContent("170");
+    expect(screen.getByTestId("team-tile")).toHaveTextContent("0");
+    expect(screen.queryByTestId("mark-unsold-error")).not.toBeInTheDocument();
+  });
+
+  it("disables Mark Unsold without a Current Player", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse({
+            mode: "auction",
+            state: createNoCurrentPlayerBoardState()
+          });
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+
+    expect(await screen.findByTestId("mark-unsold")).toBeDisabled();
+  });
+
+  it("renders Phase 1 completion and non-executing transition preview for the last unsold player", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse({
+            mode: "auction",
+            state: createPhase1CompleteUnsoldBoardState()
+          });
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+
+    expect(await screen.findByTestId("phase1-complete")).toHaveTextContent(
+      "Phase 1 complete."
+    );
+    expect(screen.getByTestId("start-unsold-bidding-preview")).toBeDisabled();
+    expect(screen.getByTestId("start-unsold-bidding-preview")).toHaveTextContent(
+      "Start Unsold Bidding will rebid 1 unsold player."
+    );
+    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
+      "Unsold (Phase 2 rebid): 1"
+    );
+  });
+
+  it("guards duplicate Mark Unsold clicks while a request is in flight", async () => {
+    let resolveMarkUnsold: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse({
+          mode: "auction",
+          state: createEligibleBoardState()
+        });
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/mark-unsold" && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          resolveMarkUnsold = resolve;
+        });
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+
+    const markUnsoldButton = await screen.findByTestId("mark-unsold");
+    fireEvent.click(markUnsoldButton);
+    expect(markUnsoldButton).toBeDisabled();
+    fireEvent.click(markUnsoldButton);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(
+          ([url, init]) =>
+            String(url) === "/api/auction/mark-unsold" && init?.method === "POST"
+        )
+      ).toHaveLength(1);
+    });
+
+    resolveMarkUnsold?.(
+      jsonResponse({
+        state: createUnsoldBoardState(),
+        result: {
+          command: "MarkUnsold",
+          clientCommandId: "cmd-mark-unsold-1",
+          message: "Marked unsold. Aarav Menon moves to Phase 2 rebid."
+        }
+      })
+    );
+  });
+
+  it("does not render Phase 1 completion when all players are sold and the pool is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse({
+            mode: "auction",
+            state: createPhase1CompleteAllSoldBoardState()
+          });
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+
+    await screen.findByTestId("phase1-progress");
+    expect(screen.queryByTestId("phase1-complete")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("start-unsold-bidding-preview")
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
+      "Unsold (Phase 2 rebid): 0"
+    );
+  });
+
+  it("clears the Mark Unsold success summary after Reveal Next Player", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse({
+          mode: "auction",
+          state: createEligibleBoardState()
+        });
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/mark-unsold" && init?.method === "POST") {
+        return jsonResponse({
+          state: createUnsoldBoardState(),
+          result: {
+            command: "MarkUnsold",
+            clientCommandId: "cmd-mark-unsold-clear",
+            message: "Marked unsold. Aarav Menon moves to Phase 2 rebid."
+          }
+        });
+      }
+
+      if (url === "/api/auction/reveal-next" && init?.method === "POST") {
+        return jsonResponse({
+          state: createRevealedNextBoardState(),
+          result: {
+            command: "RevealNextPlayer",
+            clientCommandId: "cmd-reveal-next-clear",
+            message: "Revealed Riya Shah."
+          }
+        });
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+
+    fireEvent.click(await screen.findByTestId("mark-unsold"));
+    expect(await screen.findByTestId("mark-unsold-success")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("reveal-next"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("mark-unsold-success")).not.toBeInTheDocument();
+    });
+  });
+});
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -225,7 +478,8 @@ function createEligibleBoardState(): BoardStateDto {
       ]
     },
     canUndo: false,
-    persistenceFailure: null
+    persistenceFailure: null,
+    phase2PoolCount: 0
   };
 }
 
@@ -297,7 +551,8 @@ function createBlockedBoardState(): BoardStateDto {
       ]
     },
     canUndo: false,
-    persistenceFailure: null
+    persistenceFailure: null,
+    phase2PoolCount: 0
   };
 }
 
@@ -362,7 +617,201 @@ function createSoldBoardState(): BoardStateDto {
         }
       ]
     },
-    canUndo: true
+    canUndo: true,
+    phase2PoolCount: 0
+  };
+}
+
+function createUnsoldBoardState(): BoardStateDto {
+  const baseState = createEligibleBoardState();
+  const basePlayer = baseState.players[0]!;
+  const baseTeam = baseState.teams[0]!;
+
+  return {
+    ...baseState,
+    players: [
+      {
+        ...basePlayer,
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-2",
+        name: "Riya Shah",
+        role: "Ace",
+        phase1Category: "Ace Women",
+        basePrice: 10,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    teams: [baseTeam],
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      currentCategory: "Ace Women",
+      orderedPlayerCount: 2,
+      pendingPlayerCount: 1,
+      revealedPlayerCount: 1,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 1,
+          pending: 0,
+          completed: 1
+        },
+        {
+          category: "Ace Women",
+          total: 1,
+          pending: 1,
+          completed: 0
+        }
+      ]
+    },
+    canUndo: true,
+    phase2PoolCount: 1
+  };
+}
+
+function createNoCurrentPlayerBoardState(): BoardStateDto {
+  const baseState = createEligibleBoardState();
+
+  return {
+    ...baseState,
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      ...baseState.phase1Progress,
+      pendingPlayerCount: 1,
+      revealedPlayerCount: 0
+    }
+  };
+}
+
+function createPhase1CompleteUnsoldBoardState(): BoardStateDto {
+  const basePlayer = createEligibleBoardState().players[0]!;
+
+  return {
+    auctionId: "auction-1",
+    phase: "InitialAuction",
+    parameters: createAuctionParameters(),
+    players: [
+      {
+        ...basePlayer,
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    teams: createEligibleBoardState().teams,
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      currentCategory: null,
+      orderedPlayerCount: 1,
+      pendingPlayerCount: 0,
+      revealedPlayerCount: 1,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 1,
+          pending: 0,
+          completed: 1
+        }
+      ]
+    },
+    canUndo: true,
+    persistenceFailure: null,
+    phase2PoolCount: 1
+  };
+}
+
+function createPhase1CompleteAllSoldBoardState(): BoardStateDto {
+  const basePlayer = createEligibleBoardState().players[0]!;
+
+  return {
+    auctionId: "auction-1",
+    phase: "InitialAuction",
+    parameters: createAuctionParameters(),
+    players: [
+      {
+        ...basePlayer,
+        status: "Sold",
+        soldPrice: 12,
+        winningTeamId: "team-1",
+        acquisitionType: "Auction"
+      }
+    ],
+    teams: createEligibleBoardState().teams,
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      currentCategory: null,
+      orderedPlayerCount: 1,
+      pendingPlayerCount: 0,
+      revealedPlayerCount: 1,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 1,
+          pending: 0,
+          completed: 1
+        }
+      ]
+    },
+    canUndo: true,
+    persistenceFailure: null,
+    phase2PoolCount: 0
+  };
+}
+
+function createRevealedNextBoardState(): BoardStateDto {
+  const unsoldState = createUnsoldBoardState();
+
+  return {
+    ...unsoldState,
+    players: [
+      unsoldState.players[0]!,
+      {
+        id: "player-2",
+        name: "Riya Shah",
+        role: "Ace",
+        phase1Category: "Ace Women",
+        basePrice: 10,
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    currentPlayer: {
+      id: "player-2",
+      name: "Riya Shah",
+      role: "Ace",
+      phase1Category: "Ace Women",
+      basePrice: 10,
+      status: "Current",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    },
+    currentBid: 10,
+    selectedTeamId: null,
+    phase1Progress: {
+      ...unsoldState.phase1Progress,
+      currentCategory: "Ace Women",
+      pendingPlayerCount: 0,
+      revealedPlayerCount: 2
+    }
   };
 }
 

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { BoardStateDto } from "@auction-manager/shared";
 import {
   canAttemptMarkSold,
+  canAttemptMarkUnsold,
   canIncreaseBid,
   canSelectTeam,
   canRevealNextPlayer,
@@ -43,6 +44,7 @@ function createBoardState(
     currentPlayer: null,
     currentBid: null,
     selectedTeamId: null,
+    phase2PoolCount: 0,
     persistenceFailure: null,
     teams: [],
     canUndo: false,
@@ -300,6 +302,48 @@ describe("auction board helpers", () => {
           currentBid: 10,
           selectedTeamId: "team-1",
           teams,
+          persistenceFailure: "snapshot_write_failed"
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("enables Mark Unsold with any Current Player during Initial Auction regardless of Team or bid", () => {
+    const currentPlayer = {
+      id: "player-1",
+      name: "Aarav Menon",
+      role: "Ace" as const,
+      basePrice: 10,
+      status: "Current" as const,
+      phase1Category: "Ace Men" as const,
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    };
+
+    expect(canAttemptMarkUnsold(createBoardState({ currentPlayer }))).toBe(true);
+    expect(
+      canAttemptMarkUnsold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 12,
+          selectedTeamId: "team-1"
+        })
+      )
+    ).toBe(true);
+    expect(canAttemptMarkUnsold(createBoardState())).toBe(false);
+    expect(
+      canAttemptMarkUnsold(
+        createBoardState({
+          currentPlayer,
+          phase: "UnsoldBidding"
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkUnsold(
+        createBoardState({
+          currentPlayer,
           persistenceFailure: "snapshot_write_failed"
         })
       )

@@ -41,3 +41,9 @@
 - Live roster list under team tiles — Story 2.10 owns full Board/Rosters UI; deriveSoldRosterRows helper satisfies this story's task boundary
 - Optimistic concurrency / stale-state guard on mark-sold — matches existing live-command pattern across Stories 2.2–2.6 until dedicated concurrency work lands
 - Post-commit snapshot write split from SQLite transaction — consistent with Start/Reveal/Select/Increase persistence pattern
+
+## Deferred from: code review of 2-7-mark-player-unsold-into-phase-2-pool (2026-07-07)
+
+- Stale concurrent mutating commands can overwrite newer state — no optimistic locking on any live command; matches Stories 2.2–2.6 pattern
+- Cross-command stale Mark Unsold response can overwrite fresher board state — per-command generation refs only; same pattern as Mark Sold / Reveal Next
+- Additional route tests for `persistence_failure_uncleared`, wrong phase, snapshot write failure — same coverage gap as Mark Sold route tests

@@ -48,6 +48,12 @@ export {
   type MarkSoldResult
 } from "./mark-sold.js";
 export {
+  markUnsold,
+  type MarkUnsoldErrorCode,
+  type MarkUnsoldInput,
+  type MarkUnsoldResult
+} from "./mark-unsold.js";
+export {
   createPhase1Order,
   type CreatePhase1OrderError,
   type CreatePhase1OrderInput,

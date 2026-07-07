@@ -96,6 +96,7 @@ export function startAuctionFromSetup(
       currentPlayerId: null,
       currentBid: null,
       selectedTeamId: null,
+      phase2Pool: [],
       undoHistory: [],
       createdAt: timestamp,
       updatedAt: timestamp,

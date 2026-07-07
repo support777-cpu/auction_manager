@@ -146,8 +146,10 @@ describe("startAuctionFromSetup", () => {
       currentPlayerId: null,
       currentBid: null,
       selectedTeamId: null,
+      phase2Pool: [],
       undoHistory: []
     });
+    expect(result.state.phase2Pool).toEqual([]);
     expect(result.state.players[0]).toMatchObject({
       id: "player-1",
       name: "Aarav Menon",
