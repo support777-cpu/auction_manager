@@ -29,3 +29,9 @@
 - Concurrent select-team stale-state protection — matches existing Start Auction / Reveal Next pattern until optimistic concurrency lands
 - Full UI/component test suite for tile accessibility and keyboard — helper and E2E tests cover primary flow; dedicated component tests deferred
 - Blocked-capacity E2E scenario — domain and DTO tests cover capacity reasons; Story 2.5 owns sale blocking UX
+
+## Deferred from: code review of 2-5-block-invalid-sales-with-clear-reasons (2026-07-07)
+
+- E2E coverage for squad-full and role-target-full blocking paths — domain/API unit tests cover constraints; full E2E setup requires Story 2.6 sale mutation
+- NaN/non-finite bid defensive guards — corrupt numeric state is out of scope for this slice
+- Player-already-sold status guard in domain — deferred to Story 2.6 accepted-sale path

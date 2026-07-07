@@ -40,6 +40,18 @@ export function canIncreaseBid(boardState: BoardStateDto): boolean {
   );
 }
 
+export function canAttemptMarkSold(boardState: BoardStateDto): boolean {
+  return (
+    boardState.phase === "InitialAuction" &&
+    boardState.currentPlayer !== null &&
+    boardState.currentBid !== null &&
+    boardState.currentBid > 0 &&
+    boardState.selectedTeamId !== null &&
+    boardState.teams.some((team) => team.id === boardState.selectedTeamId) &&
+    boardState.persistenceFailure === null
+  );
+}
+
 export function isEditableShortcutTarget(target: EventTarget | null): boolean {
   if (typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) {
     return false;

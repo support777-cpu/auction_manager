@@ -4,6 +4,9 @@ import {
   boardStateDtoSchema,
   increaseBidRequestSchema,
   increaseBidResponseSchema,
+  markSoldConflictReasonSchema,
+  markSoldRejectedResponseSchema,
+  markSoldRequestSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
   selectTeamRequestSchema,
@@ -64,6 +67,64 @@ describe("auction state contracts", () => {
       increaseBidRequestSchema.safeParse({
         clientCommandId: "cmd-1",
         sourceFilename: "private.csv"
+      }).success
+    ).toBe(false);
+  });
+
+  it("requires a strict clientCommandId request for Mark Sold", () => {
+    expect(markSoldRequestSchema.safeParse({ clientCommandId: "cmd-1" }).success)
+      .toBe(true);
+    expect(markSoldRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      markSoldRequestSchema.safeParse({
+        clientCommandId: "cmd-1",
+        sourceRowNumber: 2
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates strict Mark Sold conflict reasons and rejected responses", () => {
+    expect(
+      markSoldConflictReasonSchema.safeParse({
+        code: "budget_exceeded",
+        message: "Blocked: Falcons have 8 remaining; current bid is 10."
+      }).success
+    ).toBe(true);
+    expect(
+      markSoldConflictReasonSchema.safeParse({
+        code: "unknown_private_reason",
+        message: "Blocked.",
+        sourceFilename: "private.csv"
+      }).success
+    ).toBe(false);
+
+    expect(
+      markSoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: "sale_blocked",
+        message: "Blocked: Falcons have 8 remaining; current bid is 10.",
+        reasons: [
+          {
+            code: "budget_exceeded",
+            message: "Blocked: Falcons have 8 remaining; current bid is 10."
+          }
+        ]
+      }).success
+    ).toBe(true);
+
+    expect(
+      markSoldRejectedResponseSchema.safeParse({
+        ok: false,
+        error: "sale_blocked",
+        message: "Blocked: Falcons have 8 remaining; current bid is 10.",
+        reasons: [
+          {
+            code: "budget_exceeded",
+            message: "Blocked: Falcons have 8 remaining; current bid is 10.",
+            actionLogPayload: { private: true }
+          }
+        ],
+        sourceRowNumber: 2
       }).success
     ).toBe(false);
   });

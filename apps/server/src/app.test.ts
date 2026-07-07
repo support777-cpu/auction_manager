@@ -2,6 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createAuctionRepository } from "@auction-manager/persistence";
 import { createAuctionManagerServer } from "./app.js";
 
 describe("auction manager event server", () => {
@@ -628,6 +629,220 @@ describe("auction manager event server", () => {
     expect(duplicate.statusCode).toBe(409);
     expect(duplicate.json()).toMatchObject({
       error: "duplicate_client_command_id"
+    });
+
+    await app.close();
+  });
+
+  it("rejects invalid Mark Sold attempts with clear reasons and no state mutation", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const teamId = revealed.state.teams[0].id;
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-for-mark-sold", teamId }
+    });
+    expect(selected.statusCode).toBe(200);
+
+    let latestState = selected.json().state;
+    const selectedTeam =
+      latestState.teams.find((team: { id: string }) => team.id === teamId) ??
+      latestState.teams[0];
+    let commandIndex = 0;
+    while (latestState.currentBid <= selectedTeam.remainingBudget) {
+      commandIndex += 1;
+      const increased = await app.inject({
+        method: "POST",
+        url: "/api/auction/increase-bid",
+        headers: { "content-type": "application/json" },
+        payload: { clientCommandId: `cmd-increase-for-mark-sold-${commandIndex}` }
+      });
+      expect(increased.statusCode).toBe(200);
+      latestState = increased.json().state;
+    }
+
+    const beforeState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const beforeSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const beforeActionLog = repository.listActionLog();
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-blocked" }
+    });
+
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json()).toEqual({
+      ok: false,
+      error: "sale_blocked",
+      message: `Blocked: ${beforeState.teams[0].name} have ${beforeState.teams[0].remainingBudget} remaining; current bid is ${beforeState.currentBid}.`,
+      reasons: [
+        {
+          code: "budget_exceeded",
+          message: `Blocked: ${beforeState.teams[0].name} have ${beforeState.teams[0].remainingBudget} remaining; current bid is ${beforeState.currentBid}.`
+        }
+      ]
+    });
+    expect(JSON.stringify(rejected.json())).not.toContain("private-player@example.com");
+    expect(JSON.stringify(rejected.json())).not.toContain("UPI-PRIVATE");
+
+    const afterState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const afterSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    expect(afterState).toEqual(beforeState);
+    expect(afterSnapshot).toBe(beforeSnapshot);
+    expect(repository.listActionLog()).toEqual(beforeActionLog);
+    expect(
+      repository.listActionLog().some((entry) => entry.command === "MarkSold")
+    ).toBe(false);
+
+    const repeated = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-blocked" }
+    });
+    expect(repeated.statusCode).toBe(409);
+    expect(repeated.json()).toMatchObject({
+      error: "sale_blocked"
+    });
+
+    const afterRepeatState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const afterRepeatSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    expect(afterRepeatState).toEqual(beforeState);
+    expect(afterRepeatSnapshot).toBe(beforeSnapshot);
+    expect(repository.listActionLog()).toEqual(beforeActionLog);
+
+    await app.close();
+  });
+
+  it("rejects Mark Sold when clientCommandId already exists in the action log", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const teamId = revealed.state.teams[0].id;
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-for-duplicate-mark-sold", teamId }
+    });
+    expect(selected.statusCode).toBe(200);
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-for-duplicate-mark-sold" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      ok: false,
+      error: "duplicate_client_command_id"
+    });
+
+    await app.close();
+  });
+
+  it("validates Mark Sold content type, request body, and prerequisite conflicts", async () => {
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+    });
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "text/plain" },
+      payload: "mark sold"
+    });
+    expect(unsupported.statusCode).toBe(415);
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: {}
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    const inactive = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-inactive" }
+    });
+    expect(inactive.statusCode).toBe(409);
+    expect(inactive.json()).toMatchObject({
+      error: "auction_not_active"
+    });
+
+    await stageValidSetup(app);
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-1" }
+    });
+    expect(start.statusCode).toBe(200);
+
+    const noCurrentPlayer = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-no-player" }
+    });
+    expect(noCurrentPlayer.statusCode).toBe(409);
+    expect(noCurrentPlayer.json()).toMatchObject({
+      error: "current_player_required"
+    });
+
+    const reveal = await app.inject({
+      method: "POST",
+      url: "/api/auction/reveal-next",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-reveal-1" }
+    });
+    expect(reveal.statusCode).toBe(200);
+
+    const noSelectedTeam = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-no-team" }
+    });
+    expect(noSelectedTeam.statusCode).toBe(409);
+    expect(noSelectedTeam.json()).toMatchObject({
+      error: "selected_team_required"
     });
 
     await app.close();

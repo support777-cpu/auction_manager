@@ -197,9 +197,9 @@ describe("getCurrentPlayerTeamCapacity", () => {
       teamId: "team-1",
       canBuy: false,
       reasons: [
-        "Falcons has 8 remaining; current bid is 10.",
-        "Falcons already has 13 of 13 players.",
-        "Falcons has 2 of 2 Ace slots filled."
+        "Falcons have 8 remaining; current bid is 10.",
+        "Falcons already have 13 of 13 players.",
+        "Falcons have 2 of 2 Ace slots filled."
       ]
     });
   });

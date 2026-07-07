@@ -1,5 +1,7 @@
 import type {
   AuctionState,
+  AuctionPlayer,
+  AuctionTeam,
   TeamCurrentPlayerCapacityDto
 } from "@auction-manager/shared";
 
@@ -27,6 +29,25 @@ export interface SelectTeamInput {
   readonly state: AuctionState;
   readonly teamId: string | null;
   readonly now: () => string;
+}
+
+export type TeamCapacityReasonCode =
+  | "budget_exceeded"
+  | "squad_full"
+  | "role_target_full"
+  | "role_capacity_incomplete";
+
+export interface TeamCapacityReason {
+  readonly code: TeamCapacityReasonCode;
+  readonly message: string;
+}
+
+export interface CurrentPlayerTeamCapacityDetails {
+  readonly currentPlayer: AuctionPlayer;
+  readonly team: AuctionTeam;
+  readonly currentBid: number;
+  readonly canBuy: boolean;
+  readonly reasons: readonly TeamCapacityReason[];
 }
 
 export function selectTeam(input: SelectTeamInput): SelectTeamResult {
@@ -117,6 +138,22 @@ export function getCurrentPlayerTeamCapacity(
   state: AuctionState,
   teamId: string
 ): TeamCurrentPlayerCapacityDto | null {
+  const details = getCurrentPlayerTeamCapacityDetails(state, teamId);
+  if (!details) {
+    return null;
+  }
+
+  return {
+    teamId,
+    canBuy: details.canBuy,
+    reasons: details.reasons.map((reason) => reason.message)
+  };
+}
+
+export function getCurrentPlayerTeamCapacityDetails(
+  state: AuctionState,
+  teamId: string
+): CurrentPlayerTeamCapacityDetails | null {
   const currentPlayer = state.players.find(
     (player) => player.id === state.currentPlayerId
   );
@@ -129,31 +166,39 @@ export function getCurrentPlayerTeamCapacity(
     return null;
   }
 
-  const reasons: string[] = [];
+  const reasons: TeamCapacityReason[] = [];
   if (team.remainingBudget < state.currentBid) {
-    reasons.push(
-      `${team.name} has ${team.remainingBudget} remaining; current bid is ${state.currentBid}.`
-    );
+    reasons.push({
+      code: "budget_exceeded",
+      message: `${team.name} have ${team.remainingBudget} remaining; current bid is ${state.currentBid}.`
+    });
   }
 
   if (team.squadCount >= state.parameters.maxSquadSize) {
-    reasons.push(
-      `${team.name} already has ${team.squadCount} of ${state.parameters.maxSquadSize} players.`
-    );
+    reasons.push({
+      code: "squad_full",
+      message: `${team.name} already have ${team.squadCount} of ${state.parameters.maxSquadSize} players.`
+    });
   }
 
   const roleCount = team.roleCounts[currentPlayer.role];
   const roleTarget = state.parameters.roleTargets[currentPlayer.role];
   if (roleCount === undefined || roleTarget === undefined) {
-    reasons.push(`${team.name} role capacity data is incomplete for ${currentPlayer.role}.`);
+    reasons.push({
+      code: "role_capacity_incomplete",
+      message: `${team.name} role capacity data is incomplete for ${currentPlayer.role}.`
+    });
   } else if (roleCount >= roleTarget) {
-    reasons.push(
-      `${team.name} has ${roleCount} of ${roleTarget} ${currentPlayer.role} slots filled.`
-    );
+    reasons.push({
+      code: "role_target_full",
+      message: `${team.name} have ${roleCount} of ${roleTarget} ${currentPlayer.role} slots filled.`
+    });
   }
 
   return {
-    teamId,
+    currentPlayer,
+    team,
+    currentBid: state.currentBid,
     canBuy: reasons.length === 0,
     reasons
   };

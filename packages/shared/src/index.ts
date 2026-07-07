@@ -763,6 +763,45 @@ export const increaseBidRequestSchema = z
   })
   .strict();
 
+export const markSoldRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
+export const markSoldConflictReasonCodeSchema = z.enum([
+  "budget_exceeded",
+  "squad_full",
+  "role_target_full",
+  "role_capacity_incomplete",
+  "auction_not_in_initial_phase",
+  "current_player_required",
+  "selected_team_required",
+  "current_bid_required",
+  "selected_team_not_found",
+  "current_player_not_found",
+  "sale_blocked",
+  "auction_not_active",
+  "persistence_failure_uncleared",
+  "duplicate_client_command_id"
+]);
+
+export const markSoldConflictReasonSchema = z
+  .object({
+    code: markSoldConflictReasonCodeSchema,
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+export const markSoldRejectedResponseSchema = z
+  .object({
+    ok: z.literal(false),
+    error: markSoldConflictReasonCodeSchema,
+    message: z.string().trim().min(1),
+    reasons: z.array(markSoldConflictReasonSchema)
+  })
+  .strict();
+
 export const commandResultSummarySchema = z
   .object({
     command: z.string().trim().min(1),
@@ -806,6 +845,8 @@ export const increaseBidResponseSchema = z
     })
   })
   .strict();
+
+export const markSoldResponseSchema = markSoldRejectedResponseSchema;
 
 export const appStateResponseSchema = z
   .object({
@@ -898,6 +939,11 @@ export type RevealNextPlayerRequest = z.infer<
 >;
 export type SelectTeamRequest = z.infer<typeof selectTeamRequestSchema>;
 export type IncreaseBidRequest = z.infer<typeof increaseBidRequestSchema>;
+export type MarkSoldRequest = z.infer<typeof markSoldRequestSchema>;
+export type MarkSoldConflictReasonCode = z.infer<
+  typeof markSoldConflictReasonCodeSchema
+>;
+export type MarkSoldConflictReason = z.infer<typeof markSoldConflictReasonSchema>;
 export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
 export type StartAuctionResponse = z.infer<typeof startAuctionResponseSchema>;
 export type RevealNextPlayerResponse = z.infer<
@@ -905,6 +951,10 @@ export type RevealNextPlayerResponse = z.infer<
 >;
 export type SelectTeamResponse = z.infer<typeof selectTeamResponseSchema>;
 export type IncreaseBidResponse = z.infer<typeof increaseBidResponseSchema>;
+export type MarkSoldRejectedResponse = z.infer<
+  typeof markSoldRejectedResponseSchema
+>;
+export type MarkSoldResponse = z.infer<typeof markSoldResponseSchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

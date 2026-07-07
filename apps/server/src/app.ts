@@ -6,6 +6,7 @@ import {
   getSetupReadiness,
   getCurrentPlayerTeamCapacity,
   increaseBid,
+  markSold,
   revealNextPlayer,
   selectTeam,
   startAuctionFromSetup,
@@ -26,6 +27,8 @@ import type { AuctionRole } from "@auction-manager/shared";
 import {
   auctionRoleValues,
   increaseBidRequestSchema,
+  markSoldRejectedResponseSchema,
+  markSoldRequestSchema,
   revealNextPlayerRequestSchema,
   selectTeamRequestSchema,
   startAuctionRequestSchema,
@@ -824,6 +827,109 @@ export async function createAuctionManagerServer(
         message: result.summary
       }
     };
+  });
+
+  app.post("/api/auction/mark-sold", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Mark Sold as application/json."
+      });
+    }
+
+    const parsedRequest = markSoldRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Mark Sold requires clientCommandId."
+      });
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send(
+        markSoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "auction_not_active",
+          message: "Start an auction before marking a Player sold.",
+          reasons: [
+            {
+              code: "auction_not_active",
+              message: "Start an auction before marking a Player sold."
+            }
+          ]
+        })
+      );
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send(
+        markSoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "persistence_failure_uncleared",
+          message: "Resolve local persistence recovery before marking sold.",
+          reasons: [
+            {
+              code: "persistence_failure_uncleared",
+              message: "Resolve local persistence recovery before marking sold."
+            }
+          ]
+        })
+      );
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send(
+        markSoldRejectedResponseSchema.parse({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Mark Sold was already submitted with this command id.",
+          reasons: [
+            {
+              code: "duplicate_client_command_id",
+              message: "Mark Sold was already submitted with this command id."
+            }
+          ]
+        })
+      );
+    }
+
+    const result = markSold({
+      state: currentState
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send(
+        markSoldRejectedResponseSchema.parse({
+          ok: false,
+          error: result.error,
+          message: result.message,
+          reasons: result.reasons
+        })
+      );
+    }
+
+    return reply.code(409).send(
+      markSoldRejectedResponseSchema.parse({
+        ok: false,
+        error: "sale_blocked",
+        message: result.message,
+        reasons: [
+          {
+            code: "sale_blocked",
+            message: result.message
+          }
+        ]
+      })
+    );
   });
 
   await app.register(async (setupRoutes) => {

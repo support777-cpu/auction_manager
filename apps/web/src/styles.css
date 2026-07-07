@@ -1007,6 +1007,32 @@ button:focus-visible {
   line-height: 1.35;
 }
 
+.mark-sold-panel {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-height: 104px;
+}
+
+.blocked-reason-panel {
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fff1f2;
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.blocked-reason-panel p {
+  margin: 0;
+}
+
+.blocked-reason-panel p + p {
+  margin-top: 6px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 16px;

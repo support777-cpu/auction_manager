@@ -19,6 +19,7 @@ import {
   appStateResponseSchema,
   auctionRoleValues,
   increaseBidResponseSchema,
+  markSoldResponseSchema,
   revealNextPlayerResponseSchema,
   selectTeamResponseSchema,
   startAuctionResponseSchema,
@@ -40,6 +41,7 @@ import {
   type ParameterNumberFields
 } from "./auction-parameters-helpers.js";
 import {
+  canAttemptMarkSold,
   canRevealNextPlayer,
   canIncreaseBid,
   canSelectTeam,
@@ -110,6 +112,8 @@ function App() {
   const selectTeamInFlightRef = useRef(false);
   const increaseBidGenerationRef = useRef(0);
   const increaseBidInFlightRef = useRef(false);
+  const markSoldGenerationRef = useRef(0);
+  const markSoldInFlightRef = useRef(false);
   const handleIncreaseBidRef = useRef<() => Promise<void>>(async () => {});
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
@@ -177,6 +181,10 @@ function App() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [increaseBidError, setIncreaseBidError] = useState<string | null>(null);
+  const [markSoldState, setMarkSoldState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [markSoldError, setMarkSoldError] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -769,6 +777,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
+      setMarkSoldError(null);
+      setMarkSoldState("idle");
       setStartAuctionState("ready");
     } catch {
       if (commandGeneration !== startAuctionGenerationRef.current) {
@@ -819,6 +829,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
+      setMarkSoldError(null);
+      setMarkSoldState("idle");
       setRevealNextState("ready");
     } catch {
       if (commandGeneration !== revealNextGenerationRef.current) {
@@ -875,6 +887,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
+      setMarkSoldError(null);
+      setMarkSoldState("idle");
       setSelectTeamState("ready");
     } catch {
       if (commandGeneration !== selectTeamGenerationRef.current) {
@@ -930,6 +944,8 @@ function App() {
       }
 
       setBoardState(parsedResponse.data.state);
+      setMarkSoldError(null);
+      setMarkSoldState("idle");
       setIncreaseBidState("ready");
     } catch {
       if (commandGeneration !== increaseBidGenerationRef.current) {
@@ -944,6 +960,97 @@ function App() {
       }
     }
   };
+
+  async function handleMarkSold() {
+    if (
+      !boardState ||
+      !canAttemptMarkSold(boardState) ||
+      markSoldState === "loading" ||
+      markSoldInFlightRef.current
+    ) {
+      return;
+    }
+
+    const selectedTeamForSale =
+      boardState.selectedTeamId === null
+        ? null
+        : boardState.teams.find((team) => team.id === boardState.selectedTeamId) ??
+          null;
+    if (
+      selectedTeamForSale?.currentPlayerCapacity &&
+      !selectedTeamForSale.currentPlayerCapacity.canBuy
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++markSoldGenerationRef.current;
+    markSoldInFlightRef.current = true;
+    setMarkSoldState("loading");
+    setMarkSoldError(null);
+
+    try {
+      const response = await fetch("/api/auction/mark-sold", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("mark-sold")
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = markSoldResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== markSoldGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok && parsedResponse.success) {
+        const capacityBlockCodes = new Set([
+          "budget_exceeded",
+          "squad_full",
+          "role_target_full",
+          "role_capacity_incomplete"
+        ]);
+        const isCapacityBlock =
+          parsedResponse.data.error === "sale_blocked" &&
+          parsedResponse.data.reasons.length > 0 &&
+          parsedResponse.data.reasons.every((reason) =>
+            capacityBlockCodes.has(reason.code)
+          );
+
+        if (isCapacityBlock) {
+          setMarkSoldState("idle");
+          await refreshBoardState();
+          return;
+        }
+
+        setMarkSoldState("error");
+        setMarkSoldError(
+          parsedResponse.data.reasons.length > 0
+            ? parsedResponse.data.reasons.map((reason) => reason.message).join(" ")
+            : parsedResponse.data.message
+        );
+        await refreshBoardState();
+        return;
+      }
+
+      setMarkSoldState("error");
+      setMarkSoldError(readMarkSoldErrorMessage(response, responseBody));
+      await refreshBoardState();
+    } catch {
+      if (commandGeneration !== markSoldGenerationRef.current) {
+        return;
+      }
+      setMarkSoldState("error");
+      setMarkSoldError("Mark Sold could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === markSoldGenerationRef.current) {
+        markSoldInFlightRef.current = false;
+      }
+    }
+  }
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1059,8 +1166,13 @@ function App() {
         onIncreaseBid={() => {
           void handleIncreaseBidRef.current();
         }}
+        onMarkSold={() => {
+          void handleMarkSold();
+        }}
         increaseBidError={increaseBidError}
         increaseBidState={increaseBidState}
+        markSoldError={markSoldError}
+        markSoldState={markSoldState}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
         selectTeamError={selectTeamError}
@@ -1601,8 +1713,11 @@ function AuctionBoard({
   onRevealNext,
   onSelectTeam,
   onIncreaseBid,
+  onMarkSold,
   increaseBidError,
   increaseBidState,
+  markSoldError,
+  markSoldState,
   revealNextError,
   revealNextState,
   selectTeamError,
@@ -1612,8 +1727,11 @@ function AuctionBoard({
   readonly onRevealNext: () => void;
   readonly onSelectTeam: (teamId: string | null) => void;
   readonly onIncreaseBid: () => void;
+  readonly onMarkSold: () => void;
   readonly increaseBidError: string | null;
   readonly increaseBidState: "idle" | "loading" | "ready" | "error";
+  readonly markSoldError: string | null;
+  readonly markSoldState: "idle" | "loading" | "ready" | "error";
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
   readonly selectTeamError: string | null;
@@ -1632,6 +1750,14 @@ function AuctionBoard({
       : boardState.teams.find((team) => team.id === boardState.selectedTeamId) ??
         null;
   const selectedTeamCapacity = selectedTeam?.currentPlayerCapacity ?? null;
+  const markSoldBlockedReasons =
+    selectedTeamCapacity && !selectedTeamCapacity.canBuy
+      ? selectedTeamCapacity.reasons.map((reason) => `Blocked: ${reason}`)
+      : [];
+  const markSoldDisabled =
+    !canAttemptMarkSold(boardState) ||
+    markSoldState === "loading" ||
+    markSoldBlockedReasons.length > 0;
 
   return (
     <main className="app-shell" data-testid="app-shell">
@@ -1807,7 +1933,7 @@ function AuctionBoard({
                 <ul>
                   {selectedTeamCapacity.reasons.map((reason, index) => (
                     <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
-                      {reason}
+                      Blocked: {reason}
                     </li>
                   ))}
                 </ul>
@@ -1846,6 +1972,43 @@ function AuctionBoard({
                 <span>{increaseBidError}</span>
               </p>
             ) : null}
+            <div className="mark-sold-panel" aria-live="polite">
+              <button
+                aria-busy={markSoldState === "loading"}
+                className={
+                  markSoldDisabled
+                    ? "live-action live-action-disabled"
+                    : "live-action"
+                }
+                data-testid="mark-sold"
+                disabled={markSoldDisabled}
+                onClick={onMarkSold}
+                type="button"
+              >
+                <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
+              </button>
+              {markSoldBlockedReasons.length > 0 ? (
+                <div
+                  className="blocked-reason-panel"
+                  data-testid="mark-sold-blocked-reason"
+                  role="alert"
+                >
+                  {markSoldBlockedReasons.map((reason, index) => (
+                    <p key={`${reason}-${index}`}>{reason}</p>
+                  ))}
+                </div>
+              ) : null}
+              {markSoldError ? (
+                <p
+                  className="command-error"
+                  data-testid="mark-sold-error"
+                  role="alert"
+                >
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{markSoldError}</span>
+                </p>
+              ) : null}
+            </div>
           </section>
         </div>
 
@@ -2210,8 +2373,25 @@ function readIncreaseBidErrorMessage(
   return "Increase Bid could not be completed. Try again.";
 }
 
+function readMarkSoldErrorMessage(response: Response, body: unknown): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (response.status === 409) {
+    return "Mark Sold is blocked by the current auction state.";
+  }
+
+  return "Mark Sold could not be completed. Try again.";
+}
+
 function createClientCommandId(
-  command: "start" | "reveal" | "select" | "increase"
+  command: "start" | "reveal" | "select" | "increase" | "mark-sold"
 ): string {
   if ("crypto" in window && "randomUUID" in window.crypto) {
     return `${command}_${window.crypto.randomUUID()}`;

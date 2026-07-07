@@ -25,11 +25,15 @@ export {
   type RevealNextPlayerResult
 } from "./reveal-next-player.js";
 export {
+  getCurrentPlayerTeamCapacityDetails,
   getCurrentPlayerTeamCapacity,
   selectTeam,
+  type CurrentPlayerTeamCapacityDetails,
   type SelectTeamErrorCode,
   type SelectTeamInput,
-  type SelectTeamResult
+  type SelectTeamResult,
+  type TeamCapacityReason,
+  type TeamCapacityReasonCode
 } from "./select-team.js";
 export {
   increaseBid,
@@ -37,6 +41,12 @@ export {
   type IncreaseBidInput,
   type IncreaseBidResult
 } from "./increase-bid.js";
+export {
+  markSold,
+  type MarkSoldErrorCode,
+  type MarkSoldInput,
+  type MarkSoldResult
+} from "./mark-sold.js";
 export {
   createPhase1Order,
   type CreatePhase1OrderError,

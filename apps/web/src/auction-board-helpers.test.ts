@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { BoardStateDto } from "@auction-manager/shared";
 import {
+  canAttemptMarkSold,
   canIncreaseBid,
   canSelectTeam,
   canRevealNextPlayer,
@@ -199,6 +200,106 @@ describe("auction board helpers", () => {
         createBoardState({
           currentPlayer,
           currentBid: 10,
+          persistenceFailure: "snapshot_write_failed"
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("enables Mark Sold only with Current Player, Current Bid, selected Team, and no blockers", () => {
+    const currentPlayer = {
+      id: "player-1",
+      name: "Aarav Menon",
+      role: "Ace" as const,
+      basePrice: 10,
+      status: "Current" as const,
+      phase1Category: "Ace Men" as const,
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    };
+    const teams = [
+      {
+        id: "team-1",
+        name: "Falcons",
+        captain: "Priya Captain",
+        budget: 170,
+        remainingBudget: 170,
+        squadCount: 0,
+        roleCounts: {
+          Ace: 0,
+          Batting: 0,
+          Bowling: 0,
+          AllRounder: 0,
+          Girls: 0
+        }
+      }
+    ];
+
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
+          selectedTeamId: "team-1",
+          teams
+        })
+      )
+    ).toBe(true);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 0,
+          selectedTeamId: "team-1",
+          teams
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentBid: 10,
+          selectedTeamId: "team-1",
+          teams
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          selectedTeamId: "team-1",
+          teams
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
+          teams
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
+          selectedTeamId: "team-missing",
+          teams
+        })
+      )
+    ).toBe(false);
+    expect(
+      canAttemptMarkSold(
+        createBoardState({
+          currentPlayer,
+          currentBid: 10,
+          selectedTeamId: "team-1",
+          teams,
           persistenceFailure: "snapshot_write_failed"
         })
       )
