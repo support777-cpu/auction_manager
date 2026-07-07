@@ -14,7 +14,7 @@ describe("markSold", () => {
       ]
     };
 
-    const result = markSold({ state });
+    const result = markSold({ state, now: () => "2026-07-07T08:35:00.000Z" });
 
     expect(result).toMatchObject({
       ok: false,
@@ -43,7 +43,7 @@ describe("markSold", () => {
       ]
     };
 
-    expect(markSold({ state })).toMatchObject({
+    expect(markSold({ state, now: () => "2026-07-07T08:35:00.000Z" })).toMatchObject({
       ok: false,
       error: "sale_blocked",
       message: "Blocked: Falcons already have 13 of 13 players.",
@@ -70,7 +70,7 @@ describe("markSold", () => {
       ]
     };
 
-    expect(markSold({ state })).toMatchObject({
+    expect(markSold({ state, now: () => "2026-07-07T08:35:00.000Z" })).toMatchObject({
       ok: false,
       error: "sale_blocked",
       message: "Blocked: Falcons have 2 of 2 Ace slots filled.",
@@ -99,7 +99,7 @@ describe("markSold", () => {
       ]
     };
 
-    expect(markSold({ state })).toMatchObject({
+    expect(markSold({ state, now: () => "2026-07-07T08:35:00.000Z" })).toMatchObject({
       ok: false,
       error: "sale_blocked",
       message: "Blocked: Falcons have 8 remaining; current bid is 10.",
@@ -136,7 +136,7 @@ describe("markSold", () => {
       ]
     };
 
-    expect(markSold({ state })).toMatchObject({
+    expect(markSold({ state, now: () => "2026-07-07T08:35:00.000Z" })).toMatchObject({
       ok: false,
       error: "sale_blocked",
       reasons: [
@@ -151,59 +151,125 @@ describe("markSold", () => {
   it("returns typed prerequisite conflicts without mutation", () => {
     const state = createCurrentState();
 
-    expect(markSold({ state: { ...state, phase: "Setup" } })).toMatchObject({
+    const now = () => "2026-07-07T08:35:00.000Z";
+
+    expect(markSold({ state: { ...state, phase: "Setup" }, now })).toMatchObject({
       ok: false,
       error: "auction_not_in_initial_phase",
       message: "Mark Sold is only available during Initial Auction."
     });
-    expect(markSold({ state: { ...state, currentPlayerId: null } })).toMatchObject({
+    expect(markSold({ state: { ...state, currentPlayerId: null }, now })).toMatchObject({
       ok: false,
       error: "current_player_required",
       message: "Reveal a Current Player before marking sold."
     });
-    expect(markSold({ state: { ...state, currentPlayerId: "missing-player" } }))
+    expect(markSold({ state: { ...state, currentPlayerId: "missing-player" }, now }))
       .toMatchObject({
         ok: false,
         error: "current_player_not_found",
         message: "Current Player could not be found in this auction."
       });
-    expect(markSold({ state: { ...state, selectedTeamId: null } })).toMatchObject({
+    expect(markSold({ state: { ...state, selectedTeamId: null }, now })).toMatchObject({
       ok: false,
       error: "selected_team_required",
       message: "Select a Team before marking sold."
     });
-    expect(markSold({ state: { ...state, currentBid: null } })).toMatchObject({
+    expect(markSold({ state: { ...state, currentBid: null }, now })).toMatchObject({
       ok: false,
       error: "current_bid_required",
       message: "Current Bid is required before marking sold."
     });
-    expect(markSold({ state: { ...state, currentBid: 0 } })).toMatchObject({
+    expect(markSold({ state: { ...state, currentBid: 0 }, now })).toMatchObject({
       ok: false,
       error: "current_bid_required",
       message: "Current Bid is required before marking sold."
     });
-    expect(markSold({ state: { ...state, selectedTeamId: "team-unknown" } }))
+    expect(markSold({ state: { ...state, selectedTeamId: "team-unknown" }, now }))
       .toMatchObject({
         ok: false,
         error: "selected_team_not_found",
         message: "Selected Team could not be found in this auction."
       });
+    expect(
+      markSold({
+        state: {
+          ...state,
+          players: [{ ...state.players[0]!, status: "Sold" }]
+        },
+        now
+      })
+    ).toMatchObject({
+      ok: false,
+      error: "current_player_required",
+      message: "Current Player must be active before marking sold."
+    });
   });
 
-  it("accepts only validation for valid sales without mutating successful sale state", () => {
+  it("marks a valid sale sold and updates player, team, current state, undo, and timestamp without mutating input", () => {
     const state = createCurrentState();
-    const result = markSold({ state });
+    const result = markSold({
+      state,
+      now: () => "2026-07-07T08:35:00.000Z"
+    });
 
     expect(result).toMatchObject({
       ok: true,
       accepted: true,
-      message: "Falcons can buy Aarav Menon for 10."
+      message: "Sold Aarav Menon to Falcons for 10."
     });
-    expect(result.state).toBe(state);
-    expect(result.state.players).toEqual(state.players);
-    expect(result.state.teams).toEqual(state.teams);
-    expect(result.state.undoHistory).toEqual([]);
-    expect(result.state.updatedAt).toBe(state.updatedAt);
+    expect(result.state).not.toBe(state);
+    expect(result.state.players[0]).toMatchObject({
+      id: "player-1",
+      status: "Sold",
+      soldPrice: 10,
+      winningTeamId: "team-1",
+      acquisitionType: "Auction"
+    });
+    expect(result.state.teams[0]).toMatchObject({
+      id: "team-1",
+      remainingBudget: 160,
+      squadCount: 1,
+      roleCounts: {
+        Ace: 1
+      }
+    });
+    expect(result.state.currentPlayerId).toBeNull();
+    expect(result.state.currentBid).toBeNull();
+    expect(result.state.selectedTeamId).toBeNull();
+    expect(result.state.updatedAt).toBe("2026-07-07T08:35:00.000Z");
+    expect(result.state.undoHistory).toEqual([
+      {
+        command: "MarkSold",
+        playerId: "player-1",
+        previousPlayerStatus: "Current",
+        previousSoldPrice: null,
+        previousWinningTeamId: null,
+        previousAcquisitionType: null,
+        previousCurrentPlayerId: "player-1",
+        previousCurrentBid: 10,
+        previousSelectedTeamId: "team-1",
+        winningTeamId: "team-1",
+        previousTeamRemainingBudget: 170,
+        nextTeamRemainingBudget: 160,
+        previousTeamSquadCount: 0,
+        nextTeamSquadCount: 1,
+        role: "Ace",
+        previousTeamRoleCount: 0,
+        nextTeamRoleCount: 1,
+        soldPrice: 10,
+        timestamp: "2026-07-07T08:35:00.000Z"
+      }
+    ]);
+    expect(state.players[0]).toMatchObject({
+      status: "Current",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    });
+    expect(state.teams[0]).toMatchObject({
+      remainingBudget: 170,
+      squadCount: 0
+    });
   });
 });
 

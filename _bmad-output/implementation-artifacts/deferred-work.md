@@ -35,3 +35,9 @@
 - E2E coverage for squad-full and role-target-full blocking paths — domain/API unit tests cover constraints; full E2E setup requires Story 2.6 sale mutation
 - NaN/non-finite bid defensive guards — corrupt numeric state is out of scope for this slice
 - Player-already-sold status guard in domain — deferred to Story 2.6 accepted-sale path
+
+## Deferred from: code review of 2-6-mark-player-sold-and-update-team-state (2026-07-07)
+
+- Live roster list under team tiles — Story 2.10 owns full Board/Rosters UI; deriveSoldRosterRows helper satisfies this story's task boundary
+- Optimistic concurrency / stale-state guard on mark-sold — matches existing live-command pattern across Stories 2.2–2.6 until dedicated concurrency work lands
+- Post-commit snapshot write split from SQLite transaction — consistent with Start/Reveal/Select/Increase persistence pattern

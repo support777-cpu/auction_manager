@@ -740,6 +740,112 @@ describe("auction manager event server", () => {
     await app.close();
   });
 
+  it("marks a selected current player sold and persists board-ready state", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const playerId = revealed.state.currentPlayer.id;
+    const team = revealed.state.teams[0];
+
+    const selected = await app.inject({
+      method: "POST",
+      url: "/api/auction/select-team",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-select-for-sale", teamId: team.id }
+    });
+    expect(selected.statusCode).toBe(200);
+
+    const sold = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-accepted" }
+    });
+
+    expect(sold.statusCode).toBe(200);
+    const body = sold.json();
+    expect(body.result).toEqual({
+      command: "MarkSold",
+      clientCommandId: "cmd-mark-sold-accepted",
+      message: expect.stringMatching(/^Sold .+ to .+ for \d+\.$/)
+    });
+    expect(body.state).toMatchObject({
+      currentPlayer: null,
+      currentBid: null,
+      selectedTeamId: null,
+      canUndo: true
+    });
+    expect(body.state.players.find((player: { id: string }) => player.id === playerId))
+      .toMatchObject({
+        status: "Sold",
+        soldPrice: revealed.state.currentBid,
+        winningTeamId: team.id,
+        acquisitionType: "Auction"
+      });
+    expect(body.state.teams.find((candidate: { id: string }) => candidate.id === team.id))
+      .toMatchObject({
+        remainingBudget: team.remainingBudget - revealed.state.currentBid,
+        squadCount: team.squadCount + 1,
+        roleCounts: {
+          ...team.roleCounts,
+          [revealed.state.currentPlayer.role]:
+            (team.roleCounts[revealed.state.currentPlayer.role] ?? 0) + 1
+        }
+      });
+    expect(JSON.stringify(body)).not.toContain("private-player@example.com");
+    expect(JSON.stringify(body)).not.toContain("UPI-PRIVATE");
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const markSoldEntries = repository
+      .listActionLog()
+      .filter((entry) => entry.command === "MarkSold");
+    expect(markSoldEntries).toHaveLength(1);
+    expect(markSoldEntries[0]).toMatchObject({
+      clientCommandId: "cmd-mark-sold-accepted",
+      summary: body.result.message,
+      undoable: true
+    });
+    expect(JSON.parse(markSoldEntries[0]?.payloadJson ?? "{}")).toMatchObject({
+      command: "MarkSold",
+      playerId,
+      winningTeamId: team.id,
+      soldPrice: revealed.state.currentBid,
+      undo: {
+        command: "MarkSold",
+        playerId,
+        winningTeamId: team.id,
+        soldPrice: revealed.state.currentBid
+      }
+    });
+    expect(JSON.parse(await readFile(join(dataDirectory, "snapshots/latest.json"), "utf8")))
+      .toMatchObject({
+        currentPlayerId: null,
+        currentBid: null,
+        selectedTeamId: null
+      });
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-accepted" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: "duplicate_client_command_id"
+    });
+
+    repository.close();
+    await app.close();
+  });
+
   it("rejects Mark Sold when clientCommandId already exists in the action log", async () => {
     const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
     const app = await createAuctionManagerServer({
@@ -774,9 +880,10 @@ describe("auction manager event server", () => {
   });
 
   it("validates Mark Sold content type, request body, and prerequisite conflicts", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
     const app = await createAuctionManagerServer({
       webDistPath: await createWebDistFixture(),
-      dataDirectory: await mkdtemp(join(tmpdir(), "auction-manager-data-"))
+      dataDirectory
     });
 
     const unsupported = await app.inject({
@@ -834,6 +941,18 @@ describe("auction manager event server", () => {
     });
     expect(reveal.statusCode).toBe(200);
 
+    const beforeState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const beforeSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const beforeActionLog = repository.listActionLog();
+
     const noSelectedTeam = await app.inject({
       method: "POST",
       url: "/api/auction/mark-sold",
@@ -844,6 +963,19 @@ describe("auction manager event server", () => {
     expect(noSelectedTeam.json()).toMatchObject({
       error: "selected_team_required"
     });
+
+    const afterState = (await app.inject({ method: "GET", url: "/api/state" }))
+      .json().state;
+    const afterSnapshot = await readFile(
+      join(dataDirectory, "snapshots/latest.json"),
+      "utf8"
+    );
+    expect(afterState).toEqual(beforeState);
+    expect(afterSnapshot).toBe(beforeSnapshot);
+    expect(repository.listActionLog()).toEqual(beforeActionLog);
+    expect(
+      repository.listActionLog().some((entry) => entry.command === "MarkSold")
+    ).toBe(false);
 
     await app.close();
   });

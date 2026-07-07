@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   auctionStateSchema,
   boardStateDtoSchema,
+  deriveSoldRosterRows,
   increaseBidRequestSchema,
   increaseBidResponseSchema,
+  markSoldAcceptedResponseSchema,
   markSoldConflictReasonSchema,
   markSoldRejectedResponseSchema,
   markSoldRequestSchema,
+  markSoldResponseSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
   selectTeamRequestSchema,
@@ -125,6 +128,82 @@ describe("auction state contracts", () => {
           }
         ],
         sourceRowNumber: 2
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates accepted and union Mark Sold responses without private fields", () => {
+    const boardState = {
+      ...createBoardState(),
+      players: [
+        {
+          ...createBoardState().players[0],
+          status: "Sold" as const,
+          soldPrice: 10,
+          winningTeamId: "team-1",
+          acquisitionType: "Auction" as const
+        }
+      ],
+      teams: [
+        {
+          ...createBoardState().teams[0],
+          remainingBudget: 160,
+          squadCount: 1,
+          roleCounts: {
+            ...createBoardState().teams[0].roleCounts,
+            Ace: 1
+          }
+        }
+      ],
+      currentPlayer: null,
+      currentBid: null,
+      selectedTeamId: null,
+      phase1Progress: {
+        ...createBoardState().phase1Progress,
+        pendingPlayerCount: 0,
+        revealedPlayerCount: 1,
+        categories: [
+          {
+            category: "Ace Men",
+            total: 1,
+            pending: 0,
+            completed: 1
+          }
+        ]
+      }
+    };
+
+    const accepted = {
+      state: boardState,
+      result: {
+        command: "MarkSold",
+        clientCommandId: "cmd-mark-sold-1",
+        message: "Sold Aarav Menon to Falcons for 10."
+      }
+    };
+
+    expect(markSoldAcceptedResponseSchema.safeParse(accepted).success).toBe(true);
+    expect(markSoldResponseSchema.safeParse(accepted).success).toBe(true);
+    expect(
+      markSoldResponseSchema.safeParse({
+        ok: false,
+        error: "sale_blocked",
+        message: "Blocked.",
+        reasons: [{ code: "sale_blocked", message: "Blocked." }]
+      }).success
+    ).toBe(true);
+    expect(
+      markSoldAcceptedResponseSchema.safeParse({
+        ...accepted,
+        state: {
+          ...accepted.state,
+          players: [
+            {
+              ...accepted.state.players[0],
+              sourceFilename: "private.csv"
+            }
+          ]
+        }
       }).success
     ).toBe(false);
   });
@@ -372,6 +451,112 @@ describe("auction state contracts", () => {
           clientCommandId: "cmd-increase-1",
           message: "Increased bid for Aarav Menon to 12."
         }
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates Mark Sold undo-history entries and derived sold roster rows", () => {
+    const boardState = createBoardState();
+    const auctionState = {
+      auctionId: boardState.auctionId,
+      phase: boardState.phase,
+      parameters: boardState.parameters,
+      players: [
+        {
+          ...boardState.players[0],
+          gender: "Male" as const,
+          status: "Sold" as const,
+          soldPrice: 10,
+          winningTeamId: "team-1",
+          acquisitionType: "Auction" as const
+        }
+      ],
+      teams: [
+        {
+          ...boardState.teams[0],
+          remainingBudget: 160,
+          squadCount: 1,
+          roleCounts: {
+            ...boardState.teams[0].roleCounts,
+            Ace: 1
+          }
+        }
+      ],
+      phase1Order: {
+        categories: [
+          { category: "Ace Men", playerIds: ["player-1"] },
+          { category: "Ace Women", playerIds: [] },
+          { category: "Women All Rounders", playerIds: [] },
+          { category: "Men Bowlers", playerIds: [] },
+          { category: "Men Batsmen", playerIds: [] },
+          { category: "Men All Rounders", playerIds: [] }
+        ],
+        playerIds: ["player-1"],
+        generatedAt: "2026-07-07T08:30:00.000Z"
+      },
+      currentPlayerId: null,
+      currentBid: null,
+      selectedTeamId: null,
+      undoHistory: [
+        {
+          command: "MarkSold",
+          playerId: "player-1",
+          previousPlayerStatus: "Current",
+          previousSoldPrice: null,
+          previousWinningTeamId: null,
+          previousAcquisitionType: null,
+          previousCurrentPlayerId: "player-1",
+          previousCurrentBid: 10,
+          previousSelectedTeamId: "team-1",
+          winningTeamId: "team-1",
+          previousTeamRemainingBudget: 170,
+          nextTeamRemainingBudget: 160,
+          previousTeamSquadCount: 0,
+          nextTeamSquadCount: 1,
+          role: "Ace",
+          previousTeamRoleCount: 0,
+          nextTeamRoleCount: 1,
+          soldPrice: 10,
+          timestamp: "2026-07-07T08:35:00.000Z"
+        }
+      ],
+      createdAt: "2026-07-07T08:30:00.000Z",
+      updatedAt: "2026-07-07T08:35:00.000Z",
+      persistenceFailure: null
+    };
+
+    expect(auctionStateSchema.safeParse(auctionState).success).toBe(true);
+    expect(deriveSoldRosterRows(auctionState, "team-1")).toEqual([
+      {
+        playerId: "player-1",
+        name: "Aarav Menon",
+        role: "Ace",
+        acquisitionType: "Sold",
+        soldPrice: 10
+      }
+    ]);
+    expect(
+      deriveSoldRosterRows(
+        {
+          players: [
+            {
+              ...auctionState.players[0]!,
+              soldPrice: null
+            }
+          ]
+        },
+        "team-1"
+      )
+    ).toEqual([]);
+    expect(
+      auctionStateSchema.safeParse({
+        ...auctionState,
+        undoHistory: [
+          {
+            ...auctionState.undoHistory[0],
+            sourceRowNumber: 2
+          }
+        ]
       }).success
     ).toBe(false);
   });

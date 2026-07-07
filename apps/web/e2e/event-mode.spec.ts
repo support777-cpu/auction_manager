@@ -316,6 +316,44 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("selected-team")).toContainText("Falcons");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Falcons");
 
+  await page.getByTestId("mark-sold").click();
+  await expect(page.getByTestId("mark-sold-success")).toHaveText(
+    "Sold Aarav Menon to Falcons for 20."
+  );
+  await expect(page.getByTestId("current-player-panel")).toContainText(
+    "No Current Player"
+  );
+  await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("reveal-next")).toBeEnabled();
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "180"
+  );
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "1"
+  );
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "1 of 2"
+  );
+
+  await page.reload();
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("current-player-panel")).toContainText(
+    "No Current Player"
+  );
+  await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("reveal-next")).toBeEnabled();
+
+  await page.getByTestId("reveal-next").click();
+  await expect(page.getByTestId("current-player-name")).toBeVisible();
+  const secondPlayerName =
+    (await page.getByTestId("current-player-name").textContent()) ?? "";
+  expect(secondPlayerName).not.toContain("Aarav Menon");
+  await expect(page.getByTestId("current-bid")).toHaveText("10");
+  await page.locator(".team-board-grid .team-tile").first().click();
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+
   for (let increaseCount = 0; increaseCount < 100; increaseCount += 1) {
     if (await page.getByTestId("mark-sold").isDisabled()) {
       break;
@@ -324,12 +362,19 @@ test("reviews and saves auction parameters before starting the auction", async (
   }
 
   await expect(page.getByTestId("mark-sold")).toBeDisabled();
+  await expect(page.getByTestId("selected-team")).toContainText("Blocked:");
   await expect(page.getByTestId("mark-sold-blocked-reason")).toContainText(
-    "Blocked: Falcons have 200 remaining; current bid is 205."
+    /Blocked: Falcons have 180 remaining; current bid is \d+\./
   );
-  await expect(page.getByTestId("selected-team")).toContainText(
-    "Blocked: Falcons have 200 remaining; current bid is 205."
+  const blockedMessage = (
+    await page.getByTestId("mark-sold-blocked-reason").textContent()
+  )?.trim();
+  expect(blockedMessage).toMatch(
+    /^Blocked: Falcons have 180 remaining; current bid is \d+\.$/
   );
+  const blockedBid = blockedMessage?.match(/current bid is (\d+)\./)?.[1] ?? "";
+  await expect(page.getByTestId("current-bid")).toHaveText(blockedBid);
+  await expect(page.getByTestId("selected-team")).toContainText(blockedMessage ?? "");
 
   const rejectedMarkSold = await request.post("/api/auction/mark-sold", {
     data: { clientCommandId: "e2e-mark-sold-blocked" }
@@ -338,16 +383,18 @@ test("reviews and saves auction parameters before starting the auction", async (
   expect(await rejectedMarkSold.json()).toMatchObject({
     ok: false,
     error: "sale_blocked",
-    message: "Blocked: Falcons have 200 remaining; current bid is 205."
+    message: blockedMessage
   });
 
   await page.reload();
   await expect(page.getByTestId("auction-board")).toBeVisible();
-  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
-  await expect(page.getByTestId("current-bid")).toHaveText("205");
+  await expect(page.getByTestId("current-player-name")).toContainText(
+    secondPlayerName
+  );
+  await expect(page.getByTestId("current-bid")).toHaveText(blockedBid ?? "");
   await expect(page.getByTestId("selected-team")).toContainText("Falcons");
   await expect(page.getByTestId("mark-sold-blocked-reason")).toContainText(
-    "Blocked: Falcons have 200 remaining; current bid is 205."
+    blockedMessage ?? ""
   );
 
   await teamTiles.nth(1).click();
@@ -357,8 +404,10 @@ test("reviews and saves auction parameters before starting the auction", async (
   await page.reload();
 
   await expect(page.getByTestId("auction-board")).toBeVisible();
-  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
-  await expect(page.getByTestId("current-bid")).toContainText("205");
+  await expect(page.getByTestId("current-player-name")).toContainText(
+    secondPlayerName
+  );
+  await expect(page.getByTestId("current-bid")).toContainText(blockedBid ?? "");
   await expect(page.getByTestId("selected-team")).toContainText("Tigers");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
 
@@ -372,10 +421,12 @@ test("reviews and saves auction parameters before starting the auction", async (
     "Phase 1 in progress"
   );
   await expect(page.getByTestId("phase1-current-category")).toContainText(
-    "Current category: Ace Men"
+    "Current category: Ace Women"
   );
   await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
-  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
-  await expect(page.getByTestId("current-bid")).toContainText("205");
+  await expect(page.getByTestId("current-player-name")).toContainText(
+    secondPlayerName
+  );
+  await expect(page.getByTestId("current-bid")).toContainText(blockedBid ?? "");
   await expect(page.getByTestId("selected-team")).toContainText("None");
 });

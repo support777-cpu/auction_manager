@@ -27,6 +27,7 @@ import type { AuctionRole } from "@auction-manager/shared";
 import {
   auctionRoleValues,
   increaseBidRequestSchema,
+  markSoldAcceptedResponseSchema,
   markSoldRejectedResponseSchema,
   markSoldRequestSchema,
   revealNextPlayerRequestSchema,
@@ -903,7 +904,8 @@ export async function createAuctionManagerServer(
     }
 
     const result = markSold({
-      state: currentState
+      state: currentState,
+      now: () => new Date().toISOString()
     });
 
     if (!result.ok) {
@@ -917,19 +919,95 @@ export async function createAuctionManagerServer(
       );
     }
 
-    return reply.code(409).send(
-      markSoldRejectedResponseSchema.parse({
+    const soldPlayerId = currentState.currentPlayerId;
+    if (soldPlayerId === null) {
+      return reply.code(500).send({
         ok: false,
-        error: "sale_blocked",
-        message: result.message,
-        reasons: [
-          {
-            code: "sale_blocked",
-            message: result.message
-          }
-        ]
-      })
+        error: "internal_error",
+        message: "Mark Sold could not be completed. Try again."
+      });
+    }
+
+    const soldPlayer = result.state.players.find(
+      (player) => player.id === soldPlayerId
     );
+    const winningTeamId = soldPlayer?.winningTeamId ?? null;
+    const soldPrice = soldPlayer?.soldPrice ?? null;
+    if (
+      !soldPlayer ||
+      winningTeamId === null ||
+      soldPrice === null ||
+      soldPrice <= 0
+    ) {
+      return reply.code(500).send({
+        ok: false,
+        error: "internal_error",
+        message: "Mark Sold could not be completed. Try again."
+      });
+    }
+
+    try {
+      await auctionRepository.commitMarkSold({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        summary: result.message,
+        playerId: soldPlayer.id,
+        winningTeamId,
+        soldPrice
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send(
+          markSoldRejectedResponseSchema.parse({
+            ok: false,
+            error: "duplicate_client_command_id",
+            message: "Mark Sold was already submitted with this command id.",
+            reasons: [
+              {
+                code: "duplicate_client_command_id",
+                message: "Mark Sold was already submitted with this command id."
+              }
+            ]
+          })
+        );
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        return reply.code(500).send({
+          ok: false,
+          error: "snapshot_write_failed",
+          message:
+            "Mark Sold was saved, but the latest snapshot could not be written."
+        });
+      }
+
+      request.log.error(error);
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message: "Mark Sold could not be saved. Try again."
+      });
+    }
+
+    const acceptedPayload = markSoldAcceptedResponseSchema.safeParse({
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "MarkSold",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.message
+      }
+    });
+    if (!acceptedPayload.success) {
+      request.log.error(acceptedPayload.error);
+      return reply.code(500).send({
+        ok: false,
+        error: "internal_error",
+        message: "Mark Sold response could not be built."
+      });
+    }
+
+    return reply.code(200).send(acceptedPayload.data);
   });
 
   await app.register(async (setupRoutes) => {

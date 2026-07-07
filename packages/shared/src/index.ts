@@ -505,7 +505,7 @@ export const auctionTeamSchema = z
     captain: z.string().trim().min(1),
     logoAssetId: opaqueIdSchema.optional(),
     budget: positiveIntegerSchema,
-    remainingBudget: positiveIntegerSchema,
+    remainingBudget: nonnegativeIntegerSchema,
     squadCount: nonnegativeIntegerSchema,
     roleCounts: roleCountsSchema
   })
@@ -560,10 +560,35 @@ export const increaseBidUndoHistoryEntrySchema = z
   })
   .strict();
 
+export const markSoldUndoHistoryEntrySchema = z
+  .object({
+    command: z.literal("MarkSold"),
+    playerId: opaqueIdSchema,
+    previousPlayerStatus: playerStatusSchema,
+    previousSoldPrice: nullableMoneySchema,
+    previousWinningTeamId: nullableOpaqueIdSchema,
+    previousAcquisitionType: acquisitionTypeSchema.nullable(),
+    previousCurrentPlayerId: nullableOpaqueIdSchema,
+    previousCurrentBid: nullableMoneySchema,
+    previousSelectedTeamId: nullableOpaqueIdSchema,
+    winningTeamId: opaqueIdSchema,
+    previousTeamRemainingBudget: nonnegativeIntegerSchema,
+    nextTeamRemainingBudget: nonnegativeIntegerSchema,
+    previousTeamSquadCount: nonnegativeIntegerSchema,
+    nextTeamSquadCount: nonnegativeIntegerSchema,
+    role: auctionRoleSchema,
+    previousTeamRoleCount: nonnegativeIntegerSchema,
+    nextTeamRoleCount: nonnegativeIntegerSchema,
+    soldPrice: positiveIntegerSchema,
+    timestamp: z.string().trim().min(1)
+  })
+  .strict();
+
 export const liveActionUndoHistoryEntrySchema = z.discriminatedUnion("command", [
   revealNextPlayerUndoHistoryEntrySchema,
   selectTeamUndoHistoryEntrySchema,
-  increaseBidUndoHistoryEntrySchema
+  increaseBidUndoHistoryEntrySchema,
+  markSoldUndoHistoryEntrySchema
 ]);
 
 function validatePhase1OrderInAuctionState(
@@ -846,7 +871,51 @@ export const increaseBidResponseSchema = z
   })
   .strict();
 
-export const markSoldResponseSchema = markSoldRejectedResponseSchema;
+export const markSoldAcceptedResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("MarkSold")
+    })
+  })
+  .strict();
+
+export const markSoldResponseSchema = z.union([
+  markSoldAcceptedResponseSchema,
+  markSoldRejectedResponseSchema
+]);
+
+export const soldRosterRowSchema = z
+  .object({
+    playerId: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    role: auctionRoleSchema,
+    acquisitionType: z.literal("Sold"),
+    soldPrice: positiveIntegerSchema
+  })
+  .strict();
+
+export function deriveSoldRosterRows(
+  state: Pick<z.infer<typeof auctionStateSchema>, "players">,
+  teamId: string
+): z.infer<typeof soldRosterRowSchema>[] {
+  return state.players
+    .filter(
+      (player) =>
+        player.winningTeamId === teamId &&
+        player.acquisitionType === "Auction" &&
+        player.soldPrice !== null
+    )
+    .map((player) =>
+      soldRosterRowSchema.parse({
+        playerId: player.id,
+        name: player.name,
+        role: player.role,
+        acquisitionType: "Sold",
+        soldPrice: player.soldPrice
+      })
+    );
+}
 
 export const appStateResponseSchema = z
   .object({
@@ -951,10 +1020,14 @@ export type RevealNextPlayerResponse = z.infer<
 >;
 export type SelectTeamResponse = z.infer<typeof selectTeamResponseSchema>;
 export type IncreaseBidResponse = z.infer<typeof increaseBidResponseSchema>;
+export type MarkSoldAcceptedResponse = z.infer<
+  typeof markSoldAcceptedResponseSchema
+>;
 export type MarkSoldRejectedResponse = z.infer<
   typeof markSoldRejectedResponseSchema
 >;
 export type MarkSoldResponse = z.infer<typeof markSoldResponseSchema>;
+export type SoldRosterRow = z.infer<typeof soldRosterRowSchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {

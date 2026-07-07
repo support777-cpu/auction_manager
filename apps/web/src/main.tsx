@@ -20,6 +20,7 @@ import {
   auctionRoleValues,
   increaseBidResponseSchema,
   markSoldResponseSchema,
+  markSoldAcceptedResponseSchema,
   revealNextPlayerResponseSchema,
   selectTeamResponseSchema,
   startAuctionResponseSchema,
@@ -185,6 +186,7 @@ function App() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [markSoldError, setMarkSoldError] = useState<string | null>(null);
+  const [markSoldSummary, setMarkSoldSummary] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -778,6 +780,7 @@ function App() {
 
       setBoardState(parsedResponse.data.state);
       setMarkSoldError(null);
+      setMarkSoldSummary(null);
       setMarkSoldState("idle");
       setStartAuctionState("ready");
     } catch {
@@ -830,6 +833,7 @@ function App() {
 
       setBoardState(parsedResponse.data.state);
       setMarkSoldError(null);
+      setMarkSoldSummary(null);
       setMarkSoldState("idle");
       setRevealNextState("ready");
     } catch {
@@ -888,6 +892,7 @@ function App() {
 
       setBoardState(parsedResponse.data.state);
       setMarkSoldError(null);
+      setMarkSoldSummary(null);
       setMarkSoldState("idle");
       setSelectTeamState("ready");
     } catch {
@@ -945,6 +950,7 @@ function App() {
 
       setBoardState(parsedResponse.data.state);
       setMarkSoldError(null);
+      setMarkSoldSummary(null);
       setMarkSoldState("idle");
       setIncreaseBidState("ready");
     } catch {
@@ -1005,7 +1011,7 @@ function App() {
         return;
       }
 
-      if (!response.ok && parsedResponse.success) {
+      if (!response.ok && parsedResponse.success && "ok" in parsedResponse.data) {
         const capacityBlockCodes = new Set([
           "budget_exceeded",
           "squad_full",
@@ -1021,11 +1027,13 @@ function App() {
 
         if (isCapacityBlock) {
           setMarkSoldState("idle");
+          setMarkSoldSummary(null);
           await refreshBoardState();
           return;
         }
 
         setMarkSoldState("error");
+        setMarkSoldSummary(null);
         setMarkSoldError(
           parsedResponse.data.reasons.length > 0
             ? parsedResponse.data.reasons.map((reason) => reason.message).join(" ")
@@ -1035,7 +1043,39 @@ function App() {
         return;
       }
 
+      if (
+        !response.ok &&
+        typeof responseBody === "object" &&
+        responseBody !== null &&
+        "error" in responseBody &&
+        responseBody.error === "snapshot_write_failed"
+      ) {
+        const snapshotFailureMessage =
+          "message" in responseBody &&
+          typeof responseBody.message === "string"
+            ? responseBody.message
+            : "Mark Sold was saved, but the latest snapshot could not be written.";
+        await refreshBoardState();
+        setMarkSoldError(snapshotFailureMessage);
+        setMarkSoldState("ready");
+        return;
+      }
+
+      if (response.ok && parsedResponse.success) {
+        const acceptedResponse = markSoldAcceptedResponseSchema.safeParse(
+          parsedResponse.data
+        );
+        if (acceptedResponse.success) {
+          setBoardState(acceptedResponse.data.state);
+          setMarkSoldError(null);
+          setMarkSoldSummary(acceptedResponse.data.result.message);
+          setMarkSoldState("ready");
+          return;
+        }
+      }
+
       setMarkSoldState("error");
+      setMarkSoldSummary(null);
       setMarkSoldError(readMarkSoldErrorMessage(response, responseBody));
       await refreshBoardState();
     } catch {
@@ -1173,6 +1213,7 @@ function App() {
         increaseBidState={increaseBidState}
         markSoldError={markSoldError}
         markSoldState={markSoldState}
+        markSoldSummary={markSoldSummary}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
         selectTeamError={selectTeamError}
@@ -1718,6 +1759,7 @@ function AuctionBoard({
   increaseBidState,
   markSoldError,
   markSoldState,
+  markSoldSummary,
   revealNextError,
   revealNextState,
   selectTeamError,
@@ -1732,6 +1774,7 @@ function AuctionBoard({
   readonly increaseBidState: "idle" | "loading" | "ready" | "error";
   readonly markSoldError: string | null;
   readonly markSoldState: "idle" | "loading" | "ready" | "error";
+  readonly markSoldSummary: string | null;
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
   readonly selectTeamError: string | null;
@@ -2008,6 +2051,15 @@ function AuctionBoard({
                   <span>{markSoldError}</span>
                 </p>
               ) : null}
+              {markSoldSummary ? (
+                <p
+                  className="sale-summary"
+                  data-testid="mark-sold-success"
+                  role="status"
+                >
+                  {markSoldSummary}
+                </p>
+              ) : null}
             </div>
           </section>
         </div>
@@ -2066,26 +2118,40 @@ function AuctionBoard({
             {boardState.teams.map((team) => {
               const isSelected = team.id === boardState.selectedTeamId;
               const capacity = team.currentPlayerCapacity;
+              const soldPlayersOnTeam = boardState.players.filter(
+                (player) =>
+                  player.winningTeamId === team.id &&
+                  player.status === "Sold" &&
+                  player.acquisitionType === "Auction"
+              );
+              const displayRole =
+                currentPlayer?.role ?? soldPlayersOnTeam.at(-1)?.role;
               const roleCount =
-                currentPlayer === null
+                displayRole === undefined
                   ? undefined
-                  : team.roleCounts[currentPlayer.role];
+                  : team.roleCounts[displayRole];
               const roleTarget =
-                currentPlayer === null
+                displayRole === undefined
                   ? undefined
-                  : boardState.parameters.roleTargets[currentPlayer.role];
+                  : boardState.parameters.roleTargets[displayRole];
               const roleCapacityLabel =
                 roleCount === undefined || roleTarget === undefined
-                  ? "Unknown"
-                  : capacity?.canBuy
-                    ? `${roleCount} of ${roleTarget}`
-                    : "Blocked";
+                  ? currentPlayer === null
+                    ? "—"
+                    : "Unknown"
+                  : currentPlayer !== null && capacity && !capacity.canBuy
+                    ? "Blocked"
+                    : `${roleCount} of ${roleTarget}`;
               const capacityText =
-                capacity && currentPlayer
-                  ? capacity.canBuy
-                    ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${currentPlayer.role} slots available`
-                    : capacity.reasons.join(" ")
-                  : "Capacity pending Current Player";
+                currentPlayer === null
+                  ? soldPlayersOnTeam.length > 0
+                    ? `${soldPlayersOnTeam.length} sold player(s) on squad`
+                    : "Capacity pending Current Player"
+                  : capacity
+                    ? capacity.canBuy
+                      ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${currentPlayer.role} slots available`
+                      : capacity.reasons.join(" ")
+                    : "Capacity pending Current Player";
               return (
                 <button
                   aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
@@ -2149,7 +2215,7 @@ function AuctionBoard({
                       <dd>{team.squadCount}</dd>
                     </div>
                     <div>
-                      <dt>{currentPlayer ? currentPlayer.role : "Role"}</dt>
+                      <dt>{displayRole ?? "Role"}</dt>
                       <dd>{roleCapacityLabel}</dd>
                     </div>
                   </dl>

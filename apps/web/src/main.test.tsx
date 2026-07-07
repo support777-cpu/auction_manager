@@ -100,6 +100,52 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     );
     expect(screen.queryByTestId("mark-sold-blocked-reason")).not.toBeInTheDocument();
   });
+
+  it("applies accepted Mark Sold state, shows sale summary, and enables Reveal Next", async () => {
+    const acceptedState = createSoldBoardState();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse({
+          mode: "auction",
+          state: createEligibleBoardState()
+        });
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/mark-sold" && init?.method === "POST") {
+        return jsonResponse({
+          state: acceptedState,
+          result: {
+            command: "MarkSold",
+            clientCommandId: "cmd-mark-sold-1",
+            message: "Sold Aarav Menon to Falcons for 10."
+          }
+        });
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+
+    fireEvent.click(await screen.findByTestId("mark-sold"));
+
+    expect(await screen.findByTestId("mark-sold-success")).toHaveTextContent(
+      "Sold Aarav Menon to Falcons for 10."
+    );
+    expect(screen.getByTestId("current-player-panel")).toHaveTextContent(
+      "No Current Player"
+    );
+    expect(screen.getByTestId("current-bid")).toHaveTextContent("No current bid");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("None");
+    expect(screen.getByTestId("reveal-next")).toBeEnabled();
+    expect(screen.queryByTestId("mark-sold-error")).not.toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -252,6 +298,71 @@ function createBlockedBoardState(): BoardStateDto {
     },
     canUndo: false,
     persistenceFailure: null
+  };
+}
+
+function createSoldBoardState(): BoardStateDto {
+  const baseState = createEligibleBoardState();
+  const basePlayer = baseState.players[0]!;
+  const baseTeam = baseState.teams[0]!;
+
+  return {
+    ...baseState,
+    players: [
+      {
+        ...basePlayer,
+        status: "Sold",
+        soldPrice: 10,
+        winningTeamId: "team-1",
+        acquisitionType: "Auction"
+      },
+      {
+        id: "player-2",
+        name: "Riya Shah",
+        role: "Ace",
+        phase1Category: "Ace Women",
+        basePrice: 10,
+        status: "Pending",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    teams: [
+      {
+        ...baseTeam,
+        remainingBudget: 160,
+        squadCount: 1,
+        roleCounts: {
+          ...baseTeam.roleCounts,
+          Ace: 1
+        }
+      }
+    ],
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      currentCategory: "Ace Women",
+      orderedPlayerCount: 2,
+      pendingPlayerCount: 1,
+      revealedPlayerCount: 1,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 1,
+          pending: 0,
+          completed: 1
+        },
+        {
+          category: "Ace Women",
+          total: 1,
+          pending: 1,
+          completed: 0
+        }
+      ]
+    },
+    canUndo: true
   };
 }
 
