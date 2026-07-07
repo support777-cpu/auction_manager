@@ -4,6 +4,7 @@ import {
   applyAuctionParameterDraft,
   getDefaultAuctionParameters,
   getSetupReadiness,
+  startAuctionFromSetup,
   validateAuctionParametersForSetup,
   type AuctionParameterSetupContext
 } from "@auction-manager/domain";
@@ -18,9 +19,22 @@ import {
   type UploadedTeamLogoDescriptor
 } from "@auction-manager/imports";
 import type { AuctionRole } from "@auction-manager/shared";
-import { auctionRoleValues } from "@auction-manager/shared";
+import {
+  auctionRoleValues,
+  startAuctionRequestSchema,
+  type AuctionState,
+  type BoardStateDto
+} from "@auction-manager/shared";
+import {
+  AuctionAlreadyStartedError,
+  createAuctionRepository,
+  DuplicateClientCommandError,
+  PersistenceSnapshotWriteError
+} from "@auction-manager/persistence";
 import Fastify, { type FastifyInstance } from "fastify";
+import { randomUUID } from "node:crypto";
 import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSetupStaging } from "./setup-staging.js";
@@ -56,10 +70,20 @@ export async function createAuctionManagerServer(
   options: AuctionManagerServerOptions = {}
 ): Promise<FastifyInstance> {
   const webDistPath = resolve(options.webDistPath ?? defaultWebDistPath);
-  const dataDirectory = resolve(options.dataDirectory ?? defaultDataDirectory);
+  const dataDirectory = resolve(
+    options.dataDirectory ??
+      (process.env.VITEST
+        ? join(tmpdir(), `auction-manager-test-${randomUUID()}`)
+        : defaultDataDirectory)
+  );
   const playerAssetDirectory = join(dataDirectory, "assets/players");
   const teamAssetDirectory = join(dataDirectory, "assets/teams");
   await assertBuiltWebAppExists(webDistPath);
+  await mkdir(dataDirectory, { recursive: true });
+  const auctionRepository = createAuctionRepository({
+    databasePath: join(dataDirectory, "auction.db"),
+    snapshotPath: join(dataDirectory, "snapshots/latest.json")
+  });
   await mkdir(playerAssetDirectory, { recursive: true });
   await mkdir(teamAssetDirectory, { recursive: true });
 
@@ -68,12 +92,30 @@ export async function createAuctionManagerServer(
   });
   const setupStaging = createSetupStaging();
 
+  app.addHook("onClose", async () => {
+    auctionRepository.close();
+  });
+
   app.addHook("onRequest", async (request, reply) => {
     const rawUrl = request.raw.url ?? request.url;
     if (rawUrl.startsWith("/assets/") && isUnsafeAssetRequest(rawUrl)) {
       return reply.code(400).send({
         ok: false,
         error: "invalid_asset_path"
+      });
+    }
+  });
+
+  app.addHook("preHandler", async (request, reply) => {
+    if (
+      request.method !== "GET" &&
+      request.url.startsWith("/api/setup/") &&
+      auctionRepository.loadCurrentState()
+    ) {
+      return reply.code(409).send({
+        ok: false,
+        error: "auction_started",
+        message: "Setup is locked because the auction has started."
       });
     }
   });
@@ -114,6 +156,21 @@ export async function createAuctionManagerServer(
     service: "auction-manager",
     mode: "event"
   }));
+
+  app.get("/api/state", async () => {
+    const state = auctionRepository.loadCurrentState();
+    if (!state) {
+      return {
+        mode: "setup",
+        state: null
+      };
+    }
+
+    return {
+      mode: "auction",
+      state: toBoardStateDto(state)
+    };
+  });
 
   app.post(
     "/api/setup/player-csv/preview",
@@ -275,6 +332,126 @@ export async function createAuctionManagerServer(
         setupStaging.getAuctionParameterReview() ??
         buildAuctionParameterReview(setupStaging)
     });
+  });
+
+  app.post("/api/auction/start", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Start Auction as application/json."
+      });
+    }
+
+    const parsedRequest = startAuctionRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Start Auction requires clientCommandId."
+      });
+    }
+
+    const parameterReview = buildAuctionParameterReview(setupStaging);
+    const readiness = getSetupReadiness({
+      playerCsvReview: setupStaging.getPlayerCsv()?.review ?? null,
+      teamCsvReview: setupStaging.getTeamCsv()?.review ?? null,
+      parameterReview
+    });
+    const stagedPlayers = setupStaging.getPlayerCsv();
+    const stagedTeams = setupStaging.getTeamCsv();
+    const parameters = setupStaging.getAuctionParameters();
+    if (readiness.startAuctionBlocked || !stagedPlayers || !stagedTeams || !parameters) {
+      return reply.code(409).send({
+        ok: false,
+        error: "setup_blocked",
+        primaryBlockerMessage: readiness.primaryBlockerMessage,
+        blockerMessages: readiness.blockerMessages
+      });
+    }
+
+    const result = startAuctionFromSetup({
+      players: stagedPlayers.players.map((record) => record.player),
+      playerPhotoReview: setupStaging.getPlayerPhotos(),
+      teams: stagedTeams.teams,
+      teamLogoReview: setupStaging.getTeamLogos(),
+      parameters,
+      setupReadiness: readiness,
+      clientCommandId: parsedRequest.data.clientCommandId,
+      ids: {
+        auctionId: () => `auction_${randomUUID()}`,
+        playerId: () => `player_${randomUUID()}`,
+        teamId: () => `team_${randomUUID()}`
+      },
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send({
+        ok: false,
+        error: "setup_blocked",
+        primaryBlockerMessage: result.blockers[0] ?? readiness.primaryBlockerMessage,
+        blockerMessages: result.blockers
+      });
+    }
+
+    try {
+      await auctionRepository.commitStartAuction({
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId
+      });
+    } catch (error) {
+      if (error instanceof AuctionAlreadyStartedError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "auction_already_started",
+          message: "The auction has already been started."
+        });
+      }
+
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Start Auction was already submitted with this command id."
+        });
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        const persistedState = auctionRepository.loadCurrentState();
+        if (persistedState) {
+          return {
+            state: toBoardStateDto(persistedState),
+            result: {
+              command: "StartAuction",
+              clientCommandId: parsedRequest.data.clientCommandId,
+              message:
+                "Auction started, but local recovery snapshot could not be written."
+            }
+          };
+        }
+      }
+
+      const message =
+        error instanceof Error &&
+        error.message.includes("persistence failure is uncleared")
+          ? "Auction started but persistence recovery is required before further commands."
+          : "Start Auction could not be persisted. Try again.";
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message
+      });
+    }
+
+    return {
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "StartAuction",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: "Auction started from validated setup."
+      }
+    };
   });
 
   await app.register(async (setupRoutes) => {
@@ -638,7 +815,73 @@ function buildAuctionParameterReview(
   );
 }
 
-function getUploadKind(url: string): "player-csv" | "team-csv" | "photo" | "logo" {
+function toBoardStateDto(state: AuctionState): BoardStateDto {
+  const currentPlayer =
+    state.currentPlayerId === null
+      ? null
+      : state.players.find((player) => player.id === state.currentPlayerId) ?? null;
+
+  return {
+    auctionId: state.auctionId,
+    phase: state.phase,
+    parameters: state.parameters,
+    players: state.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      role: player.role,
+      phase1Category: player.phase1Category,
+      basePrice: player.basePrice,
+      status: player.status,
+      ...(player.photoAssetId ? { photoAssetId: player.photoAssetId } : {}),
+      soldPrice: player.soldPrice,
+      winningTeamId: player.winningTeamId,
+      acquisitionType: player.acquisitionType
+    })),
+    teams: state.teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      captain: team.captain,
+      ...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {}),
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: team.roleCounts
+    })),
+    currentPlayer:
+      currentPlayer === null
+        ? null
+        : {
+            id: currentPlayer.id,
+            name: currentPlayer.name,
+            role: currentPlayer.role,
+            phase1Category: currentPlayer.phase1Category,
+            basePrice: currentPlayer.basePrice,
+            status: currentPlayer.status,
+            ...(currentPlayer.photoAssetId
+              ? { photoAssetId: currentPlayer.photoAssetId }
+              : {}),
+            soldPrice: currentPlayer.soldPrice,
+            winningTeamId: currentPlayer.winningTeamId,
+            acquisitionType: currentPlayer.acquisitionType
+          },
+    currentBid: state.currentBid,
+    selectedTeamId: state.selectedTeamId,
+    canUndo: state.undoHistory.length > 0,
+    persistenceFailure: state.persistenceFailure
+  };
+}
+
+function getUploadKind(
+  url: string
+): "player-csv" | "team-csv" | "photo" | "logo" | "auction-start" | "state" {
+  if (url.startsWith("/api/auction/start")) {
+    return "auction-start";
+  }
+
+  if (url.startsWith("/api/state")) {
+    return "state";
+  }
+
   if (url.startsWith("/api/setup/player-photos")) {
     return "photo";
   }
@@ -671,6 +914,14 @@ function getUploadTooLargeMessage(kind: ReturnType<typeof getUploadKind>): strin
 }
 
 function getGenericFailureMessage(kind: ReturnType<typeof getUploadKind>): string {
+  if (kind === "auction-start") {
+    return "Start Auction could not be completed.";
+  }
+
+  if (kind === "state") {
+    return "Auction state could not be loaded.";
+  }
+
   if (kind === "photo") {
     return "Player photo upload could not be completed.";
   }

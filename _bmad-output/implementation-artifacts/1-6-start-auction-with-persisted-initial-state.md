@@ -5,7 +5,7 @@ created: 2026-07-07T13:25:00+0530
 
 # Story 1.6: Start Auction With Persisted Initial State
 
-Status: ready-for-dev
+Status: done
 
 Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
 
@@ -27,51 +27,51 @@ so that the live event begins with trusted Players, Teams, parameters, and recov
 
 ## Tasks / Subtasks
 
-- [ ] Add runtime auction-state and Start Auction contracts. (AC: 3, 4, 5)
-  - [ ] In `packages/shared/src/index.ts` or adjacent shared files, add strict Zod schemas/types for `AuctionPhase`, `PlayerStatus`, `AcquisitionType`, `AuctionPlayer`, `AuctionTeam`, `AuctionState`, `BoardStateDto`, `StartAuctionRequest`, `StartAuctionResponse`, and compact command result summary.
-  - [ ] Reuse existing `auctionRoleValues`, `phase1CategoryValues`, `auctionParametersSchema`, `setupPlayerPreviewSchema`, and `setupTeamPreviewSchema`; do not introduce parallel role/category enums.
-  - [ ] Include only allowlisted auction-facing fields in board/resume DTOs: Player name, photo placeholder/asset id, Role, Base Price, status, Team name, Captain, logo placeholder/asset id, budget, remaining budget, squad count, role counts, phase, current player, current bid, selected team, and undo availability. Do not include private registration source fields.
-  - [ ] Require `clientCommandId` on `StartAuctionRequest`; use a generated opaque auction id and generated opaque Player/Team ids for persisted state.
+- [x] Add runtime auction-state and Start Auction contracts. (AC: 3, 4, 5)
+  - [x] In `packages/shared/src/index.ts` or adjacent shared files, add strict Zod schemas/types for `AuctionPhase`, `PlayerStatus`, `AcquisitionType`, `AuctionPlayer`, `AuctionTeam`, `AuctionState`, `BoardStateDto`, `StartAuctionRequest`, `StartAuctionResponse`, and compact command result summary.
+  - [x] Reuse existing `auctionRoleValues`, `phase1CategoryValues`, `auctionParametersSchema`, `setupPlayerPreviewSchema`, and `setupTeamPreviewSchema`; do not introduce parallel role/category enums.
+  - [x] Include only allowlisted auction-facing fields in board/resume DTOs: Player name, photo placeholder/asset id, Role, Base Price, status, Team name, Captain, logo placeholder/asset id, budget, remaining budget, squad count, role counts, phase, current player, current bid, selected team, and undo availability. Do not include private registration source fields.
+  - [x] Require `clientCommandId` on `StartAuctionRequest`; use a generated opaque auction id and generated opaque Player/Team ids for persisted state.
 
-- [ ] Implement domain-owned Start Auction initialization. (AC: 1, 2, 3, 5)
-  - [ ] Add a domain command such as `startAuctionFromSetup(input)` in `packages/domain/src/start-auction.ts`, re-exported from `packages/domain/src/index.ts`.
-  - [ ] The domain command must accept validated setup Player records, optional player photo review, validated Team records, optional team logo review, saved Auction Parameters, current setup readiness, `clientCommandId`, and a deterministic id/timestamp source for tests.
-  - [ ] Block if setup readiness is still blocked. Preserve blocker priority from `getSetupReadiness`: Player CSV, Team CSV, Auction Parameters. Missing photos/logos must not block.
-  - [ ] Initialize every Player with `status: "Pending"`, `basePrice` derived from `parameters.roleBasePrices[player.role]`, no sold price, no winning team, and `photoAssetId` only when matched.
-  - [ ] Initialize every Team with `budget` and `remainingBudget` equal to `parameters.teamBudget`, `squadCount: 0`, all role counts at `0`, no roster rows, and `logoAssetId` only when matched.
-  - [ ] Set phase to `InitialAuction`, `currentPlayerId: null`, `currentBid: null`, `selectedTeamId: null`, and empty undo history.
-  - [ ] Lock Auction Parameters by storing a cloned immutable copy in the created auction state. Later parameter changes must not mutate the started auction.
-  - [ ] Do not create or randomize the Phase 1 player order in this story. Story 2.1 owns persisted role-wise randomized order creation.
+- [x] Implement domain-owned Start Auction initialization. (AC: 1, 2, 3, 5)
+  - [x] Add a domain command such as `startAuctionFromSetup(input)` in `packages/domain/src/start-auction.ts`, re-exported from `packages/domain/src/index.ts`.
+  - [x] The domain command must accept validated setup Player records, optional player photo review, validated Team records, optional team logo review, saved Auction Parameters, current setup readiness, `clientCommandId`, and a deterministic id/timestamp source for tests.
+  - [x] Block if setup readiness is still blocked. Preserve blocker priority from `getSetupReadiness`: Player CSV, Team CSV, Auction Parameters. Missing photos/logos must not block.
+  - [x] Initialize every Player with `status: "Pending"`, `basePrice` derived from `parameters.roleBasePrices[player.role]`, no sold price, no winning team, and `photoAssetId` only when matched.
+  - [x] Initialize every Team with `budget` and `remainingBudget` equal to `parameters.teamBudget`, `squadCount: 0`, all role counts at `0`, no roster rows, and `logoAssetId` only when matched.
+  - [x] Set phase to `InitialAuction`, `currentPlayerId: null`, `currentBid: null`, `selectedTeamId: null`, and empty undo history.
+  - [x] Lock Auction Parameters by storing a cloned immutable copy in the created auction state. Later parameter changes must not mutate the started auction.
+  - [x] Do not create or randomize the Phase 1 player order in this story. Story 2.1 owns persisted role-wise randomized order creation.
 
-- [ ] Build SQLite persistence for initial auction state. (AC: 3, 4)
-  - [ ] Replace the `packages/persistence/src/index.ts` stub with repository/transaction APIs for opening a local SQLite DB, applying schema/migrations, committing Start Auction in one transaction, loading current state, and writing `data/snapshots/latest.json` only after commit.
-  - [ ] Add schema-version behavior so future migrations can detect existing DB shape. Keep this minimal but explicit.
-  - [ ] Add temporary-DB tests proving a successful Start Auction persists current state, action log, and snapshot; rollback leaves no partial state; and loading after reopen reconstructs the setup-started state.
-  - [ ] If snapshot write fails after DB commit, surface a persistence failure state that causes further mutating commands to be rejected until recovery is introduced or the failure is cleared.
+- [x] Build SQLite persistence for initial auction state. (AC: 3, 4)
+  - [x] Replace the `packages/persistence/src/index.ts` stub with repository/transaction APIs for opening a local SQLite DB, applying schema/migrations, committing Start Auction in one transaction, loading current state, and writing `data/snapshots/latest.json` only after commit.
+  - [x] Add schema-version behavior so future migrations can detect existing DB shape. Keep this minimal but explicit.
+  - [x] Add temporary-DB tests proving a successful Start Auction persists current state, action log, and snapshot; rollback leaves no partial state; and loading after reopen reconstructs the setup-started state.
+  - [x] If snapshot write fails after DB commit, surface a persistence failure state that causes further mutating commands to be rejected until recovery is introduced or the failure is cleared.
 
-- [ ] Add Start Auction and resume API routes. (AC: 1, 2, 4, 5)
-  - [ ] In `apps/server/src/app.ts`, add `POST /api/auction/start` and wire it through setup staging -> domain -> persistence. Keep route handlers thin; do not duplicate domain readiness or parameter rules in Fastify.
-  - [ ] Return `409` with setup blocker messages when Start Auction is attempted before setup is valid. Return `400` for malformed JSON or missing `clientCommandId`, `415` for non-JSON content type, and `500` for unexpected faults without stack traces.
-  - [ ] Update `GET /api/state` or add it if missing so app open/resume can read the latest persisted board-ready state from SQLite.
-  - [ ] Ensure `POST /api/setup/auction-parameters` and setup imports cannot change locked parameters for a started auction unless a future Reset/New Auction path is implemented.
-  - [ ] Add Fastify `inject()` tests for valid start, blocked start, missing/duplicate malformed `clientCommandId` policy, unsupported content type, persisted resume, and no private source fields in responses.
+- [x] Add Start Auction and resume API routes. (AC: 1, 2, 4, 5)
+  - [x] In `apps/server/src/app.ts`, add `POST /api/auction/start` and wire it through setup staging -> domain -> persistence. Keep route handlers thin; do not duplicate domain readiness or parameter rules in Fastify.
+  - [x] Return `409` with setup blocker messages when Start Auction is attempted before setup is valid. Return `400` for malformed JSON or missing `clientCommandId`, `415` for non-JSON content type, and `500` for unexpected faults without stack traces.
+  - [x] Update `GET /api/state` or add it if missing so app open/resume can read the latest persisted board-ready state from SQLite.
+  - [x] Ensure `POST /api/setup/auction-parameters` and setup imports cannot change locked parameters for a started auction unless a future Reset/New Auction path is implemented.
+  - [x] Add Fastify `inject()` tests for valid start, blocked start, missing/duplicate malformed `clientCommandId` policy, unsupported content type, persisted resume, and no private source fields in responses.
 
-- [ ] Upgrade setup UI and add the first live board shell. (AC: 1, 2, 5)
-  - [ ] In `apps/web/src/main.tsx`, replace the Story 1.5 placeholder that disables `setup-start-auction` with a real command when readiness is unblocked.
-  - [ ] Keep the stable selectors `setup-start-auction` and `start-auction-blocker`; add `current-player-panel`, `current-bid`, `reveal-next`, and any board shell selectors needed by Story 2.1.
-  - [ ] On success, render an Initial Auction board state: phase indicator `Initial Auction`, no current player, no current bid, all Teams initialized, and `Reveal Next Player` visible as the safe next action but disabled or clearly unavailable until Story 2.1 implements the command.
-  - [ ] Preserve all existing setup flows and selectors for Player CSV, photos, Team CSV, logos, and Auction Parameters.
-  - [ ] Use schema validation with `safeParse` for Start Auction and state responses; do not trust arbitrary server JSON in React state.
-  - [ ] Add pending affordance to prevent duplicate Start Auction clicks while the command is in flight.
+- [x] Upgrade setup UI and add the first live board shell. (AC: 1, 2, 5)
+  - [x] In `apps/web/src/main.tsx`, replace the Story 1.5 placeholder that disables `setup-start-auction` with a real command when readiness is unblocked.
+  - [x] Keep the stable selectors `setup-start-auction` and `start-auction-blocker`; add `current-player-panel`, `current-bid`, `reveal-next`, and any board shell selectors needed by Story 2.1.
+  - [x] On success, render an Initial Auction board state: phase indicator `Initial Auction`, no current player, no current bid, all Teams initialized, and `Reveal Next Player` visible as the safe next action but disabled or clearly unavailable until Story 2.1 implements the command.
+  - [x] Preserve all existing setup flows and selectors for Player CSV, photos, Team CSV, logos, and Auction Parameters.
+  - [x] Use schema validation with `safeParse` for Start Auction and state responses; do not trust arbitrary server JSON in React state.
+  - [x] Add pending affordance to prevent duplicate Start Auction clicks while the command is in flight.
 
-- [ ] Add story-level acceptance and regression coverage. (AC: 6, 7)
-  - [ ] Unit: shared schemas reject private fields and invalid states; domain Start Auction initializes Players, Teams, phase, empty undo, and parameter lock correctly.
-  - [ ] Integration: persistence commits state/action log/snapshot atomically and reconstructs state on reopen.
-  - [ ] API: Fastify inject tests cover Start Auction success, setup blockers, content-type/status-code behavior, and `GET /api/state` resume.
-  - [ ] UI/component: setup Start Auction button enables only when readiness is unblocked, sends a command once, handles blocked errors, and transitions to board state.
-  - [ ] E2E/event: valid Player CSV + valid Team CSV + optional placeholder media + saved parameters starts the auction, locks parameters, and lands on Initial Auction board. Invalid Player/Team/parameter setup stays blocked.
-  - [ ] Regression: Story 1.1-1.5 tests still pass, including import privacy and placeholder non-blocking behavior.
-  - [ ] Run the full Dev Gate and record results in the Dev Agent Record before marking tasks complete.
+- [x] Add story-level acceptance and regression coverage. (AC: 6, 7)
+  - [x] Unit: shared schemas reject private fields and invalid states; domain Start Auction initializes Players, Teams, phase, empty undo, and parameter lock correctly.
+  - [x] Integration: persistence commits state/action log/snapshot atomically and reconstructs state on reopen.
+  - [x] API: Fastify inject tests cover Start Auction success, setup blockers, content-type/status-code behavior, and `GET /api/state` resume.
+  - [x] UI/component: setup Start Auction button enables only when readiness is unblocked, sends a command once, handles blocked errors, and transitions to board state.
+  - [x] E2E/event: valid Player CSV + valid Team CSV + optional placeholder media + saved parameters starts the auction, locks parameters, and lands on Initial Auction board. Invalid Player/Team/parameter setup stays blocked.
+  - [x] Regression: Story 1.1-1.5 tests still pass, including import privacy and placeholder non-blocking behavior.
+  - [x] Run the full Dev Gate and record results in the Dev Agent Record before marking tasks complete.
 
 ## Dev Notes
 
@@ -270,14 +270,63 @@ Review/Test Gate:
 
 ### Agent Model Used
 
-TBD by dev agent.
+GPT-5 Codex
 
 ### Debug Log References
 
+- 2026-07-07T13:09:55+0530: Targeted backend tests passed for shared contracts, setup readiness, domain Start Auction, persistence repository, and Fastify routes.
+- 2026-07-07T13:13:02+0530: Full Vitest suite passed: 23 files, 126 tests.
+- 2026-07-07T13:14:00+0530: Full build passed across workspaces.
+- 2026-07-07T13:14:00+0530: Standard Playwright E2E passed: 4 tests.
+- 2026-07-07T13:16:00+0530: Event-mode Playwright E2E passed: 8 tests.
+
 ### Completion Notes List
+
+- Added strict shared auction runtime contracts and DTO schemas for Start Auction, board/resume state, command summaries, and app state responses.
+- Added domain-owned `startAuctionFromSetup` initialization with generated opaque IDs, cloned locked parameters, Pending Players, initialized Teams, InitialAuction phase, empty undo history, and non-blocking media placeholders.
+- Replaced the persistence stub with a better-sqlite3 repository that applies schema versioning, commits auction state and action log in one transaction, writes `snapshots/latest.json` after commit, reconstructs state on reopen, and blocks further mutations after snapshot failure.
+- Added `POST /api/auction/start` and `GET /api/state`, setup mutation locking after auction start, route-level content-type/request validation, duplicate command handling, and allowlisted board projection without private source fields.
+- Replaced the disabled Start Auction placeholder with a real UI command, pending duplicate-click guard, safeParse response validation, persisted-state resume on app open, and the Initial Auction board shell with `current-player-panel`, `current-bid`, and `reveal-next`.
+- Updated event-mode test data isolation so each run uses a fresh local data directory while still exercising real SQLite persistence.
 
 ### File List
 
+- `_bmad-output/implementation-artifacts/1-6-start-auction-with-persisted-initial-state.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `apps/server/src/app.test.ts`
+- `apps/server/src/app.ts`
+- `apps/server/src/main.ts`
+- `apps/web/e2e/event-mode.spec.ts`
+- `apps/web/src/main.tsx`
+- `apps/web/src/styles.css`
+- `packages/domain/src/index.ts`
+- `packages/domain/src/start-auction.test.ts`
+- `packages/domain/src/start-auction.ts`
+- `packages/persistence/src/auction-repository.test.ts`
+- `packages/persistence/src/index.ts`
+- `packages/shared/src/auction-state-contracts.test.ts`
+- `packages/shared/src/index.ts`
+- `packages/shared/src/setup-readiness.test.ts`
+- `packages/shared/src/setup-readiness.ts`
+- `playwright.event.config.ts`
+
 ### Change Log
 
+- 2026-07-07: Implemented Story 1.6 Start Auction persisted initial state and moved story to review.
+
 ### Review Findings
+
+- [x] [Review][Patch] Guard Start Auction against duplicate starts with a fresh clientCommandId [apps/server/src/app.ts:346]
+- [x] [Review][Patch] Create data directory before opening SQLite on fresh installs [apps/server/src/app.ts:73]
+- [x] [Review][Patch] Recompute Auction Parameter review at Start Auction instead of reusing stale cache [apps/server/src/app.ts:354]
+- [x] [Review][Patch] Return board state on snapshot-write failure instead of a hard 500 [apps/server/src/app.ts:420]
+- [x] [Review][Patch] Replace brittle UNIQUE string-matching with typed persistence errors [packages/persistence/src/index.ts:36]
+- [x] [Review][Patch] Scope action log reads to the current auction only [packages/persistence/src/index.ts:130]
+- [x] [Review][Patch] Surface persistenceFailure on board/resume DTOs and UI [packages/shared/src/index.ts:557]
+- [x] [Review][Patch] Block Start Auction when app state load fails or is still loading [apps/web/src/main.tsx:285]
+- [x] [Review][Patch] Invalidate saved parameter readiness after CSV reimports [apps/web/src/main.tsx:447]
+- [x] [Review][Patch] Treat parameter blocking reasons as blocking even without a local draft [apps/web/src/main.tsx:252]
+- [x] [Review][Patch] Add route-specific generic failure messages for Start Auction and state routes [apps/server/src/app.ts:867]
+- [x] [Review][Defer] Route-level staged-data checks partially duplicate domain readiness [apps/server/src/app.ts:363] — deferred, pre-existing adapter guard for missing staged payloads
+- [x] [Review][Defer] persistence_failure marking happens outside the commit transaction [packages/persistence/src/index.ts:96] — deferred, rare crash window; snapshot failure still blocks mutations
+- [x] [Review][Defer] Board DTO includes phase1/sold fields beyond the story's literal allowlist [packages/shared/src/index.ts:523] — deferred, fields are null-safe and needed for later live phases

@@ -12,7 +12,7 @@ export interface SetupReadinessInput {
 }
 
 const story16ReadyMessage =
-  "Ready: setup prerequisites are valid. Start Auction command arrives in Story 1.6.";
+  "Ready: setup prerequisites are valid. Start Auction can begin.";
 
 export function getSetupReadiness(input: SetupReadinessInput): SetupReadinessResponse {
   const blockerMessages: string[] = [];
@@ -76,7 +76,7 @@ export function getSetupReadiness(input: SetupReadinessInput): SetupReadinessRes
   return {
     startAuctionBlocked: false,
     primaryBlockerMessage: story16ReadyMessage,
-    blockerMessages: [story16ReadyMessage],
+    blockerMessages: [],
     story16Ready: true
   };
 }

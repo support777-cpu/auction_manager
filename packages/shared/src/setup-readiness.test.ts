@@ -80,6 +80,8 @@ describe("setup readiness", () => {
 
     expect(readiness.story16Ready).toBe(true);
     expect(readiness.startAuctionBlocked).toBe(false);
+    expect(readiness.primaryBlockerMessage).toContain("Start Auction can begin");
+    expect(readiness.blockerMessages).toEqual([]);
   });
 
   it("includes every parameter blocking reason", () => {

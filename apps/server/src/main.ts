@@ -2,9 +2,13 @@ import { createAuctionManagerServer } from "./app.js";
 
 const host = process.env.HOST?.trim() || "127.0.0.1";
 const port = parseLocalPort(process.env.PORT ?? "3000");
+const dataDirectory = process.env.DATA_DIRECTORY?.trim();
 
 try {
-  const server = await createAuctionManagerServer({ logger: true });
+  const server = await createAuctionManagerServer({
+    logger: true,
+    ...(dataDirectory ? { dataDirectory } : {})
+  });
   await server.listen({ host, port });
 } catch (error) {
   console.error(error);

@@ -16,7 +16,9 @@ import {
   teamCsvImportReviewResponseSchema,
   teamLogoReviewResponseSchema,
   auctionParameterReviewResponseSchema,
+  appStateResponseSchema,
   auctionRoleValues,
+  startAuctionResponseSchema,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
   type PlayerPhotoReviewResponse,
@@ -24,7 +26,8 @@ import {
   type TeamLogoReviewResponse,
   type AuctionParameterReviewResponse,
   type AuctionParameterReviewParameters,
-  type AuctionRole
+  type AuctionRole,
+  type BoardStateDto
 } from "@auction-manager/shared";
 import { AuctionParametersSection } from "./auction-parameters-section.js";
 import {
@@ -89,6 +92,8 @@ function App() {
   const parameterSaveGenerationRef = useRef(0);
   const parameterLoadGenerationRef = useRef(0);
   const parameterPreviewGenerationRef = useRef(0);
+  const stateLoadGenerationRef = useRef(0);
+  const startAuctionGenerationRef = useRef(0);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -135,6 +140,14 @@ function App() {
     AuctionParameterReviewResponse["blockingReasons"]
   >([]);
   const [parameterSaveError, setParameterSaveError] = useState<string | null>(null);
+  const [boardState, setBoardState] = useState<BoardStateDto | null>(null);
+  const [stateLoadState, setStateLoadState] = useState<"loading" | "ready" | "error">(
+    "loading"
+  );
+  const [startAuctionState, setStartAuctionState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [startAuctionError, setStartAuctionError] = useState<string | null>(null);
 
   const applyParameterReviewToForm = useCallback(
     (review: AuctionParameterReviewResponse) => {
@@ -181,11 +194,43 @@ function App() {
 
   const markParameterDraftEdited = useCallback(() => {
     parameterLoadGenerationRef.current += 1;
+    setParameterSaveState("idle");
+    setParameterReview(null);
   }, []);
 
   useEffect(() => {
     void loadAuctionParameters();
   }, [loadAuctionParameters]);
+
+  useEffect(() => {
+    const loadGeneration = ++stateLoadGenerationRef.current;
+    async function loadAppState() {
+      try {
+        const response = await fetch("/api/state");
+        const parsedState = appStateResponseSchema.safeParse(await response.json());
+
+        if (loadGeneration !== stateLoadGenerationRef.current) {
+          return;
+        }
+
+        if (!response.ok || !parsedState.success) {
+          setStateLoadState("error");
+          return;
+        }
+
+        if (parsedState.data.mode === "auction") {
+          setBoardState(parsedState.data.state);
+        }
+        setStateLoadState("ready");
+      } catch {
+        if (loadGeneration === stateLoadGenerationRef.current) {
+          setStateLoadState("error");
+        }
+      }
+    }
+
+    void loadAppState();
+  }, []);
   const issueGroups = mergeIssueGroups(
     review?.issueGroups,
     photoReview?.issueGroups,
@@ -200,20 +245,42 @@ function App() {
     parameterErrors.length > 0 ? parameterErrors : draftPreviewReasons;
 
   const parameterReviewForReadiness = useMemo(() => {
-    if (parameterLoadState !== "ready" || !parameterDraft) {
+    if (parameterLoadState !== "ready") {
       return null;
     }
 
-    return {
-      parameters: parameterDraft,
-      blockingReasons: parameterBlockingReasons,
-      reasonsByField: {},
-      startAuctionBlocked: parameterBlockingReasons.length > 0
-    } satisfies AuctionParameterReviewResponse;
+    if (parameterBlockingReasons.length > 0) {
+      return {
+        parameters: parameterDraft ?? parameterReview?.parameters ?? {
+          roleBasePrices: Object.fromEntries(
+            auctionRoleValues.map((role) => [role, 0])
+          ) as AuctionParameterReviewParameters["roleBasePrices"],
+          bidIncrement: 0,
+          teamBudget: 0,
+          maxSquadSize: 0,
+          roleTargets: Object.fromEntries(
+            auctionRoleValues.map((role) => [role, 0])
+          ) as AuctionParameterReviewParameters["roleTargets"],
+          phase1CategoryOrder: [],
+          manualAssignmentBudgetBehavior: "NoBudgetImpact"
+        },
+        blockingReasons: parameterBlockingReasons,
+        reasonsByField: {},
+        startAuctionBlocked: true
+      } satisfies AuctionParameterReviewResponse;
+    }
+
+    if (parameterSaveState !== "ready" || !parameterReview) {
+      return null;
+    }
+
+    return parameterReview;
   }, [
     parameterBlockingReasons,
     parameterDraft,
-    parameterLoadState
+    parameterLoadState,
+    parameterReview,
+    parameterSaveState
   ]);
 
   const setupReadiness = useMemo(
@@ -227,6 +294,10 @@ function App() {
   );
 
   const blockerText = setupReadiness.primaryBlockerMessage;
+  const startAuctionDisabled =
+    setupReadiness.startAuctionBlocked ||
+    startAuctionState === "loading" ||
+    stateLoadState !== "ready";
 
   useEffect(() => {
     if (parameterLoadState !== "ready" || !parameterDraft) {
@@ -387,6 +458,8 @@ function App() {
 
       setReview(parsedReview.data);
       setPhotoReview(null);
+      setParameterSaveState("idle");
+      setParameterReview(null);
       setUploadState("ready");
       await loadAuctionParameters({ force: true });
     } catch {
@@ -522,6 +595,8 @@ function App() {
 
       setTeamReview(parsedReview.data);
       setLogoReview(null);
+      setParameterSaveState("idle");
+      setParameterReview(null);
       setTeamUploadState("ready");
       await loadAuctionParameters({ force: true });
     } catch {
@@ -611,6 +686,49 @@ function App() {
     }
   }
 
+  async function handleStartAuction() {
+    if (startAuctionDisabled) {
+      return;
+    }
+
+    const commandGeneration = ++startAuctionGenerationRef.current;
+    setStartAuctionState("loading");
+    setStartAuctionError(null);
+
+    try {
+      const response = await fetch("/api/auction/start", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId()
+        })
+      });
+      const responseBody = (await response.json().catch(() => null)) as unknown;
+      const parsedResponse = startAuctionResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== startAuctionGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok || !parsedResponse.success) {
+        setStartAuctionState("error");
+        setStartAuctionError(readStartAuctionErrorMessage(response, responseBody));
+        return;
+      }
+
+      setBoardState(parsedResponse.data.state);
+      setStartAuctionState("ready");
+    } catch {
+      if (commandGeneration !== startAuctionGenerationRef.current) {
+        return;
+      }
+      setStartAuctionState("error");
+      setStartAuctionError("Start Auction could not be completed. Try again.");
+    }
+  }
+
   function updateRoleNumberField(
     group: "roleBasePrices" | "roleTargets",
     role: AuctionRole,
@@ -685,6 +803,10 @@ function App() {
     } finally {
       event.currentTarget.value = "";
     }
+  }
+
+  if (boardState) {
+    return <AuctionBoard boardState={boardState} />;
   }
 
   return (
@@ -1223,17 +1345,158 @@ function App() {
       />
 
       <div className="start-auction-row">
-        <p data-testid="start-auction-blocker">{blockerText}</p>
+        <div>
+          <p data-testid="start-auction-blocker">{blockerText}</p>
+          {startAuctionError ? (
+            <p className="csv-error" role="alert">
+              <FileWarning aria-hidden="true" size={18} />
+              <span>{startAuctionError}</span>
+            </p>
+          ) : null}
+        </div>
         <button
-          className="primary-action primary-action-disabled"
+          className={
+            startAuctionDisabled
+              ? "primary-action primary-action-disabled"
+              : "primary-action"
+          }
           data-testid="setup-start-auction"
-          disabled
+          disabled={startAuctionDisabled}
+          onClick={() => {
+            void handleStartAuction();
+          }}
           type="button"
         >
           <PlayCircle aria-hidden="true" size={20} />
-          <span>Start Auction</span>
+          <span>
+            {startAuctionState === "loading" ? "Starting Auction..." : "Start Auction"}
+          </span>
         </button>
       </div>
+    </main>
+  );
+}
+
+function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
+  return (
+    <main className="app-shell" data-testid="app-shell">
+      <header className="app-header" aria-labelledby="app-title">
+        <div>
+          <p className="eyebrow">Local event console</p>
+          <h1 id="app-title">Auction Manager</h1>
+        </div>
+        <div className="runtime-pill" aria-label="Runtime mode">
+          <MonitorDot aria-hidden="true" size={18} />
+          <span>Runs locally on this event PC</span>
+        </div>
+      </header>
+
+      <section className="status-grid" aria-label="Auction status">
+        <article>
+          <span className="status-label">Current phase</span>
+          <strong>Initial Auction</strong>
+          <span>No Player has been revealed yet.</span>
+        </article>
+        <article>
+          <span className="status-label">Auction state</span>
+          <strong>{boardState.players.length} pending</strong>
+          <span>{boardState.teams.length} Teams initialized.</span>
+        </article>
+        <article>
+          <span className="status-label">Recovery</span>
+          <strong>
+            {boardState.persistenceFailure ? "Snapshot warning" : "Saved locally"}
+          </strong>
+          <span>
+            {boardState.persistenceFailure
+              ? "Auction started, but the local recovery snapshot could not be written."
+              : "This event PC can resume the started auction."}
+          </span>
+        </article>
+      </section>
+
+      <section
+        className="phase-strip"
+        data-testid="phase-indicator"
+        aria-label="Auction phases"
+      >
+        {phases.map((phase) => {
+          const isActive = phase === "Initial Auction";
+          return (
+            <div
+              className={isActive ? "phase-step phase-step-active" : "phase-step"}
+              key={phase}
+              aria-current={isActive ? "step" : undefined}
+            >
+              {isActive ? (
+                <CheckCircle2 aria-hidden="true" size={18} />
+              ) : (
+                <Circle aria-hidden="true" size={18} />
+              )}
+              <span>{phase}</span>
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="auction-board" data-testid="auction-board" aria-live="polite">
+        <div className="board-main">
+          <section
+            className="current-player-panel"
+            data-testid="current-player-panel"
+            aria-labelledby="current-player-title"
+          >
+            <p className="eyebrow">Current Player</p>
+            <h2 id="current-player-title">No Current Player</h2>
+            <p>Reveal Next Player is the safe next action.</p>
+          </section>
+
+          <section className="bid-panel" aria-label="Current bid">
+            <span className="status-label">Current bid</span>
+            <strong data-testid="current-bid">No current bid</strong>
+            <button
+              className="primary-action primary-action-disabled"
+              data-testid="reveal-next"
+              disabled
+              type="button"
+            >
+              <PlayCircle aria-hidden="true" size={20} />
+              <span>Reveal Next Player</span>
+            </button>
+          </section>
+        </div>
+
+        <section className="team-board" aria-label="Initialized Teams">
+          <div className="subsection-heading">
+            <h3>Teams</h3>
+            <span>{boardState.teams.length}</span>
+          </div>
+          <div className="team-board-grid">
+            {boardState.teams.map((team) => (
+              <article className="team-tile" key={team.id}>
+                <div>
+                  <strong>{team.name}</strong>
+                  <span>{team.captain}</span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Budget</dt>
+                    <dd>{team.budget}</dd>
+                  </div>
+                  <div>
+                    <dt>Remaining</dt>
+                    <dd>{team.remainingBudget}</dd>
+                  </div>
+                  <div>
+                    <dt>Squad</dt>
+                    <dd>{team.squadCount}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+      </section>
     </main>
   );
 }
@@ -1304,6 +1567,43 @@ async function readLogoUploadErrorMessage(response: Response): Promise<string> {
   }
 
   return "Team logos could not be reviewed. Check the files and try again.";
+}
+
+function readStartAuctionErrorMessage(
+  response: Response,
+  body: unknown
+): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "primaryBlockerMessage" in body &&
+    typeof body.primaryBlockerMessage === "string"
+  ) {
+    return body.primaryBlockerMessage;
+  }
+
+  if (response.status === 409) {
+    return "Start Auction is blocked until setup is valid.";
+  }
+
+  return "Start Auction could not be completed. Try again.";
+}
+
+function createClientCommandId(): string {
+  if ("crypto" in window && "randomUUID" in window.crypto) {
+    return `start_${window.crypto.randomUUID()}`;
+  }
+
+  return `start_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
 function mergeIssueGroups(

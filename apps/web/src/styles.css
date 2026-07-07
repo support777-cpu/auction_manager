@@ -580,6 +580,122 @@ button:focus-visible {
   line-height: 1.4;
 }
 
+.auction-board {
+  max-width: 1120px;
+  margin: 0 auto 16px;
+}
+
+.board-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 360px);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.current-player-panel,
+.bid-panel,
+.team-board {
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.current-player-panel {
+  min-height: 220px;
+  padding: 24px;
+}
+
+.current-player-panel h2 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.current-player-panel p:last-child {
+  margin: 0;
+  color: #4b5563;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.bid-panel {
+  display: grid;
+  min-height: 220px;
+  align-content: center;
+  gap: 14px;
+  padding: 24px;
+}
+
+.bid-panel strong {
+  color: #111827;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.team-board {
+  padding: 20px;
+}
+
+.team-board-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.team-tile {
+  min-height: 150px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9fafb;
+}
+
+.team-tile strong,
+.team-tile span {
+  display: block;
+}
+
+.team-tile strong {
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.team-tile span {
+  margin-top: 4px;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.team-tile dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.team-tile dt,
+.team-tile dd {
+  margin: 0;
+}
+
+.team-tile dt {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.team-tile dd {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 16px;
@@ -606,7 +722,9 @@ button:focus-visible {
   .csv-summary-grid,
   .review-layout,
   .parameter-grid,
-  .auction-parameters-summary {
+  .auction-parameters-summary,
+  .board-main,
+  .team-board-grid {
     grid-template-columns: 1fr;
   }
 
@@ -631,6 +749,10 @@ button:focus-visible {
   .phase-step {
     justify-content: flex-start;
   }
+
+  .team-tile dl {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (min-width: 761px) and (max-width: 980px) {
@@ -640,5 +762,9 @@ button:focus-visible {
 
   .phase-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .team-board-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

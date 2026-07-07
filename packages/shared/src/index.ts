@@ -75,6 +75,21 @@ export const photoMatchStatusValues = [
   "undecodable_uses_placeholder"
 ] as const;
 export const mediaMatchStatusValues = photoMatchStatusValues;
+export const auctionPhaseValues = [
+  "Setup",
+  "InitialAuction",
+  "UnsoldBidding",
+  "ManualAssignment",
+  "Closed"
+] as const;
+export const playerStatusValues = [
+  "Pending",
+  "Current",
+  "Sold",
+  "Unsold",
+  "Assigned"
+] as const;
+export const acquisitionTypeValues = ["Auction", "ManualAssignment"] as const;
 
 export const genderSchema = z.enum(genderValues);
 export const auctionRoleSchema = z.enum(auctionRoleValues);
@@ -89,6 +104,9 @@ export const importIssueSeveritySchema = z.enum(importIssueSeverityValues);
 export const importIssueCodeSchema = z.enum(importIssueCodeValues);
 export const photoMatchStatusSchema = z.enum(photoMatchStatusValues);
 export const mediaMatchStatusSchema = photoMatchStatusSchema;
+export const auctionPhaseSchema = z.enum(auctionPhaseValues);
+export const playerStatusSchema = z.enum(playerStatusValues);
+export const acquisitionTypeSchema = z.enum(acquisitionTypeValues);
 
 const positiveIntegerSchema = z.number().int().positive();
 const nonnegativeIntegerSchema = z.number().int().nonnegative();
@@ -441,6 +459,136 @@ export const teamLogoReviewResponseSchema = z
   })
   .strict();
 
+const opaqueIdSchema = z.string().trim().min(1);
+const nullableOpaqueIdSchema = opaqueIdSchema.nullable();
+const nullableMoneySchema = z.number().int().positive().nullable();
+
+const roleCountsSchema = z
+  .object(
+    Object.fromEntries(
+      auctionRoleValues.map((role) => [role, nonnegativeIntegerSchema])
+    ) as Record<
+      (typeof auctionRoleValues)[number],
+      typeof nonnegativeIntegerSchema
+    >
+  )
+  .strict();
+
+export const auctionPlayerSchema = z
+  .object({
+    id: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    gender: genderSchema,
+    role: auctionRoleSchema,
+    phase1Category: phase1CategorySchema,
+    basePrice: positiveIntegerSchema,
+    status: playerStatusSchema,
+    photoAssetId: opaqueIdSchema.optional(),
+    soldPrice: nullableMoneySchema,
+    winningTeamId: nullableOpaqueIdSchema,
+    acquisitionType: acquisitionTypeSchema.nullable()
+  })
+  .strict();
+
+export const auctionTeamSchema = z
+  .object({
+    id: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    captain: z.string().trim().min(1),
+    logoAssetId: opaqueIdSchema.optional(),
+    budget: positiveIntegerSchema,
+    remainingBudget: positiveIntegerSchema,
+    squadCount: nonnegativeIntegerSchema,
+    roleCounts: roleCountsSchema
+  })
+  .strict();
+
+export const auctionStateSchema = z
+  .object({
+    auctionId: opaqueIdSchema,
+    phase: auctionPhaseSchema,
+    parameters: auctionParametersSchema,
+    players: z.array(auctionPlayerSchema),
+    teams: z.array(auctionTeamSchema),
+    currentPlayerId: nullableOpaqueIdSchema,
+    currentBid: nullableMoneySchema,
+    selectedTeamId: nullableOpaqueIdSchema,
+    undoHistory: z.array(z.unknown()),
+    createdAt: z.string().trim().min(1),
+    updatedAt: z.string().trim().min(1),
+    persistenceFailure: z.string().trim().min(1).nullable()
+  })
+  .strict();
+
+export const boardPlayerDtoSchema = auctionPlayerSchema.pick({
+  id: true,
+  name: true,
+  role: true,
+  phase1Category: true,
+  basePrice: true,
+  status: true,
+  photoAssetId: true,
+  soldPrice: true,
+  winningTeamId: true,
+  acquisitionType: true
+});
+
+export const boardTeamDtoSchema = auctionTeamSchema.pick({
+  id: true,
+  name: true,
+  captain: true,
+  logoAssetId: true,
+  budget: true,
+  remainingBudget: true,
+  squadCount: true,
+  roleCounts: true
+});
+
+export const boardStateDtoSchema = z
+  .object({
+    auctionId: opaqueIdSchema,
+    phase: auctionPhaseSchema,
+    parameters: auctionParametersSchema,
+    players: z.array(boardPlayerDtoSchema),
+    teams: z.array(boardTeamDtoSchema),
+    currentPlayer: boardPlayerDtoSchema.nullable(),
+    currentBid: nullableMoneySchema,
+    selectedTeamId: nullableOpaqueIdSchema,
+    canUndo: z.boolean(),
+    persistenceFailure: z.string().trim().min(1).nullable()
+  })
+  .strict();
+
+export const startAuctionRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
+export const commandResultSummarySchema = z
+  .object({
+    command: z.string().trim().min(1),
+    clientCommandId: z.string().trim().min(1),
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+export const startAuctionResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("StartAuction")
+    })
+  })
+  .strict();
+
+export const appStateResponseSchema = z
+  .object({
+    mode: z.enum(["setup", "auction"]),
+    state: boardStateDtoSchema.nullable()
+  })
+  .strict();
+
 export type Gender = z.infer<typeof genderSchema>;
 export type AuctionRole = z.infer<typeof auctionRoleSchema>;
 export type Phase1Category = z.infer<typeof phase1CategorySchema>;
@@ -454,6 +602,9 @@ export type ImportIssueSeverity = z.infer<typeof importIssueSeveritySchema>;
 export type ImportIssueCode = z.infer<typeof importIssueCodeSchema>;
 export type PhotoMatchStatus = z.infer<typeof photoMatchStatusSchema>;
 export type MediaMatchStatus = z.infer<typeof mediaMatchStatusSchema>;
+export type AuctionPhase = z.infer<typeof auctionPhaseSchema>;
+export type PlayerStatus = z.infer<typeof playerStatusSchema>;
+export type AcquisitionType = z.infer<typeof acquisitionTypeSchema>;
 export type SetupPlayerPreview = z.infer<typeof setupPlayerPreviewSchema>;
 export type SetupTeamPreview = z.infer<typeof setupTeamPreviewSchema>;
 export type ImportIssue = z.infer<typeof importIssueSchema>;
@@ -491,6 +642,14 @@ export type AuctionParameterReviewParameters = z.infer<
   typeof auctionParameterReviewParametersSchema
 >;
 export type SetupReadinessResponse = z.infer<typeof setupReadinessResponseSchema>;
+export type AuctionPlayer = z.infer<typeof auctionPlayerSchema>;
+export type AuctionTeam = z.infer<typeof auctionTeamSchema>;
+export type AuctionState = z.infer<typeof auctionStateSchema>;
+export type BoardStateDto = z.infer<typeof boardStateDtoSchema>;
+export type StartAuctionRequest = z.infer<typeof startAuctionRequestSchema>;
+export type CommandResultSummary = z.infer<typeof commandResultSummarySchema>;
+export type StartAuctionResponse = z.infer<typeof startAuctionResponseSchema>;
+export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 
 export {
   getSetupReadiness,

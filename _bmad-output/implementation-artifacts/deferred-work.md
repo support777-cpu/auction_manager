@@ -6,3 +6,9 @@
 - No viewport layout regression tests for photo UI — manual acceptance sufficient for this story
 - getPlayerPhotos() staging accessor is unused — reserved for Story 1.6 persistence seam
 - File-count limit test lacks specific error code/message assertion — status range check meets minimum gate
+
+## Deferred from: code review of 1-6-start-auction-with-persisted-initial-state (2026-07-07)
+
+- Route-level staged-data checks partially duplicate domain readiness — adapter guard for missing staged payloads
+- persistence_failure marking happens outside the commit transaction — rare crash window; snapshot failure still blocks mutations
+- Board DTO includes phase1/sold fields beyond the story's literal allowlist — fields are null-safe and needed for later live phases

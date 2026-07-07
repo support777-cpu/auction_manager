@@ -1,4 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const eventDataDirectory = mkdtempSync(join(tmpdir(), "auction-manager-event-"));
 
 export default defineConfig({
   testDir: "./apps/web/e2e",
@@ -7,7 +12,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["html"], ["line"]] : "list",
   webServer: {
-    command: "PORT=4174 npm run start:event",
+    command: `DATA_DIRECTORY=${eventDataDirectory} PORT=4174 npm run start:event`,
     url: "http://127.0.0.1:4174/api/health",
     reuseExistingServer: false,
     timeout: 120_000

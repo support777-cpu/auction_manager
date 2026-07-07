@@ -177,7 +177,36 @@ test("uploads Team logos in event mode and keeps missing logos non-blocking", as
   await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/logo/i);
 });
 
-test("reviews and saves auction parameters before Start Auction readiness", async ({
+test("blocks Start Auction when an imported role base price is missing", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("team-csv-input").setInputFiles({
+    name: "teams-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validTeamCsvPath)
+  });
+  await expect(page.getByTestId("team-csv-summary")).toContainText("4 imported");
+
+  await page.getByTestId("role-base-price-Bowling").fill("");
+  await page.getByTestId("auction-parameters-save").click();
+
+  await expect(page.locator(".parameter-errors")).toContainText(
+    "Base price is missing for Bowling."
+  );
+  await expect(page.getByTestId("start-auction-blocker")).toContainText(
+    "Blocked: Auction Parameters need attention."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+});
+
+test("reviews and saves auction parameters before starting the auction", async ({
   page
 }) => {
   await page.goto("/");
@@ -223,36 +252,18 @@ test("reviews and saves auction parameters before Start Auction readiness", asyn
     "Increment 5; Team budget 200"
   );
   await expect(page.getByTestId("start-auction-blocker")).toContainText(
-    "Ready: setup prerequisites are valid. Start Auction command arrives in Story 1.6."
+    "Ready: setup prerequisites are valid. Start Auction can begin."
   );
-  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
-});
+  await expect(page.getByTestId("setup-start-auction")).toBeEnabled();
 
-test("blocks Start Auction when an imported role base price is missing", async ({ page }) => {
-  await page.goto("/");
+  await page.getByTestId("setup-start-auction").click();
 
-  await page.getByTestId("player-csv-input").setInputFiles({
-    name: "players-valid.csv",
-    mimeType: "text/csv",
-    buffer: await readFile(validCsvPath)
-  });
-  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
-
-  await page.getByTestId("team-csv-input").setInputFiles({
-    name: "teams-valid.csv",
-    mimeType: "text/csv",
-    buffer: await readFile(validTeamCsvPath)
-  });
-  await expect(page.getByTestId("team-csv-summary")).toContainText("4 imported");
-
-  await page.getByTestId("role-base-price-Bowling").fill("");
-  await page.getByTestId("auction-parameters-save").click();
-
-  await expect(page.locator(".parameter-errors")).toContainText(
-    "Base price is missing for Bowling."
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("phase-indicator")).toContainText("Initial Auction");
+  await expect(page.getByTestId("current-player-panel")).toContainText(
+    "No Current Player"
   );
-  await expect(page.getByTestId("start-auction-blocker")).toContainText(
-    "Blocked: Auction Parameters need attention."
-  );
-  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+  await expect(page.getByTestId("current-bid")).toContainText("No current bid");
+  await expect(page.getByTestId("reveal-next")).toBeDisabled();
+  await expect(page.locator("body")).toContainText("4 Teams initialized");
 });
