@@ -529,6 +529,199 @@ describe("AuctionBoard Mark Unsold", () => {
   });
 });
 
+describe("AuctionBoard Undo", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="root"></div>';
+  });
+
+  it("shows empty Undo state and disables under persistence failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(
+            createAuctionAppState({
+              ...createEligibleBoardState(),
+              persistenceFailure: "snapshot_write_failed"
+            })
+          );
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+    await resumeSavedAuction();
+
+    expect(await screen.findByTestId("undo-summary")).toHaveTextContent(
+      "No actions to undo."
+    );
+    expect(screen.getByTestId("undo-action")).toBeDisabled();
+  });
+
+  it("displays last Undo summary and reconciles successful Undo response", async () => {
+    const soldState = createSoldBoardState();
+    const undoneState = {
+      ...createEligibleBoardState(),
+      canUndo: true,
+      lastUndoAction: {
+        command: "SelectTeam" as const,
+        summary: "Undo Select Team: Aarav Menon -> Falcons."
+      }
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(soldState));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/undo" && init?.method === "POST") {
+        return jsonResponse({
+          state: undoneState,
+          result: {
+            command: "Undo",
+            clientCommandId: "cmd-undo-1",
+            message: "Undid Mark Sold: Aarav Menon."
+          }
+        });
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+    await resumeSavedAuction();
+
+    expect(await screen.findByTestId("undo-summary")).toHaveTextContent(
+      "Undo Mark Sold: Aarav Menon -> Falcons, 10."
+    );
+    fireEvent.click(screen.getByTestId("undo-action"));
+
+    expect(await screen.findByTestId("undo-success")).toHaveTextContent(
+      "Undid Mark Sold: Aarav Menon."
+    );
+    expect(screen.getByTestId("current-player-name")).toHaveTextContent(
+      "Aarav Menon"
+    );
+    expect(screen.getByTestId("undo-summary")).toHaveTextContent("Undo Select Team");
+    expect(screen.queryByTestId("mark-sold-success")).not.toBeInTheDocument();
+  });
+
+  it("shows Undo errors, refreshes board state, and supports keyboard u", async () => {
+    const soldState = createSoldBoardState();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(soldState));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/undo" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "no_actions_to_undo",
+            message: "No actions to undo."
+          },
+          409
+        );
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+    await resumeSavedAuction();
+    await waitFor(() => {
+      expect(screen.getByTestId("undo-action")).toBeEnabled();
+    });
+    fireEvent.keyDown(document, { key: "u" });
+
+    expect(await screen.findByTestId("undo-error")).toHaveTextContent(
+      "No actions to undo."
+    );
+    expect(
+      fetchMock.mock.calls.some(([url, init]) => {
+        return String(url) === "/api/auction/undo" && init?.method === "POST";
+      })
+    ).toBe(true);
+  });
+
+  it("disables Undo and ignores keyboard u while another live command is loading", async () => {
+    let resolveIncrease: (value: Response) => void = () => {};
+    const increasePromise = new Promise<Response>((resolve) => {
+      resolveIncrease = resolve;
+    });
+    const boardState = {
+      ...createEligibleBoardState(),
+      canUndo: true,
+      lastUndoAction: {
+        command: "SelectTeam" as const,
+        summary: "Undo Select Team: Aarav Menon -> Falcons."
+      }
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(boardState));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url === "/api/auction/increase-bid" && init?.method === "POST") {
+        return increasePromise;
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("increase-bid");
+
+    fireEvent.click(screen.getByTestId("increase-bid"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("undo-action")).toBeDisabled();
+    });
+    expect(screen.getByTestId("increase-bid")).toHaveAttribute("aria-busy", "true");
+
+    resolveIncrease(
+      jsonResponse({
+        state: boardState,
+        result: {
+          command: "IncreaseBid",
+          clientCommandId: "cmd-increase-1",
+          message: "Increased bid to 15."
+        }
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("undo-action")).toBeEnabled();
+    });
+  });
+});
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -643,6 +836,7 @@ function createEligibleBoardState(): BoardStateDto {
       ]
     },
     canUndo: false,
+    lastUndoAction: null,
     persistenceFailure: null,
     phase2PoolCount: 0
   };
@@ -734,6 +928,7 @@ function createBlockedBoardState(): BoardStateDto {
       ]
     },
     canUndo: false,
+    lastUndoAction: null,
     persistenceFailure: null,
     phase2PoolCount: 0
   };
@@ -824,6 +1019,10 @@ function createSoldBoardState(): BoardStateDto {
       ]
     },
     canUndo: true,
+    lastUndoAction: {
+      command: "MarkSold",
+      summary: "Undo Mark Sold: Aarav Menon -> Falcons, 10."
+    },
     phase2PoolCount: 0
   };
 }
@@ -880,6 +1079,10 @@ function createUnsoldBoardState(): BoardStateDto {
       ]
     },
     canUndo: true,
+    lastUndoAction: {
+      command: "MarkUnsold",
+      summary: "Undo Mark Unsold: Aarav Menon."
+    },
     phase2PoolCount: 1
   };
 }
@@ -936,6 +1139,10 @@ function createPhase1CompleteUnsoldBoardState(): BoardStateDto {
       ]
     },
     canUndo: true,
+    lastUndoAction: {
+      command: "MarkUnsold",
+      summary: "Undo Mark Unsold: Aarav Menon."
+    },
     persistenceFailure: null,
     phase2PoolCount: 1
   };
@@ -1002,6 +1209,10 @@ function createPhase1CompleteAllSoldBoardState(): BoardStateDto {
       ]
     },
     canUndo: true,
+    lastUndoAction: {
+      command: "MarkSold",
+      summary: "Undo Mark Sold: Aarav Menon -> Falcons, 12."
+    },
     persistenceFailure: null,
     phase2PoolCount: 0
   };

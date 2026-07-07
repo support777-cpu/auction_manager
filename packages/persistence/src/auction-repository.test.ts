@@ -10,7 +10,8 @@ import {
   markSold,
   markUnsold,
   revealNextPlayer,
-  selectTeam
+  selectTeam,
+  undoLastAction
 } from "@auction-manager/domain";
 
 describe("auction repository", () => {
@@ -1369,6 +1370,335 @@ describe("auction repository", () => {
         clientCommandId: "cmd-mark-unsold-2",
         summary: unsold.message,
         playerId: "player-1"
+      })
+    ).rejects.toThrow("persistence failure");
+    repository.close();
+  });
+
+  it("commits Undo after sale with restored state, non-undoable log row, snapshot, and reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const repository = createAuctionRepository({ databasePath, snapshotPath });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const sale = markSold({
+      state: previousState,
+      now: () => "2026-07-07T09:20:00.000Z"
+    });
+    expect(sale.ok).toBe(true);
+    if (!sale.ok) {
+      repository.close();
+      return;
+    }
+    await repository.commitMarkSold({
+      previousState,
+      state: sale.state,
+      clientCommandId: "cmd-mark-sold-1",
+      summary: sale.message,
+      playerId: "player-1",
+      winningTeamId: "team-1",
+      soldPrice: 10
+    });
+    const undo = undoLastAction({
+      state: sale.state,
+      now: () => "2026-07-07T09:21:00.000Z"
+    });
+    expect(undo.ok).toBe(true);
+    if (!undo.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitUndo({
+      previousState: sale.state,
+      state: undo.state,
+      clientCommandId: "cmd-undo-1",
+      summary: undo.message,
+      undoneAction: undo.undoneAction
+    });
+
+    expect(repository.loadCurrentState()).toEqual(undo.state);
+    expect(repository.loadCurrentState()?.players[0]).toMatchObject({
+      status: "Current",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    });
+    expect(repository.loadCurrentState()?.teams[0]).toMatchObject({
+      remainingBudget: 170,
+      squadCount: 0,
+      roleCounts: { Ace: 0 }
+    });
+    expect(repository.loadCurrentState()?.currentPlayerId).toBe("player-1");
+    expect(repository.loadCurrentState()?.currentBid).toBe(10);
+    expect(repository.loadCurrentState()?.selectedTeamId).toBe("team-1");
+    expect(JSON.parse(await readFile(snapshotPath, "utf8"))).toEqual(undo.state);
+    expect(repository.listActionLog()).toMatchObject([
+      { command: "StartAuction", clientCommandId: "cmd-start-1" },
+      { command: "MarkSold", clientCommandId: "cmd-mark-sold-1", undoable: true },
+      {
+        command: "Undo",
+        clientCommandId: "cmd-undo-1",
+        summary: "Undid Mark Sold: Aarav Menon.",
+        undoable: false
+      }
+    ]);
+    expect(JSON.parse(repository.listActionLog()[2]?.payloadJson ?? "{}"))
+      .toMatchObject({
+        command: "Undo",
+        undoneCommand: "MarkSold",
+        previousLastUndoEntry: {
+          command: "MarkSold",
+          playerId: "player-1",
+          winningTeamId: "team-1"
+        },
+        nextUndoSummary: {
+          command: "SelectTeam",
+          playerId: "player-1"
+        },
+        before: {
+          currentPlayerId: null,
+          currentBid: null,
+          selectedTeamId: null,
+          affectedPlayer: {
+            id: "player-1",
+            status: "Sold",
+            soldPrice: 10,
+            winningTeamId: "team-1",
+            acquisitionType: "Auction"
+          },
+          affectedTeam: {
+            id: "team-1",
+            remainingBudget: 160,
+            squadCount: 1
+          }
+        },
+        after: {
+          currentPlayerId: "player-1",
+          currentBid: 10,
+          selectedTeamId: "team-1",
+          affectedPlayer: {
+            id: "player-1",
+            status: "Current",
+            soldPrice: null,
+            winningTeamId: null,
+            acquisitionType: null
+          },
+          affectedTeam: {
+            id: "team-1",
+            remainingBudget: 170,
+            squadCount: 0
+          }
+        }
+      });
+    await expect(
+      repository.commitUndo({
+        previousState: sale.state,
+        state: undo.state,
+        clientCommandId: "cmd-undo-1",
+        summary: undo.message,
+        undoneAction: undo.undoneAction
+      })
+    ).rejects.toThrow("Duplicate clientCommandId");
+    repository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()).toEqual(undo.state);
+    reopenedRepository.close();
+  });
+
+  it("commits Undo after Mark Unsold by removing only the affected phase 2 pool player", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const repository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    const previousState = {
+      ...createSelectedState(createMultiPlayerState()),
+      phase2Pool: ["player-2"]
+    };
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const unsold = markUnsold({
+      state: previousState,
+      now: () => "2026-07-07T09:25:00.000Z"
+    });
+    expect(unsold.ok).toBe(true);
+    if (!unsold.ok) {
+      repository.close();
+      return;
+    }
+    await repository.commitMarkUnsold({
+      previousState,
+      state: unsold.state,
+      clientCommandId: "cmd-mark-unsold-1",
+      summary: unsold.message,
+      playerId: "player-1"
+    });
+    const undo = undoLastAction({
+      state: unsold.state,
+      now: () => "2026-07-07T09:26:00.000Z"
+    });
+    expect(undo.ok).toBe(true);
+    if (!undo.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitUndo({
+      previousState: unsold.state,
+      state: undo.state,
+      clientCommandId: "cmd-undo-unsold-1",
+      summary: undo.message,
+      undoneAction: undo.undoneAction
+    });
+
+    expect(repository.loadCurrentState()?.phase2Pool).toEqual(["player-2"]);
+    expect(repository.loadCurrentState()?.players[0]).toMatchObject({
+      status: "Current"
+    });
+    expect(repository.loadCurrentState()?.teams).toEqual(previousState.teams);
+    expect(repository.listActionLog().at(-1)).toMatchObject({
+      command: "Undo",
+      undoable: false
+    });
+    repository.close();
+
+    const reopenedRepository = createAuctionRepository({
+      databasePath: join(directory, "auction.db"),
+      snapshotPath: join(directory, "snapshots/latest.json")
+    });
+    expect(reopenedRepository.loadCurrentState()?.phase2Pool).toEqual(["player-2"]);
+    reopenedRepository.close();
+  });
+
+  it("commits Undo after reveal with restored pending player and reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const snapshotPath = join(directory, "snapshots/latest.json");
+    const repository = createAuctionRepository({ databasePath, snapshotPath });
+    const previousState = createMultiPlayerState();
+    await repository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const reveal = revealNextPlayer({
+      state: previousState,
+      now: () => "2026-07-07T09:00:00.000Z"
+    });
+    expect(reveal.ok).toBe(true);
+    if (!reveal.ok) {
+      repository.close();
+      return;
+    }
+    await repository.commitRevealNextPlayer({
+      previousState,
+      state: reveal.state,
+      clientCommandId: "cmd-reveal-1",
+      revealedPlayerId: reveal.revealedPlayerId,
+      summary: reveal.summary
+    });
+    const undo = undoLastAction({
+      state: reveal.state,
+      now: () => "2026-07-07T09:01:00.000Z"
+    });
+    expect(undo.ok).toBe(true);
+    if (!undo.ok) {
+      repository.close();
+      return;
+    }
+
+    await repository.commitUndo({
+      previousState: reveal.state,
+      state: undo.state,
+      clientCommandId: "cmd-undo-reveal-1",
+      summary: undo.message,
+      undoneAction: undo.undoneAction
+    });
+
+    expect(repository.loadCurrentState()).toEqual(undo.state);
+    expect(repository.loadCurrentState()?.players[0]).toMatchObject({
+      status: "Pending"
+    });
+    expect(repository.loadCurrentState()?.currentPlayerId).toBeNull();
+    expect(JSON.parse(await readFile(snapshotPath, "utf8"))).toEqual(undo.state);
+    repository.close();
+
+    const reopenedRepository = createAuctionRepository({ databasePath, snapshotPath });
+    expect(reopenedRepository.loadCurrentState()).toEqual(undo.state);
+    reopenedRepository.close();
+  });
+
+  it("marks snapshot failure after Undo and blocks later live mutations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "auction-repository-"));
+    const databasePath = join(directory, "auction.db");
+    const validSnapshotPath = join(directory, "snapshots/latest.json");
+    const firstRepository = createAuctionRepository({
+      databasePath,
+      snapshotPath: validSnapshotPath
+    });
+    const previousState = createSelectedState(createMultiPlayerState());
+    await firstRepository.commitStartAuction({
+      state: previousState,
+      clientCommandId: "cmd-start-1"
+    });
+    const sale = markSold({
+      state: previousState,
+      now: () => "2026-07-07T09:20:00.000Z"
+    });
+    expect(sale.ok).toBe(true);
+    if (!sale.ok) {
+      firstRepository.close();
+      return;
+    }
+    await firstRepository.commitMarkSold({
+      previousState,
+      state: sale.state,
+      clientCommandId: "cmd-mark-sold-1",
+      summary: sale.message,
+      playerId: "player-1",
+      winningTeamId: "team-1",
+      soldPrice: 10
+    });
+    firstRepository.close();
+
+    const repository = createAuctionRepository({
+      databasePath,
+      snapshotPath: directory
+    });
+    const undo = undoLastAction({
+      state: sale.state,
+      now: () => "2026-07-07T09:21:00.000Z"
+    });
+    expect(undo.ok).toBe(true);
+    if (!undo.ok) {
+      repository.close();
+      return;
+    }
+    await expect(
+      repository.commitUndo({
+        previousState: sale.state,
+        state: undo.state,
+        clientCommandId: "cmd-undo-1",
+        summary: undo.message,
+        undoneAction: undo.undoneAction
+      })
+    ).rejects.toBeInstanceOf(PersistenceSnapshotWriteError);
+
+    expect(repository.loadCurrentState()?.persistenceFailure).toContain("snapshot");
+    await expect(
+      repository.commitUndo({
+        previousState: sale.state,
+        state: undo.state,
+        clientCommandId: "cmd-undo-2",
+        summary: undo.message,
+        undoneAction: undo.undoneAction
       })
     ).rejects.toThrow("persistence failure");
     repository.close();

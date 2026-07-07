@@ -604,6 +604,19 @@ export const liveActionUndoHistoryEntrySchema = z.discriminatedUnion("command", 
   markUnsoldUndoHistoryEntrySchema
 ]);
 
+export const undoActionSummarySchema = z
+  .object({
+    command: z.enum([
+      "RevealNextPlayer",
+      "SelectTeam",
+      "IncreaseBid",
+      "MarkSold",
+      "MarkUnsold"
+    ]),
+    summary: z.string().trim().min(1)
+  })
+  .strict();
+
 function validatePhase1OrderInAuctionState(
   state: {
     players: z.infer<typeof auctionPlayerSchema>[];
@@ -800,6 +813,7 @@ export const boardStateDtoSchema = z
     phase2PoolCount: nonnegativeIntegerSchema,
     phase1Progress: phase1ProgressDtoSchema,
     canUndo: z.boolean(),
+    lastUndoAction: undoActionSummarySchema.nullable(),
     persistenceFailure: z.string().trim().min(1).nullable()
   })
   .strict();
@@ -836,6 +850,12 @@ export const markSoldRequestSchema = z
   .strict();
 
 export const markUnsoldRequestSchema = z
+  .object({
+    clientCommandId: z.string().trim().min(1)
+  })
+  .strict();
+
+export const undoRequestSchema = z
   .object({
     clientCommandId: z.string().trim().min(1)
   })
@@ -965,6 +985,15 @@ export const markUnsoldResponseSchema = z.union([
   markUnsoldRejectedResponseSchema
 ]);
 
+export const undoResponseSchema = z
+  .object({
+    state: boardStateDtoSchema,
+    result: commandResultSummarySchema.extend({
+      command: z.literal("Undo")
+    })
+  })
+  .strict();
+
 export function deriveSoldRosterRows(
   state: Pick<z.infer<typeof auctionStateSchema>, "players">,
   teamId: string
@@ -1084,9 +1113,13 @@ export type IncreaseBidUndoHistoryEntry = z.infer<
 export type MarkUnsoldUndoHistoryEntry = z.infer<
   typeof markUnsoldUndoHistoryEntrySchema
 >;
+export type MarkSoldUndoHistoryEntry = z.infer<
+  typeof markSoldUndoHistoryEntrySchema
+>;
 export type LiveActionUndoHistoryEntry = z.infer<
   typeof liveActionUndoHistoryEntrySchema
 >;
+export type UndoActionSummary = z.infer<typeof undoActionSummarySchema>;
 export type AuctionState = z.infer<typeof auctionStateSchema>;
 export type Phase1ProgressCategoryDto = z.infer<
   typeof phase1ProgressCategoryDtoSchema
@@ -1123,6 +1156,7 @@ export type MarkSoldRejectedResponse = z.infer<
 >;
 export type MarkSoldResponse = z.infer<typeof markSoldResponseSchema>;
 export type MarkUnsoldRequest = z.infer<typeof markUnsoldRequestSchema>;
+export type UndoRequest = z.infer<typeof undoRequestSchema>;
 export type MarkUnsoldConflictReasonCode = z.infer<
   typeof markUnsoldConflictReasonCodeSchema
 >;
@@ -1133,6 +1167,7 @@ export type MarkUnsoldRejectedResponse = z.infer<
   typeof markUnsoldRejectedResponseSchema
 >;
 export type MarkUnsoldResponse = z.infer<typeof markUnsoldResponseSchema>;
+export type UndoResponse = z.infer<typeof undoResponseSchema>;
 export type SoldRosterRow = z.infer<typeof soldRosterRowSchema>;
 export type ResumeSummary = z.infer<typeof resumeSummarySchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;

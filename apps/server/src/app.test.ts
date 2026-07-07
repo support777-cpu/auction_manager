@@ -1019,6 +1019,213 @@ describe("auction manager event server", () => {
     await app.close();
   });
 
+  it("undoes Mark Sold through the API and returns authoritative board and roster state", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const playerId = revealed.state.currentPlayer.id;
+    const team = revealed.state.teams[0];
+
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/auction/select-team",
+          headers: { "content-type": "application/json" },
+          payload: { clientCommandId: "cmd-select-for-undo-sale", teamId: team.id }
+        })
+      ).statusCode
+    ).toBe(200);
+    const sold = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-sold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-sold-for-undo" }
+    });
+    expect(sold.statusCode).toBe(200);
+    expect(sold.json().state.lastUndoAction).toMatchObject({
+      command: "MarkSold",
+      summary: expect.stringContaining("Undo Mark Sold")
+    });
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-sale" }
+    });
+
+    expect(undo.statusCode).toBe(200);
+    const body = undo.json();
+    expect(body.result).toMatchObject({
+      command: "Undo",
+      clientCommandId: "cmd-undo-sale",
+      message: expect.stringMatching(/^Undid Mark Sold:/)
+    });
+    expect(body.state).toMatchObject({
+      currentPlayer: expect.objectContaining({ id: playerId, status: "Current" }),
+      currentBid: revealed.state.currentBid,
+      selectedTeamId: team.id,
+      canUndo: true,
+      lastUndoAction: {
+        command: "SelectTeam",
+        summary: expect.stringContaining("Undo Select Team")
+      }
+    });
+    expect(body.state.players.find((player: { id: string }) => player.id === playerId))
+      .toMatchObject({
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      });
+    expect(body.state.teams.find((candidate: { id: string }) => candidate.id === team.id))
+      .toMatchObject({
+        remainingBudget: team.remainingBudget,
+        squadCount: team.squadCount,
+        roleCounts: team.roleCounts
+      });
+    expect(
+      body.state.teamRosters.find((candidate: { teamId: string }) => candidate.teamId === team.id)
+        .roster
+    ).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain("private-player@example.com");
+    expect(JSON.stringify(body)).not.toContain("UPI-PRIVATE");
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    expect(repository.listActionLog().at(-1)).toMatchObject({
+      command: "Undo",
+      clientCommandId: "cmd-undo-sale",
+      undoable: false
+    });
+    expect(JSON.parse(repository.listActionLog().at(-1)?.payloadJson ?? "{}"))
+      .toMatchObject({
+        command: "Undo",
+        undoneCommand: "MarkSold",
+        before: {
+          affectedPlayer: {
+            status: "Sold",
+            winningTeamId: team.id,
+            soldPrice: revealed.state.currentBid
+          }
+        },
+        after: {
+          affectedPlayer: {
+            status: "Current",
+            winningTeamId: null,
+            soldPrice: null
+          }
+        }
+      });
+    expect(JSON.parse(await readFile(join(dataDirectory, "snapshots/latest.json"), "utf8")))
+      .toMatchObject({
+        currentPlayerId: playerId,
+        currentBid: revealed.state.currentBid,
+        selectedTeamId: team.id
+      });
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-sale" }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({
+      error: "duplicate_client_command_id"
+    });
+
+    repository.close();
+    await app.close();
+  });
+
+  it("validates Undo content type, request body, inactive auction, empty history, and persistence failure", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+
+    const unsupported = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "text/plain" },
+      payload: "undo"
+    });
+    expect(unsupported.statusCode).toBe(415);
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: {}
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    const inactive = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-inactive" }
+    });
+    expect(inactive.statusCode).toBe(409);
+    expect(inactive.json()).toMatchObject({ error: "auction_not_active" });
+
+    await stageValidSetup(app);
+    const start = await app.inject({
+      method: "POST",
+      url: "/api/auction/start",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-start-for-empty-undo" }
+    });
+    expect(start.statusCode).toBe(200);
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-empty" }
+    });
+    expect(empty.statusCode).toBe(409);
+    expect(empty.json()).toEqual({
+      ok: false,
+      error: "no_actions_to_undo",
+      message: "No actions to undo."
+    });
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    const currentState = repository.loadCurrentState();
+    expect(currentState).not.toBeNull();
+    const database = new Database(join(dataDirectory, "auction.db"));
+    database
+      .prepare("UPDATE auction_state SET persistence_failure = ? WHERE auction_id = ?")
+      .run("snapshot_write_failed", currentState!.auctionId);
+    database.close();
+
+    const persistenceFailure = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-persistence-failure" }
+    });
+    expect(persistenceFailure.statusCode).toBe(409);
+    expect(persistenceFailure.json()).toMatchObject({
+      error: "persistence_failure_uncleared"
+    });
+
+    repository.close();
+    await app.close();
+  });
+
   it("rejects Mark Sold when clientCommandId already exists in the action log", async () => {
     const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
     const app = await createAuctionManagerServer({
@@ -1280,6 +1487,160 @@ describe("auction manager event server", () => {
     });
 
     repository.close();
+    await app.close();
+  });
+
+  it("undoes Mark Unsold through the API and removes the player from Phase 2 pool without team mutation", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const playerId = revealed.state.currentPlayer.id;
+    const teamsBefore = revealed.state.teams;
+
+    const unsold = await app.inject({
+      method: "POST",
+      url: "/api/auction/mark-unsold",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-mark-unsold-for-undo" }
+    });
+    expect(unsold.statusCode).toBe(200);
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-unsold" }
+    });
+
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json()).toMatchObject({
+      result: {
+        command: "Undo",
+        message: expect.stringMatching(/^Undid Mark Unsold:/)
+      },
+      state: {
+        currentPlayer: expect.objectContaining({ id: playerId, status: "Current" }),
+        phase2PoolCount: 0
+      }
+    });
+    expect(
+      undo.json().state.teams.map(
+        (team: {
+          id: string;
+          remainingBudget: number;
+          squadCount: number;
+          roleCounts: Record<string, number>;
+        }) => ({
+          id: team.id,
+          remainingBudget: team.remainingBudget,
+          squadCount: team.squadCount,
+          roleCounts: team.roleCounts
+        })
+      )
+    ).toEqual(
+      teamsBefore.map(
+        (team: {
+          id: string;
+          remainingBudget: number;
+          squadCount: number;
+          roleCounts: Record<string, number>;
+        }) => ({
+          id: team.id,
+          remainingBudget: team.remainingBudget,
+          squadCount: team.squadCount,
+          roleCounts: team.roleCounts
+        })
+      )
+    );
+
+    const repository = createAuctionRepository({
+      databasePath: join(dataDirectory, "auction.db"),
+      snapshotPath: join(dataDirectory, "snapshots/latest.json")
+    });
+    expect(repository.listActionLog().at(-1)).toMatchObject({
+      command: "Undo",
+      clientCommandId: "cmd-undo-unsold",
+      undoable: false
+    });
+    expect(JSON.parse(repository.listActionLog().at(-1)?.payloadJson ?? "{}"))
+      .toMatchObject({
+        command: "Undo",
+        undoneCommand: "MarkUnsold",
+        before: {
+          affectedPlayer: {
+            status: "Unsold"
+          },
+          phase2Pool: [playerId]
+        },
+        after: {
+          affectedPlayer: {
+            status: "Current"
+          },
+          phase2Pool: []
+        }
+      });
+    expect(JSON.parse(await readFile(join(dataDirectory, "snapshots/latest.json"), "utf8")))
+      .toMatchObject({
+        currentPlayerId: playerId,
+        phase2Pool: []
+      });
+    repository.close();
+
+    await app.close();
+  });
+
+  it("undoes Increase Bid through the API and restores the previous bid", async () => {
+    const dataDirectory = await mkdtemp(join(tmpdir(), "auction-manager-data-"));
+    const app = await createAuctionManagerServer({
+      webDistPath: await createWebDistFixture(),
+      dataDirectory
+    });
+    await stageValidSetup(app);
+    const revealed = await startAndReveal(app);
+    const previousBid = revealed.state.currentBid;
+
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/auction/increase-bid",
+          headers: { "content-type": "application/json" },
+          payload: { clientCommandId: "cmd-increase-for-undo" }
+        })
+      ).statusCode
+    ).toBe(200);
+    const increased = await app.inject({
+      method: "GET",
+      url: "/api/state"
+    });
+    expect(increased.json().state.currentBid).toBeGreaterThan(previousBid);
+
+    const undo = await app.inject({
+      method: "POST",
+      url: "/api/auction/undo",
+      headers: { "content-type": "application/json" },
+      payload: { clientCommandId: "cmd-undo-increase" }
+    });
+
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json()).toMatchObject({
+      result: {
+        command: "Undo",
+        message: expect.stringMatching(/^Undid Increase Bid:/)
+      },
+      state: {
+        currentBid: previousBid,
+        canUndo: true,
+        lastUndoAction: {
+          command: "RevealNextPlayer"
+        }
+      }
+    });
+
     await app.close();
   });
 

@@ -15,6 +15,8 @@ import {
   markUnsoldRejectedResponseSchema,
   markUnsoldRequestSchema,
   markUnsoldResponseSchema,
+  undoRequestSchema,
+  undoResponseSchema,
   revealNextPlayerRequestSchema,
   revealNextPlayerResponseSchema,
   resumeSummarySchema,
@@ -227,6 +229,18 @@ describe("auction state contracts", () => {
     ).toBe(false);
   });
 
+  it("requires a strict clientCommandId request for Undo", () => {
+    expect(undoRequestSchema.safeParse({ clientCommandId: "cmd-undo-1" }).success)
+      .toBe(true);
+    expect(undoRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      undoRequestSchema.safeParse({
+        clientCommandId: "cmd-undo-1",
+        sourceFilename: "private.csv"
+      }).success
+    ).toBe(false);
+  });
+
   it("validates strict Mark Unsold rejected responses", () => {
     expect(
       markUnsoldRejectedResponseSchema.safeParse({
@@ -425,6 +439,26 @@ describe("auction state contracts", () => {
     expect(
       boardStateDtoSchema.safeParse({
         ...state,
+        canUndo: true,
+        lastUndoAction: {
+          command: "MarkSold",
+          summary: "Undo Mark Sold: Aarav Menon."
+        }
+      }).success
+    ).toBe(true);
+    expect(
+      boardStateDtoSchema.safeParse({
+        ...state,
+        lastUndoAction: {
+          command: "MarkSold",
+          summary: "Undo Mark Sold: Aarav Menon.",
+          sourceRowNumber: 2
+        }
+      }).success
+    ).toBe(false);
+    expect(
+      boardStateDtoSchema.safeParse({
+        ...state,
         players: [
           {
             ...state.players[0],
@@ -604,6 +638,43 @@ describe("auction state contracts", () => {
         }
       }).success
     ).toBe(true);
+  });
+
+  it("validates Undo response shape", () => {
+    expect(
+      undoResponseSchema.safeParse({
+        state: {
+          ...createBoardState(),
+          canUndo: true,
+          lastUndoAction: {
+            command: "IncreaseBid",
+            summary: "Undo Increase Bid: Aarav Menon back to 10."
+          }
+        },
+        result: {
+          command: "Undo",
+          clientCommandId: "cmd-undo-1",
+          message: "Undid Increase Bid: Aarav Menon."
+        }
+      }).success
+    ).toBe(true);
+    expect(
+      undoResponseSchema.safeParse({
+        state: {
+          ...createBoardState(),
+          lastUndoAction: {
+            command: "IncreaseBid",
+            summary: "Undo Increase Bid: Aarav Menon back to 10.",
+            paymentTransactionId: "UPI-PRIVATE"
+          }
+        },
+        result: {
+          command: "Undo",
+          clientCommandId: "cmd-undo-1",
+          message: "Undid Increase Bid: Aarav Menon."
+        }
+      }).success
+    ).toBe(false);
   });
 
   it("validates Select Team response shape with capacity and rejects private fields", () => {
@@ -1296,6 +1367,7 @@ function createBoardState() {
       ]
     },
     canUndo: false,
+    lastUndoAction: null,
     persistenceFailure: null
   } as const;
 }

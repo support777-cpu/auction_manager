@@ -7,6 +7,7 @@ import {
   FileWarning,
   ListChecks,
   PlayCircle,
+  RotateCcw,
   Upload
 } from "lucide-react";
 import {
@@ -26,6 +27,7 @@ import {
   revealNextPlayerResponseSchema,
   selectTeamResponseSchema,
   startAuctionResponseSchema,
+  undoResponseSchema,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
   type PlayerPhotoReviewResponse,
@@ -50,6 +52,7 @@ import {
   canRevealNextPlayer,
   canIncreaseBid,
   canSelectTeam,
+  canUndo,
   getPhase1OrderStatusLabel,
   isEditableShortcutTarget
 } from "./auction-board-helpers.js";
@@ -121,7 +124,10 @@ function App() {
   const markSoldInFlightRef = useRef(false);
   const markUnsoldGenerationRef = useRef(0);
   const markUnsoldInFlightRef = useRef(false);
+  const undoGenerationRef = useRef(0);
+  const undoInFlightRef = useRef(false);
   const handleIncreaseBidRef = useRef<() => Promise<void>>(async () => {});
+  const handleUndoRef = useRef<() => Promise<void>>(async () => {});
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
   const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
@@ -202,6 +208,11 @@ function App() {
   >("idle");
   const [markUnsoldError, setMarkUnsoldError] = useState<string | null>(null);
   const [markUnsoldSummary, setMarkUnsoldSummary] = useState<string | null>(null);
+  const [undoState, setUndoState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const [undoSummary, setUndoSummary] = useState<string | null>(null);
 
   function clearMarkSoldOutcome() {
     setMarkSoldError(null);
@@ -213,6 +224,12 @@ function App() {
     setMarkUnsoldError(null);
     setMarkUnsoldSummary(null);
     setMarkUnsoldState("idle");
+  }
+
+  function clearUndoOutcome() {
+    setUndoError(null);
+    setUndoSummary(null);
+    setUndoState("idle");
   }
 
   const applyParameterReviewToForm = useCallback(
@@ -814,6 +831,7 @@ function App() {
       setSavedAuction(null);
       clearMarkSoldOutcome();
       clearMarkUnsoldOutcome();
+      clearUndoOutcome();
       setStartAuctionState("ready");
     } catch {
       if (commandGeneration !== startAuctionGenerationRef.current) {
@@ -829,7 +847,9 @@ function App() {
       !boardState ||
       !canRevealNextPlayer(boardState) ||
       revealNextState === "loading" ||
-      revealNextInFlightRef.current
+      revealNextInFlightRef.current ||
+      undoState === "loading" ||
+      undoInFlightRef.current
     ) {
       return;
     }
@@ -866,6 +886,7 @@ function App() {
       setBoardState(parsedResponse.data.state);
       clearMarkSoldOutcome();
       clearMarkUnsoldOutcome();
+      clearUndoOutcome();
       setRevealNextState("ready");
     } catch {
       if (commandGeneration !== revealNextGenerationRef.current) {
@@ -886,7 +907,9 @@ function App() {
       !boardState ||
       !canSelectTeam(boardState) ||
       selectTeamState === "loading" ||
-      selectTeamInFlightRef.current
+      selectTeamInFlightRef.current ||
+      undoState === "loading" ||
+      undoInFlightRef.current
     ) {
       return;
     }
@@ -924,6 +947,7 @@ function App() {
       setBoardState(parsedResponse.data.state);
       clearMarkSoldOutcome();
       clearMarkUnsoldOutcome();
+      clearUndoOutcome();
       setSelectTeamState("ready");
     } catch {
       if (commandGeneration !== selectTeamGenerationRef.current) {
@@ -944,7 +968,9 @@ function App() {
       !boardState ||
       !canIncreaseBid(boardState) ||
       increaseBidState === "loading" ||
-      increaseBidInFlightRef.current
+      increaseBidInFlightRef.current ||
+      undoState === "loading" ||
+      undoInFlightRef.current
     ) {
       return;
     }
@@ -981,6 +1007,7 @@ function App() {
       setBoardState(parsedResponse.data.state);
       clearMarkSoldOutcome();
       clearMarkUnsoldOutcome();
+      clearUndoOutcome();
       setIncreaseBidState("ready");
     } catch {
       if (commandGeneration !== increaseBidGenerationRef.current) {
@@ -1001,7 +1028,9 @@ function App() {
       !boardState ||
       !canAttemptMarkSold(boardState) ||
       markSoldState === "loading" ||
-      markSoldInFlightRef.current
+      markSoldInFlightRef.current ||
+      undoState === "loading" ||
+      undoInFlightRef.current
     ) {
       return;
     }
@@ -1097,6 +1126,7 @@ function App() {
         if (acceptedResponse.success) {
           setBoardState(acceptedResponse.data.state);
           clearMarkUnsoldOutcome();
+          clearUndoOutcome();
           setMarkSoldError(null);
           setMarkSoldSummary(acceptedResponse.data.result.message);
           setMarkSoldState("ready");
@@ -1127,7 +1157,9 @@ function App() {
       !boardState ||
       !canAttemptMarkUnsold(boardState) ||
       markUnsoldState === "loading" ||
-      markUnsoldInFlightRef.current
+      markUnsoldInFlightRef.current ||
+      undoState === "loading" ||
+      undoInFlightRef.current
     ) {
       return;
     }
@@ -1187,6 +1219,7 @@ function App() {
         if (acceptedResponse.success) {
           setBoardState(acceptedResponse.data.state);
           clearMarkSoldOutcome();
+          clearUndoOutcome();
           setMarkUnsoldError(null);
           setMarkUnsoldSummary(acceptedResponse.data.result.message);
           setMarkUnsoldState("ready");
@@ -1212,9 +1245,75 @@ function App() {
     }
   }
 
+  handleUndoRef.current = async function handleUndo() {
+    if (
+      !boardState ||
+      !canUndo(boardState) ||
+      undoState === "loading" ||
+      undoInFlightRef.current ||
+      revealNextState === "loading" ||
+      selectTeamState === "loading" ||
+      increaseBidState === "loading" ||
+      markSoldState === "loading" ||
+      markUnsoldState === "loading"
+    ) {
+      return;
+    }
+
+    const commandGeneration = ++undoGenerationRef.current;
+    undoInFlightRef.current = true;
+    setUndoState("loading");
+    setUndoError(null);
+    setUndoSummary(null);
+
+    try {
+      const response = await fetch("/api/auction/undo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          clientCommandId: createClientCommandId("undo")
+        })
+      });
+      const responseBody = await response.json();
+      const parsedResponse = undoResponseSchema.safeParse(responseBody);
+
+      if (commandGeneration !== undoGenerationRef.current) {
+        return;
+      }
+
+      if (response.ok && parsedResponse.success) {
+        setBoardState(parsedResponse.data.state);
+        clearMarkSoldOutcome();
+        clearMarkUnsoldOutcome();
+        setUndoError(null);
+        setUndoSummary(parsedResponse.data.result.message);
+        setUndoState("ready");
+        return;
+      }
+
+      setUndoState("error");
+      setUndoError(readUndoErrorMessage(response, responseBody));
+      await refreshBoardState();
+    } catch {
+      if (commandGeneration !== undoGenerationRef.current) {
+        return;
+      }
+      setUndoState("error");
+      setUndoError("Undo could not be completed. Try again.");
+      await refreshBoardState();
+    } finally {
+      if (commandGeneration === undoGenerationRef.current) {
+        undoInFlightRef.current = false;
+      }
+    }
+  };
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "+") {
+      const shortcut = event.key.toLowerCase();
+      if (event.key !== "+" && shortcut !== "u") {
         return;
       }
 
@@ -1228,12 +1327,16 @@ function App() {
       }
 
       event.preventDefault();
-      void handleIncreaseBidRef.current();
+      if (event.key === "+") {
+        void handleIncreaseBidRef.current();
+        return;
+      }
+      void handleUndoRef.current();
     }
 
-    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown);
     };
   }, []);
 
@@ -1332,6 +1435,9 @@ function App() {
         onMarkUnsold={() => {
           void handleMarkUnsold();
         }}
+        onUndo={() => {
+          void handleUndoRef.current();
+        }}
         increaseBidError={increaseBidError}
         increaseBidState={increaseBidState}
         markSoldError={markSoldError}
@@ -1340,6 +1446,9 @@ function App() {
         markUnsoldError={markUnsoldError}
         markUnsoldState={markUnsoldState}
         markUnsoldSummary={markUnsoldSummary}
+        undoError={undoError}
+        undoState={undoState}
+        undoSummary={undoSummary}
         revealNextError={revealNextError}
         revealNextState={revealNextState}
         selectTeamError={selectTeamError}
@@ -2009,6 +2118,7 @@ function AuctionBoard({
   onIncreaseBid,
   onMarkSold,
   onMarkUnsold,
+  onUndo,
   increaseBidError,
   increaseBidState,
   markSoldError,
@@ -2017,6 +2127,9 @@ function AuctionBoard({
   markUnsoldError,
   markUnsoldState,
   markUnsoldSummary,
+  undoError,
+  undoState,
+  undoSummary,
   revealNextError,
   revealNextState,
   selectTeamError,
@@ -2028,6 +2141,7 @@ function AuctionBoard({
   readonly onIncreaseBid: () => void;
   readonly onMarkSold: () => void;
   readonly onMarkUnsold: () => void;
+  readonly onUndo: () => void;
   readonly increaseBidError: string | null;
   readonly increaseBidState: "idle" | "loading" | "ready" | "error";
   readonly markSoldError: string | null;
@@ -2036,18 +2150,24 @@ function AuctionBoard({
   readonly markUnsoldError: string | null;
   readonly markUnsoldState: "idle" | "loading" | "ready" | "error";
   readonly markUnsoldSummary: string | null;
+  readonly undoError: string | null;
+  readonly undoState: "idle" | "loading" | "ready" | "error";
+  readonly undoSummary: string | null;
   readonly revealNextError: string | null;
   readonly revealNextState: "idle" | "loading" | "ready" | "error";
   readonly selectTeamError: string | null;
   readonly selectTeamState: "idle" | "loading" | "ready" | "error";
 }) {
   const currentPlayer = boardState.currentPlayer;
+  const undoInFlight = undoState === "loading";
   const revealDisabled =
-    !canRevealNextPlayer(boardState) || revealNextState === "loading";
+    !canRevealNextPlayer(boardState) || revealNextState === "loading" || undoInFlight;
   const selectionEnabled =
-    canSelectTeam(boardState) && selectTeamState !== "loading";
+    canSelectTeam(boardState) &&
+    selectTeamState !== "loading" &&
+    !undoInFlight;
   const increaseBidDisabled =
-    !canIncreaseBid(boardState) || increaseBidState === "loading";
+    !canIncreaseBid(boardState) || increaseBidState === "loading" || undoInFlight;
   const selectedTeam =
     boardState.selectedTeamId === null
       ? null
@@ -2061,9 +2181,18 @@ function AuctionBoard({
   const markSoldDisabled =
     !canAttemptMarkSold(boardState) ||
     markSoldState === "loading" ||
-    markSoldBlockedReasons.length > 0;
+    markSoldBlockedReasons.length > 0 ||
+    undoInFlight;
   const markUnsoldDisabled =
-    !canAttemptMarkUnsold(boardState) || markUnsoldState === "loading";
+    !canAttemptMarkUnsold(boardState) || markUnsoldState === "loading" || undoInFlight;
+  const undoDisabled =
+    !canUndo(boardState) ||
+    undoState === "loading" ||
+    revealNextState === "loading" ||
+    selectTeamState === "loading" ||
+    increaseBidState === "loading" ||
+    markSoldState === "loading" ||
+    markUnsoldState === "loading";
   const showPhase1Complete =
     boardState.phase === "InitialAuction" &&
     boardState.currentPlayer === null &&
@@ -2259,6 +2388,42 @@ function AuctionBoard({
                 >
                   Clear selected Team
                 </button>
+              ) : null}
+            </div>
+            <div className="undo-panel" aria-live="polite">
+              <button
+                aria-busy={undoState === "loading"}
+                aria-label={
+                  boardState.lastUndoAction
+                    ? boardState.lastUndoAction.summary
+                    : "No actions to undo."
+                }
+                className={
+                  undoDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="undo-action"
+                disabled={undoDisabled}
+                onClick={onUndo}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" size={18} />
+                <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
+              </button>
+              <p className="undo-summary" data-testid="undo-summary">
+                {boardState.lastUndoAction?.summary ?? "No actions to undo."}
+              </p>
+              {undoError ? (
+                <p className="command-error" data-testid="undo-error" role="alert">
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{undoError}</span>
+                </p>
+              ) : null}
+              {undoSummary ? (
+                <p className="undo-success" data-testid="undo-success" role="status">
+                  {undoSummary}
+                </p>
               ) : null}
             </div>
             {revealNextError ? (
@@ -2798,6 +2963,23 @@ function readMarkUnsoldErrorMessage(response: Response, body: unknown): string {
   return "Mark Unsold could not be completed. Try again.";
 }
 
+function readUndoErrorMessage(response: Response, body: unknown): string {
+  if (
+    body &&
+    typeof body === "object" &&
+    "message" in body &&
+    typeof body.message === "string"
+  ) {
+    return body.message;
+  }
+
+  if (response.status === 409) {
+    return "Undo is blocked by the current auction state.";
+  }
+
+  return "Undo could not be completed. Try again.";
+}
+
 function formatPhaseLabel(phase: string): string {
   return phase.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
@@ -2811,7 +2993,14 @@ function formatCommandLabel(command: string | null): string {
 }
 
 function createClientCommandId(
-  command: "start" | "reveal" | "select" | "increase" | "mark-sold" | "mark-unsold"
+  command:
+    | "start"
+    | "reveal"
+    | "select"
+    | "increase"
+    | "mark-sold"
+    | "mark-unsold"
+    | "undo"
 ): string {
   if ("crypto" in window && "randomUUID" in window.crypto) {
     return `${command}_${window.crypto.randomUUID()}`;

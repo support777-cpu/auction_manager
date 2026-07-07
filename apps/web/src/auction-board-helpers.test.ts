@@ -7,6 +7,7 @@ import {
   canAttemptMarkSold,
   canAttemptMarkUnsold,
   canIncreaseBid,
+  canUndo,
   canSelectTeam,
   canRevealNextPlayer,
   getPhase1OrderStatusLabel,
@@ -49,6 +50,7 @@ function createBoardState(
     teams: [],
     teamRosters: [],
     canUndo: false,
+    lastUndoAction: null,
     phase1Progress: {
       orderedPlayerCount: 8,
       pendingPlayerCount: 8,
@@ -345,6 +347,29 @@ describe("auction board helpers", () => {
       canAttemptMarkUnsold(
         createBoardState({
           currentPlayer,
+          persistenceFailure: "snapshot_write_failed"
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("enables Undo only when history exists and persistence is healthy", () => {
+    expect(
+      canUndo(
+        createBoardState({
+          canUndo: true,
+          lastUndoAction: {
+            command: "MarkSold",
+            summary: "Undo Mark Sold: Aarav Menon."
+          }
+        })
+      )
+    ).toBe(true);
+    expect(canUndo(createBoardState({ canUndo: false }))).toBe(false);
+    expect(
+      canUndo(
+        createBoardState({
+          canUndo: true,
           persistenceFailure: "snapshot_write_failed"
         })
       )

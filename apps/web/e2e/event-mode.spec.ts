@@ -369,6 +369,54 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
   await expect(page.getByTestId("selected-team")).toContainText("None");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
+  await expect(page.getByTestId("undo-summary")).toContainText("Undo Mark Sold");
+
+  await page.getByTestId("undo-action").click();
+  await expect(page.getByTestId("undo-success")).toHaveText(
+    "Undid Mark Sold: Aarav Menon."
+  );
+  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("current-bid")).toHaveText("20");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "200"
+  );
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "0"
+  );
+  const undoAfterSaleState = await request.get("/api/state");
+  expect(undoAfterSaleState.status()).toBe(200);
+  const undoAfterSaleJson = await undoAfterSaleState.json();
+  expect(undoAfterSaleJson.resume).toMatchObject({
+    lastSavedAction: "Undo",
+    currentPlayerName: "Aarav Menon",
+    persistenceFailure: null
+  });
+  expect(undoAfterSaleJson.state.teamRosters[0].roster).toEqual([]);
+  expect(undoAfterSaleJson.state.players[0]).toMatchObject({
+    name: "Aarav Menon",
+    status: "Current",
+    soldPrice: null,
+    winningTeamId: null,
+    acquisitionType: null
+  });
+  expect(undoAfterSaleJson.state.teams[0]).toMatchObject({
+    remainingBudget: 200,
+    squadCount: 0
+  });
+
+  await page.reload();
+  await resumeSavedAuction(page);
+  await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("current-bid")).toHaveText("20");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await page.getByTestId("mark-sold").click();
+  await expect(page.getByTestId("mark-sold-success")).toHaveText(
+    "Sold Aarav Menon to Falcons for 20."
+  );
+  await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
+    "180"
+  );
 
   await page.getByTestId("reveal-next").click();
   await expect(page.getByTestId("current-player-name")).toBeVisible();
@@ -498,6 +546,55 @@ test("reviews and saves auction parameters before starting the auction", async (
     "No Current Player"
   );
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
+  await expect(page.getByTestId("undo-summary")).toContainText("Undo Mark Unsold");
+
+  await page.keyboard.press("u");
+  await expect(page.getByTestId("undo-success")).toHaveText(
+    new RegExp(`Undid Mark Unsold: ${secondPlayerName.trim()}\\.`)
+  );
+  await expect(page.getByTestId("current-player-name")).toContainText(
+    secondPlayerName
+  );
+  await expect(page.getByTestId("current-bid")).toHaveText(blockedBid ?? "");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
+    "Unsold (Phase 2 rebid): 0"
+  );
+  await expect(falconsTile).toContainText("180");
+  await expect(falconsTile).toContainText("1");
+
+  const undoAfterUnsoldState = await request.get("/api/state");
+  expect(undoAfterUnsoldState.status()).toBe(200);
+  const undoAfterUnsoldJson = await undoAfterUnsoldState.json();
+  expect(undoAfterUnsoldJson.resume).toMatchObject({
+    lastSavedAction: "Undo",
+    currentPlayerName: secondPlayerName.trim(),
+    persistenceFailure: null
+  });
+  expect(undoAfterUnsoldJson.state.phase2PoolCount).toBe(0);
+  expect(
+    undoAfterUnsoldJson.state.players.find(
+      (player: { name: string }) => player.name === secondPlayerName.trim()
+    )
+  ).toMatchObject({
+    status: "Current",
+    soldPrice: null,
+    winningTeamId: null,
+    acquisitionType: null
+  });
+
+  await page.reload();
+  await resumeSavedAuction(page);
+  await expect(page.getByTestId("current-player-name")).toContainText(
+    secondPlayerName
+  );
+  await page.getByTestId("mark-unsold").click();
+  await expect(page.getByTestId("mark-unsold-success")).toHaveText(
+    /Marked unsold\..+ moves to Phase 2 rebid\./
+  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
+    "Unsold (Phase 2 rebid): 1"
+  );
 
   for (let playerIndex = 0; playerIndex < 6; playerIndex += 1) {
     await page.getByTestId("reveal-next").click();

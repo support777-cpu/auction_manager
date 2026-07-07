@@ -54,6 +54,12 @@ export {
   type MarkUnsoldResult
 } from "./mark-unsold.js";
 export {
+  undoLastAction,
+  type UndoLastActionErrorCode,
+  type UndoLastActionInput,
+  type UndoLastActionResult
+} from "./undo.js";
+export {
   createPhase1Order,
   type CreatePhase1OrderError,
   type CreatePhase1OrderInput,

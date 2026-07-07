@@ -56,3 +56,8 @@
 - `deriveSoldRosterRows` silently omits or throws on corrupt sold-player rows — corrupt-row hardening is cross-cutting data-integrity work
 - No in-app discard path when saved auction state is unrecoverable — Reset/Close belong to later stories
 - E2E coverage for persistence-failure resume blocking — component and API tests cover the operator path for this story
+
+## Deferred from: code review of 2-9-undo-phase-1-live-actions (2026-07-08)
+
+- Concurrent undo requests can race like other live commands — single-writer pattern matches Stories 2.2–2.8 until optimistic concurrency lands
+- E2E undo flow does not assert action log or snapshot files — API and repository tests cover audit/snapshot evidence for this story

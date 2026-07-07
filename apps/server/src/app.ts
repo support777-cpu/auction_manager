@@ -11,6 +11,7 @@ import {
   revealNextPlayer,
   selectTeam,
   startAuctionFromSetup,
+  undoLastAction,
   validateAuctionParametersForSetup,
   type AuctionParameterSetupContext
 } from "@auction-manager/domain";
@@ -39,8 +40,11 @@ import {
   revealNextPlayerRequestSchema,
   selectTeamRequestSchema,
   startAuctionRequestSchema,
+  undoRequestSchema,
+  undoResponseSchema,
   type AuctionState,
   type BoardStateDto,
+  type LiveActionUndoHistoryEntry,
   type ResumeSummary
 } from "@auction-manager/shared";
 import {
@@ -1201,6 +1205,133 @@ export async function createAuctionManagerServer(
     return reply.code(200).send(acceptedPayload.data);
   });
 
+  app.post("/api/auction/undo", async (request, reply) => {
+    if (!isJsonContentType(request.headers["content-type"])) {
+      return reply.code(415).send({
+        ok: false,
+        error: "unsupported_content_type",
+        message: "Undo as application/json."
+      });
+    }
+
+    const parsedRequest = undoRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: "invalid_request",
+        message: "Undo requires clientCommandId."
+      });
+    }
+
+    const currentState = auctionRepository.loadCurrentState();
+    if (!currentState) {
+      return reply.code(409).send({
+        ok: false,
+        error: "auction_not_active",
+        message: "Start an auction before using Undo."
+      });
+    }
+
+    if (currentState.persistenceFailure) {
+      return reply.code(409).send({
+        ok: false,
+        error: "persistence_failure_uncleared",
+        message: "Resolve local persistence recovery before using Undo."
+      });
+    }
+
+    if (
+      auctionRepository
+        .listActionLog()
+        .some(
+          (entry) => entry.clientCommandId === parsedRequest.data.clientCommandId
+        )
+    ) {
+      return reply.code(409).send({
+        ok: false,
+        error: "duplicate_client_command_id",
+        message: "Undo was already submitted with this command id."
+      });
+    }
+
+    const result = undoLastAction({
+      state: currentState,
+      now: () => new Date().toISOString()
+    });
+
+    if (!result.ok) {
+      return reply.code(409).send({
+        ok: false,
+        error: result.error,
+        message: result.message
+      });
+    }
+
+    try {
+      await auctionRepository.commitUndo({
+        previousState: currentState,
+        state: result.state,
+        clientCommandId: parsedRequest.data.clientCommandId,
+        summary: result.message,
+        undoneAction: result.undoneAction
+      });
+    } catch (error) {
+      if (error instanceof DuplicateClientCommandError) {
+        return reply.code(409).send({
+          ok: false,
+          error: "duplicate_client_command_id",
+          message: "Undo was already submitted with this command id."
+        });
+      }
+
+      if (error instanceof PersistenceSnapshotWriteError) {
+        return reply.code(500).send({
+          ok: false,
+          error: "snapshot_write_failed",
+          message: "Undo was saved, but the latest snapshot could not be written."
+        });
+      }
+
+      if (
+        error instanceof Error &&
+        (error.message.includes("does not match the previous last undo entry") ||
+          error.message.includes("Undo commit must remove exactly one undo history entry"))
+      ) {
+        return reply.code(409).send({
+          ok: false,
+          error: "stale_undo_state",
+          message: "Undo is no longer valid. Refresh and try again."
+        });
+      }
+
+      request.log.error(error);
+      return reply.code(500).send({
+        ok: false,
+        error: "persistence_failed",
+        message: "Undo could not be saved. Try again."
+      });
+    }
+
+    const acceptedPayload = undoResponseSchema.safeParse({
+      state: toBoardStateDto(result.state),
+      result: {
+        command: "Undo",
+        clientCommandId: parsedRequest.data.clientCommandId,
+        message: result.message
+      }
+    });
+    if (!acceptedPayload.success) {
+      request.log.error(acceptedPayload.error);
+      return reply.code(500).send({
+        ok: false,
+        error: "internal_error",
+        message: "Undo response could not be built."
+      });
+    }
+
+    return reply.code(200).send(acceptedPayload.data);
+  });
+
   await app.register(async (setupRoutes) => {
     await setupRoutes.register(fastifyMultipart, {
       limits: {
@@ -1631,8 +1762,60 @@ function toBoardStateDto(state: AuctionState): BoardStateDto {
     phase2PoolCount: new Set(state.phase2Pool).size,
     phase1Progress: toPhase1ProgressDto(state),
     canUndo: state.undoHistory.length > 0,
+    lastUndoAction: toLastUndoActionSummary(state),
     persistenceFailure: state.persistenceFailure
   };
+}
+
+function toLastUndoActionSummary(
+  state: AuctionState
+): BoardStateDto["lastUndoAction"] {
+  const action = state.undoHistory.at(-1);
+  if (!action) {
+    return null;
+  }
+
+  return {
+    command: action.command,
+    summary: getUndoActionSummary(state, action)
+  };
+}
+
+function getUndoActionSummary(
+  state: AuctionState,
+  action: LiveActionUndoHistoryEntry
+): string {
+  const player =
+    "playerId" in action
+      ? state.players.find((candidate) => candidate.id === action.playerId)
+      : state.players.find((candidate) => candidate.id === action.currentPlayerId);
+  const playerName = player?.name ?? "Player";
+
+  switch (action.command) {
+    case "RevealNextPlayer":
+      return `Undo Reveal Next Player: ${playerName}.`;
+    case "SelectTeam": {
+      const team =
+        action.nextSelectedTeamId === null
+          ? null
+          : state.teams.find((candidate) => candidate.id === action.nextSelectedTeamId);
+      return team
+        ? `Undo Select Team: ${playerName} -> ${team.name}.`
+        : `Undo Select Team: ${playerName}.`;
+    }
+    case "IncreaseBid":
+      return `Undo Increase Bid: ${playerName} back to ${action.previousCurrentBid}.`;
+    case "MarkSold": {
+      const team = state.teams.find(
+        (candidate) => candidate.id === action.winningTeamId
+      );
+      return `Undo Mark Sold: ${playerName}${team ? ` -> ${team.name}` : ""}, ${action.soldPrice}.`;
+    }
+    case "MarkUnsold":
+      return `Undo Mark Unsold: ${playerName}.`;
+    default:
+      return "Undo last action.";
+  }
 }
 
 function toResumeSummary(

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import {
   auctionStateBaseSchema,
   auctionStateSchema,
+  type LiveActionUndoHistoryEntry,
   type AuctionState
 } from "@auction-manager/shared";
 import { createPhase1Order } from "@auction-manager/domain";
@@ -65,6 +66,14 @@ export interface CommitMarkUnsoldInput {
   readonly playerId: string;
 }
 
+export interface CommitUndoInput {
+  readonly previousState: AuctionState;
+  readonly state: AuctionState;
+  readonly clientCommandId: string;
+  readonly summary: string;
+  readonly undoneAction: LiveActionUndoHistoryEntry;
+}
+
 export interface ActionLogEntry {
   readonly actionId: number;
   readonly auctionId: string;
@@ -74,7 +83,8 @@ export interface ActionLogEntry {
     | "SelectTeam"
     | "IncreaseBid"
     | "MarkSold"
-    | "MarkUnsold";
+    | "MarkUnsold"
+    | "Undo";
   readonly clientCommandId: string;
   readonly timestamp: string;
   readonly summary: string;
@@ -98,6 +108,7 @@ export interface AuctionRepository {
   readonly commitIncreaseBid: (input: CommitIncreaseBidInput) => Promise<void>;
   readonly commitMarkSold: (input: CommitMarkSoldInput) => Promise<void>;
   readonly commitMarkUnsold: (input: CommitMarkUnsoldInput) => Promise<void>;
+  readonly commitUndo: (input: CommitUndoInput) => Promise<void>;
   readonly loadCurrentState: () => AuctionState | null;
   readonly getLatestActionSummary: () => LatestActionSummary | null;
   readonly listActionLog: () => readonly ActionLogEntry[];
@@ -605,6 +616,65 @@ export function createAuctionRepository(
     }
   );
 
+  const undoTransaction = database.transaction((input: CommitUndoInput) => {
+    assertMutationsAllowed(database);
+    const duplicateCommand = database
+      .prepare("SELECT 1 AS found FROM action_log WHERE client_command_id = ?")
+      .get(input.clientCommandId) as { found: 1 } | undefined;
+    if (duplicateCommand) {
+      throw new DuplicateClientCommandError(input.clientCommandId);
+    }
+
+    const currentAuction = database
+      .prepare("SELECT auction_id AS auctionId FROM current_auction WHERE singleton = 1")
+      .get() as { auctionId: string } | undefined;
+    if (!currentAuction || currentAuction.auctionId !== input.state.auctionId) {
+      throw new Error("Cannot commit Undo without an active matching auction.");
+    }
+
+    if (
+      input.previousState.undoHistory.at(-1)?.timestamp !==
+        input.undoneAction.timestamp ||
+      input.previousState.undoHistory.at(-1)?.command !== input.undoneAction.command
+    ) {
+      throw new Error("Undo action does not match the previous last undo entry.");
+    }
+
+    if (input.state.undoHistory.length !== input.previousState.undoHistory.length - 1) {
+      throw new Error("Undo commit must remove exactly one undo history entry.");
+    }
+
+    database
+      .prepare(
+        `UPDATE auction_state
+            SET state_json = @stateJson,
+                phase = @phase,
+                updated_at = @updatedAt,
+                persistence_failure = NULL
+          WHERE auction_id = @auctionId`
+      )
+      .run({
+        auctionId: input.state.auctionId,
+        stateJson: JSON.stringify(input.state),
+        phase: input.state.phase,
+        updatedAt: input.state.updatedAt
+      });
+
+    database
+      .prepare(
+        `INSERT INTO action_log
+          (auction_id, command, client_command_id, timestamp, summary, payload_json, undoable)
+          VALUES (?, 'Undo', ?, ?, ?, ?, 0)`
+      )
+      .run(
+        input.state.auctionId,
+        input.clientCommandId,
+        input.state.updatedAt,
+        input.summary,
+        JSON.stringify(createUndoAuditPayload(input))
+      );
+  });
+
   return {
     commitStartAuction: async (input) => {
       const parsed = auctionStateSchema.parse(input.state);
@@ -762,6 +832,32 @@ export function createAuctionRepository(
         );
       }
     },
+    commitUndo: async (input) => {
+      const parsed = auctionStateSchema.parse(input.state);
+      try {
+        undoTransaction({ ...input, state: parsed });
+      } catch (error) {
+        if (isDuplicateClientCommandError(error, input.clientCommandId)) {
+          throw new DuplicateClientCommandError(input.clientCommandId);
+        }
+        throw error;
+      }
+      try {
+        await mkdir(dirname(options.snapshotPath), { recursive: true });
+        await writeFile(options.snapshotPath, JSON.stringify(parsed, null, 2), "utf8");
+      } catch (error) {
+        markPersistenceFailure(
+          database,
+          parsed.auctionId,
+          "snapshot_write_failed",
+          options.snapshotPath
+        );
+        throw new PersistenceSnapshotWriteError(
+          "Undo committed, but latest snapshot could not be written.",
+          { cause: error }
+        );
+      }
+    },
     loadCurrentState: () => loadCurrentState(database, options.snapshotPath),
     getLatestActionSummary: () => getLatestActionSummary(database),
     listActionLog: () => {
@@ -825,6 +921,99 @@ function getLatestActionSummary(
       )
       .get(currentAuctionId.auctionId) as LatestActionSummary | undefined) ?? null
   );
+}
+
+function createUndoAuditPayload(input: CommitUndoInput): Record<string, unknown> {
+  const affectedPlayerId =
+    "playerId" in input.undoneAction
+      ? input.undoneAction.playerId
+      : "currentPlayerId" in input.undoneAction
+        ? input.undoneAction.currentPlayerId
+        : null;
+  const affectedTeamId =
+    input.undoneAction.command === "MarkSold"
+      ? input.undoneAction.winningTeamId
+      : "previousSelectedTeamId" in input.undoneAction
+        ? input.undoneAction.previousSelectedTeamId
+        : null;
+
+  return {
+    command: "Undo",
+    undoneCommand: input.undoneAction.command,
+    previousLastUndoEntry: input.undoneAction,
+    nextUndoSummary: summarizeUndoEntry(input.state.undoHistory.at(-1) ?? null),
+    before: {
+      currentPlayerId: input.previousState.currentPlayerId,
+      currentBid: input.previousState.currentBid,
+      selectedTeamId: input.previousState.selectedTeamId,
+      phase2Pool: input.previousState.phase2Pool,
+      affectedPlayer: summarizePlayer(input.previousState, affectedPlayerId),
+      affectedTeam: summarizeTeam(input.previousState, affectedTeamId)
+    },
+    after: {
+      currentPlayerId: input.state.currentPlayerId,
+      currentBid: input.state.currentBid,
+      selectedTeamId: input.state.selectedTeamId,
+      phase2Pool: input.state.phase2Pool,
+      affectedPlayer: summarizePlayer(input.state, affectedPlayerId),
+      affectedTeam: summarizeTeam(input.state, affectedTeamId)
+    }
+  };
+}
+
+function summarizeUndoEntry(
+  entry: LiveActionUndoHistoryEntry | null
+): { command: LiveActionUndoHistoryEntry["command"]; playerId: string | null } | null {
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    command: entry.command,
+    playerId:
+      "playerId" in entry
+        ? entry.playerId
+        : "currentPlayerId" in entry
+          ? entry.currentPlayerId
+          : null
+  };
+}
+
+function summarizePlayer(state: AuctionState, playerId: string | null) {
+  if (!playerId) {
+    return null;
+  }
+
+  const player = state.players.find((candidate) => candidate.id === playerId);
+  if (!player) {
+    return null;
+  }
+
+  return {
+    id: player.id,
+    status: player.status,
+    soldPrice: player.soldPrice,
+    winningTeamId: player.winningTeamId,
+    acquisitionType: player.acquisitionType
+  };
+}
+
+function summarizeTeam(state: AuctionState, teamId: string | null) {
+  if (!teamId) {
+    return null;
+  }
+
+  const team = state.teams.find((candidate) => candidate.id === teamId);
+  if (!team) {
+    return null;
+  }
+
+  return {
+    id: team.id,
+    remainingBudget: team.remainingBudget,
+    squadCount: team.squadCount,
+    roleCounts: team.roleCounts
+  };
 }
 
 function applySchema(database: Database.Database): void {

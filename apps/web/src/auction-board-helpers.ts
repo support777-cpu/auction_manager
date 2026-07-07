@@ -60,6 +60,10 @@ export function canAttemptMarkUnsold(boardState: BoardStateDto): boolean {
   );
 }
 
+export function canUndo(boardState: BoardStateDto): boolean {
+  return boardState.canUndo && boardState.persistenceFailure === null;
+}
+
 export function isEditableShortcutTarget(target: EventTarget | null): boolean {
   if (typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) {
     return false;
