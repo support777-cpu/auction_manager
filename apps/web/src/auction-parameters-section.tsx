@@ -59,7 +59,6 @@ export function AuctionParametersSection({
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Setup checklist</p>
           <h2 id="auction-parameters-title">Auction Parameters</h2>
         </div>
         <span
@@ -294,12 +293,9 @@ export function AuctionParametersSection({
               <CheckCircle2 aria-hidden="true" size={20} />
               <span>{parameterSaveState === "loading" ? "Saving" : "Save Parameters"}</span>
             </button>
-            <p aria-live="polite">
-              {parameterSaveState === "ready"
-                ? "Auction Parameters saved."
-                : parameterBlockingReasons[0]?.message ??
-                  "Defaults are prefilled and may be saved as-is."}
-            </p>
+            {parameterBlockingReasons[0] ? (
+              <p aria-live="polite">{parameterBlockingReasons[0].message}</p>
+            ) : null}
           </div>
         </>
       ) : null}

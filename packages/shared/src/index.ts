@@ -242,7 +242,7 @@ export const auctionParameterReviewResponseSchema = z
 export const setupReadinessResponseSchema = z
   .object({
     startAuctionBlocked: z.boolean(),
-    primaryBlockerMessage: z.string().trim().min(1),
+    primaryBlockerMessage: z.string().trim(),
     blockerMessages: z.array(z.string().trim().min(1)),
     story16Ready: z.boolean()
   })
@@ -261,6 +261,14 @@ export const setupReadinessResponseSchema = z
         code: "custom",
         path: ["story16Ready"],
         message: "story16Ready requires an unblocked setup state."
+      });
+    }
+
+    if (readiness.startAuctionBlocked && readiness.primaryBlockerMessage.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["primaryBlockerMessage"],
+        message: "primaryBlockerMessage is required when startAuctionBlocked is true."
       });
     }
   });

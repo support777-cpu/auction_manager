@@ -46,7 +46,7 @@ const validTeamReview = {
 
 const ready = {
   startAuctionBlocked: false,
-  primaryBlockerMessage: "Ready: setup prerequisites are valid.",
+  primaryBlockerMessage: "",
   blockerMessages: [],
   story16Ready: true
 } as const;

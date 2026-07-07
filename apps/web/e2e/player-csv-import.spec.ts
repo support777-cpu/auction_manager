@@ -369,9 +369,6 @@ test("uploads Player photos after CSV review without treating missing photos as 
 
   await expect(page.getByTestId("player-photos-summary")).toContainText("1 matched");
   await expect(page.getByTestId("player-photos-summary")).toContainText("1 placeholder");
-  await expect(page.getByTestId("player-photos-summary")).toContainText(
-    "Start Auction is not blocked by missing photos."
-  );
   await expect(page.getByTestId("import-issue-group-can_proceed_with_placeholder")).toContainText(
     "Neha Rao has no matched photo; player placeholder will be used."
   );

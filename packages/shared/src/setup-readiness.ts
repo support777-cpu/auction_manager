@@ -11,8 +11,7 @@ export interface SetupReadinessInput {
   readonly parameterReview: AuctionParameterReviewResponse | null;
 }
 
-const story16ReadyMessage =
-  "Ready: setup prerequisites are valid. Start Auction can begin.";
+const story16ReadyMessage = "";
 
 export function getSetupReadiness(input: SetupReadinessInput): SetupReadinessResponse {
   const blockerMessages: string[] = [];

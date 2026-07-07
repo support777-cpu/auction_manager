@@ -170,9 +170,6 @@ test("uploads Team logos in event mode and keeps missing logos non-blocking", as
   await expect(page.getByTestId("import-issue-group-can_proceed_with_placeholder")).toContainText(
     "Tigers has no matched logo; team placeholder will be used."
   );
-  await expect(page.getByTestId("team-logos-summary")).toContainText(
-    "Start Auction is not blocked by missing logos."
-  );
   await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
   await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/logo/i);
 });
@@ -251,9 +248,6 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("auction-parameters-summary")).toContainText(
     "Increment 5; Team budget 200"
   );
-  await expect(page.getByTestId("start-auction-blocker")).toContainText(
-    "Ready: setup prerequisites are valid. Start Auction can begin."
-  );
   await expect(page.getByTestId("setup-start-auction")).toBeEnabled();
 
   await page.getByTestId("setup-start-auction").click();
@@ -265,5 +259,5 @@ test("reviews and saves auction parameters before starting the auction", async (
   );
   await expect(page.getByTestId("current-bid")).toContainText("No current bid");
   await expect(page.getByTestId("reveal-next")).toBeDisabled();
-  await expect(page.locator("body")).toContainText("4 Teams initialized");
+  await expect(page.locator(".team-board-grid .team-tile")).toHaveCount(4);
 });

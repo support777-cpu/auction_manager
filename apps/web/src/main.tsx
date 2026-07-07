@@ -5,7 +5,6 @@ import {
   Circle,
   FileWarning,
   ListChecks,
-  MonitorDot,
   PlayCircle,
   Upload
 } from "lucide-react";
@@ -470,7 +469,9 @@ function App() {
       setReview(previousReview);
       setPhotoReview(previousPhotoReview);
       setUploadState("error");
-      setUploadError("Player CSV could not be reviewed. Check the file and try again.");
+      setUploadError(
+        "Could not reach the auction server. Start it with `npm run dev:server`, then try again."
+      );
     } finally {
       event.currentTarget.value = "";
     }
@@ -607,7 +608,9 @@ function App() {
       setTeamReview(previousTeamReview);
       setLogoReview(previousLogoReview);
       setTeamUploadState("error");
-      setTeamUploadError("Team CSV could not be reviewed. Check the file and try again.");
+      setTeamUploadError(
+        "Could not reach the auction server. Start it with `npm run dev:server`, then try again."
+      );
     } finally {
       event.currentTarget.value = "";
     }
@@ -812,31 +815,21 @@ function App() {
   return (
     <main className="app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
-        <div>
-          <p className="eyebrow">Local event console</p>
-          <h1 id="app-title">Auction Manager</h1>
-        </div>
-        <div className="runtime-pill" aria-label="Runtime mode">
-          <MonitorDot aria-hidden="true" size={18} />
-          <span>Runs locally on this event PC</span>
-        </div>
+        <h1 id="app-title">Auction Manager</h1>
       </header>
 
       <section className="status-grid" aria-label="Setup status">
         <article>
           <span className="status-label">Current phase</span>
           <strong>Setup</strong>
-          <span>Ready to prepare event inputs.</span>
         </article>
         <article>
           <span className="status-label">Auction state</span>
           <strong>No active auction</strong>
-          <span>Nothing is started, sold, assigned, or persisted yet.</span>
         </article>
         <article>
           <span className="status-label">Server target</span>
           <strong>127.0.0.1</strong>
-          <span>Same-machine operation with no cloud service required.</span>
         </article>
       </section>
 
@@ -866,20 +859,13 @@ function App() {
 
       <section className="setup-panel" data-testid="setup-empty-state">
         <div className="setup-copy">
-          <p className="eyebrow">Setup empty state</p>
           <h2>No auction is loaded</h2>
-          <p>
-            Start setup when the event PC is ready. This shell is prepared for
-            local files and future resume checks without creating auction state
-            in the browser.
-          </p>
         </div>
         <div className="setup-actions" aria-label="Setup actions">
           <button className="primary-action" data-testid="setup-start" type="button">
             <PlayCircle aria-hidden="true" size={20} />
             <span>Start setup</span>
           </button>
-          <p>Resume-ready framing is visible before any import, bidding, or persistence work.</p>
         </div>
       </section>
 
@@ -890,7 +876,6 @@ function App() {
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Setup checklist</p>
             <h2 id="player-csv-title">Player CSV review</h2>
           </div>
           <span className={reviewStatus.className}>
@@ -913,13 +898,11 @@ function App() {
           </label>
           <div className="csv-upload-status" aria-live="polite">
             <strong>{selectedFileName ?? "No file selected"}</strong>
-            <span>
-              {uploadState === "loading"
-                ? "Reviewing Player CSV..."
-                : uploadState === "error"
-                  ? "Upload failed. Fix the file or try again."
-                  : "Source fixes stay in the CSV, then reimport."}
-            </span>
+            {uploadState === "loading" ? (
+              <span>Reviewing Player CSV...</span>
+            ) : uploadState === "error" ? (
+              <span>{uploadError ?? "Upload failed. Fix the file or try again."}</span>
+            ) : null}
           </div>
         </div>
 
@@ -1039,7 +1022,6 @@ function App() {
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Setup checklist</p>
             <h2 id="player-photos-title">Player photos</h2>
           </div>
           <span className={photoReview ? "review-state review-state-ready" : "review-state"}>
@@ -1075,15 +1057,11 @@ function App() {
                 ? `${selectedPhotoFileNames.length} photo file${selectedPhotoFileNames.length === 1 ? "" : "s"} selected`
                 : "No photo files selected"}
             </strong>
-            <span>
-              {photoUploadDisabled
-                ? "Import a valid Player CSV before adding photos."
-                : photoUploadState === "loading"
-                  ? "Reviewing Player photos..."
-                  : photoUploadState === "error"
-                    ? "Photo upload failed. Fix the files or try again."
-                    : "JPEG, PNG, WebP, and HEIC files are accepted where this event PC can decode them."}
-            </span>
+            {photoUploadState === "loading" ? (
+              <span>Reviewing Player photos...</span>
+            ) : photoUploadState === "error" ? (
+              <span>Photo upload failed. Fix the files or try again.</span>
+            ) : null}
           </div>
         </div>
 
@@ -1106,11 +1084,6 @@ function App() {
               {(photoReview?.summary.placeholderPhotos ?? 0) === 1 ? "placeholder" : "placeholders"}
             </strong>
           </article>
-          <article className="neutral-summary">
-            <span className="status-label">Auction readiness</span>
-            <strong>Photos are non-blocking</strong>
-            <span>Start Auction is not blocked by missing photos.</span>
-          </article>
         </div>
       </section>
 
@@ -1121,7 +1094,6 @@ function App() {
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Setup checklist</p>
             <h2 id="team-csv-title">Team CSV review</h2>
           </div>
           <span className={teamReviewStatus.className}>
@@ -1144,13 +1116,11 @@ function App() {
           </label>
           <div className="csv-upload-status" aria-live="polite">
             <strong>{selectedTeamFileName ?? "No file selected"}</strong>
-            <span>
-              {teamUploadState === "loading"
-                ? "Reviewing Team CSV..."
-                : teamUploadState === "error"
-                  ? "Upload failed. Fix the file or try again."
-                  : "Team and Captain fixes stay in the CSV, then reimport."}
-            </span>
+            {teamUploadState === "loading" ? (
+              <span>Reviewing Team CSV...</span>
+            ) : teamUploadState === "error" ? (
+              <span>{teamUploadError ?? "Upload failed. Fix the file or try again."}</span>
+            ) : null}
           </div>
         </div>
 
@@ -1220,7 +1190,6 @@ function App() {
       >
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Setup checklist</p>
             <h2 id="team-logos-title">Team logos</h2>
           </div>
           <span className={logoReview ? "review-state review-state-ready" : "review-state"}>
@@ -1256,15 +1225,11 @@ function App() {
                 ? `${selectedLogoFileNames.length} logo file${selectedLogoFileNames.length === 1 ? "" : "s"} selected`
                 : "No logo files selected"}
             </strong>
-            <span>
-              {logoUploadDisabled
-                ? "Import a valid Team CSV before adding logos."
-                : logoUploadState === "loading"
-                  ? "Reviewing Team logos..."
-                  : logoUploadState === "error"
-                    ? "Logo upload failed. Fix the files or try again."
-                    : "JPEG, PNG, WebP, and HEIC files are accepted where this event PC can decode them."}
-            </span>
+            {logoUploadState === "loading" ? (
+              <span>Reviewing Team logos...</span>
+            ) : logoUploadState === "error" ? (
+              <span>Logo upload failed. Fix the files or try again.</span>
+            ) : null}
           </div>
         </div>
 
@@ -1286,11 +1251,6 @@ function App() {
               {logoReview?.summary.placeholderLogos ?? 0}{" "}
               {(logoReview?.summary.placeholderLogos ?? 0) === 1 ? "placeholder" : "placeholders"}
             </strong>
-          </article>
-          <article className="neutral-summary">
-            <span className="status-label">Auction readiness</span>
-            <strong>Logos are non-blocking</strong>
-            <span>Start Auction is not blocked by missing logos.</span>
           </article>
         </div>
       </section>
@@ -1346,7 +1306,9 @@ function App() {
 
       <div className="start-auction-row">
         <div>
-          <p data-testid="start-auction-blocker">{blockerText}</p>
+          {blockerText ? (
+            <p data-testid="start-auction-blocker">{blockerText}</p>
+          ) : null}
           {startAuctionError ? (
             <p className="csv-error" role="alert">
               <FileWarning aria-hidden="true" size={18} />
@@ -1381,38 +1343,29 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
   return (
     <main className="app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
-        <div>
-          <p className="eyebrow">Local event console</p>
-          <h1 id="app-title">Auction Manager</h1>
-        </div>
-        <div className="runtime-pill" aria-label="Runtime mode">
-          <MonitorDot aria-hidden="true" size={18} />
-          <span>Runs locally on this event PC</span>
-        </div>
+        <h1 id="app-title">Auction Manager</h1>
       </header>
 
       <section className="status-grid" aria-label="Auction status">
         <article>
           <span className="status-label">Current phase</span>
           <strong>Initial Auction</strong>
-          <span>No Player has been revealed yet.</span>
         </article>
         <article>
           <span className="status-label">Auction state</span>
           <strong>{boardState.players.length} pending</strong>
-          <span>{boardState.teams.length} Teams initialized.</span>
         </article>
         <article>
-          <span className="status-label">Recovery</span>
-          <strong>
-            {boardState.persistenceFailure ? "Snapshot warning" : "Saved locally"}
-          </strong>
-          <span>
-            {boardState.persistenceFailure
-              ? "Auction started, but the local recovery snapshot could not be written."
-              : "This event PC can resume the started auction."}
-          </span>
+          <span className="status-label">Teams</span>
+          <strong>{boardState.teams.length}</strong>
         </article>
+        {boardState.persistenceFailure ? (
+          <article>
+            <span className="status-label">Recovery</span>
+            <strong>Snapshot warning</strong>
+            <span>Auction started, but the local recovery snapshot could not be written.</span>
+          </article>
+        ) : null}
       </section>
 
       <section
@@ -1446,9 +1399,7 @@ function AuctionBoard({ boardState }: { readonly boardState: BoardStateDto }) {
             data-testid="current-player-panel"
             aria-labelledby="current-player-title"
           >
-            <p className="eyebrow">Current Player</p>
             <h2 id="current-player-title">No Current Player</h2>
-            <p>Reveal Next Player is the safe next action.</p>
           </section>
 
           <section className="bid-panel" aria-label="Current bid">
@@ -1509,17 +1460,51 @@ if (!root) {
 
 createRoot(root).render(<App />);
 
+async function readApiErrorMessage(
+  response: Response,
+  options: {
+    fallback: string;
+    serverUnavailable?: string;
+  }
+): Promise<string> {
+  if (response.status === 502 || response.status === 503 || response.status === 504) {
+    return (
+      options.serverUnavailable ??
+      "Could not reach the auction server. Start it with `npm run dev:server`, then try again."
+    );
+  }
+
+  const body = (await response.json().catch(() => null)) as { message?: string } | null;
+
+  if (body?.message) {
+    return body.message;
+  }
+
+  return options.fallback;
+}
+
 async function readUploadErrorMessage(response: Response): Promise<string> {
   if (response.status === 413) {
     return "Player CSV exceeds the 256 KB upload limit.";
   }
 
   if (response.status === 415) {
-    const body = (await response.json().catch(() => null)) as { message?: string } | null;
-    return body?.message ?? "Upload the Player CSV as text/csv.";
+    return readApiErrorMessage(response, {
+      fallback: "Upload the Player CSV as text/csv."
+    });
   }
 
-  return "Player CSV could not be reviewed. Check the file and try again.";
+  if (response.status === 409) {
+    return readApiErrorMessage(response, {
+      fallback: "Setup is locked because the auction has started."
+    });
+  }
+
+  return readApiErrorMessage(response, {
+    fallback: "Player CSV could not be reviewed. Check the file and try again.",
+    serverUnavailable:
+      "Could not reach the auction server. Start it with `npm run dev:server`, then try again."
+  });
 }
 
 async function readPhotoUploadErrorMessage(response: Response): Promise<string> {
@@ -1545,11 +1530,22 @@ async function readTeamUploadErrorMessage(response: Response): Promise<string> {
   }
 
   if (response.status === 415) {
-    const body = (await response.json().catch(() => null)) as { message?: string } | null;
-    return body?.message ?? "Upload the Team CSV as text/csv.";
+    return readApiErrorMessage(response, {
+      fallback: "Upload the Team CSV as text/csv."
+    });
   }
 
-  return "Team CSV could not be reviewed. Check the file and try again.";
+  if (response.status === 409) {
+    return readApiErrorMessage(response, {
+      fallback: "Setup is locked because the auction has started."
+    });
+  }
+
+  return readApiErrorMessage(response, {
+    fallback: "Team CSV could not be reviewed. Check the file and try again.",
+    serverUnavailable:
+      "Could not reach the auction server. Start it with `npm run dev:server`, then try again."
+  });
 }
 
 async function readLogoUploadErrorMessage(response: Response): Promise<string> {

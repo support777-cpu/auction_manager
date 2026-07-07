@@ -11,5 +11,4 @@ test("opens the setup-ready app shell", async ({ page }) => {
     "data-testid",
     "setup-start"
   );
-  await expect(page.getByText("Runs locally on this event PC")).toBeVisible();
 });
