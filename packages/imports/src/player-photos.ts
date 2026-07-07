@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   importIssueSeverityValues,
@@ -9,7 +7,12 @@ import {
   type PlayerPhotoMatchRecord,
   type PlayerPhotoReviewResponse
 } from "@auction-manager/shared";
-import sharp from "sharp";
+import {
+  normalizeAndStoreMedia,
+  normalizeMatchText,
+  stripExtension,
+  uniqueCandidates
+} from "./media-matching.js";
 import type { PlayerSetupStagingRecord } from "./player-csv.js";
 
 export const supportedPlayerPhotoFormatValues = ["jpeg", "png", "webp", "heic"] as const;
@@ -102,10 +105,12 @@ export async function matchPlayerPhotosForSetup({
     }
 
     const assetId = generateAssetId(player.player);
-    const stored = await normalizeAndStorePhoto({
+    const stored = await normalizeAndStoreMedia({
       file: matchedFile,
       assetDirectory,
-      assetId
+      assetId,
+      decodeFailureCode: "photo_not_decodable",
+      storageFailureCode: "photo_storage_failed"
     });
 
     if (stored.ok) {
@@ -178,40 +183,6 @@ function findCandidates(
   );
 }
 
-async function normalizeAndStorePhoto({
-  file,
-  assetDirectory,
-  assetId
-}: {
-  file: UploadedPlayerPhotoDescriptor;
-  assetDirectory: string;
-  assetId: string;
-}): Promise<{ ok: true } | { ok: false; code: "photo_not_decodable" | "photo_storage_failed" }> {
-  let normalizedPhoto: Buffer;
-  try {
-    normalizedPhoto = await sharp(file.content, { failOn: "error" })
-      .rotate()
-      .resize({
-        width: 512,
-        height: 512,
-        fit: "inside",
-        withoutEnlargement: true
-      })
-      .webp()
-      .toBuffer();
-  } catch {
-    return { ok: false, code: "photo_not_decodable" };
-  }
-
-  try {
-    await mkdir(assetDirectory, { recursive: true });
-    await writeFile(join(assetDirectory, `${assetId}.webp`), normalizedPhoto);
-    return { ok: true };
-  } catch {
-    return { ok: false, code: "photo_storage_failed" };
-  }
-}
-
 function buildPhotoReview({
   records,
   issues
@@ -272,32 +243,6 @@ function createPhotoIssue({
     message,
     ...(playerName ? { playerName } : {})
   };
-}
-
-function stripExtension(filename: string): string {
-  const name = basename(filename);
-  const extension = extname(name);
-  return extension ? name.slice(0, -extension.length) : name;
-}
-
-function normalizeMatchText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function uniqueCandidates(candidates: readonly Candidate[]): Candidate[] {
-  const seen = new Set<UploadedPlayerPhotoDescriptor>();
-  const unique: Candidate[] = [];
-
-  for (const candidate of candidates) {
-    if (seen.has(candidate.file)) {
-      continue;
-    }
-
-    seen.add(candidate.file);
-    unique.push(candidate);
-  }
-
-  return unique;
 }
 
 function slugify(value: string): string {

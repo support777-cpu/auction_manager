@@ -1,9 +1,14 @@
 import {
+  mediaMatchStatusValues,
   photoMatchStatusValues,
   playerPhotoMatchRecordSchema,
   playerPhotoReviewResponseSchema,
   playerCsvImportReviewResponseSchema,
+  setupTeamPreviewSchema,
   setupPlayerPreviewSchema,
+  teamCsvImportReviewResponseSchema,
+  teamLogoMatchRecordSchema,
+  teamLogoReviewResponseSchema,
   importIssueCodeValues,
   importIssueSeverityValues,
   auctionRoleValues,
@@ -241,5 +246,206 @@ describe("Player CSV import shared contracts", () => {
 
     expect(review.summary.startAuctionBlocked).toBe(false);
     expect(review.summary.placeholderPhotos).toBe(1);
+  });
+});
+
+describe("Team import shared contracts", () => {
+  it("keeps setup Team preview records privacy-safe and strict", () => {
+    const preview = setupTeamPreviewSchema.parse({
+      sourceRowNumber: 2,
+      name: "Falcons",
+      captain: "Priya Captain"
+    });
+
+    expect(Object.keys(preview)).toEqual(["sourceRowNumber", "name", "captain"]);
+
+    expect(() =>
+      setupTeamPreviewSchema.parse({
+        ...preview,
+        Budget: "170"
+      })
+    ).toThrow();
+  });
+
+  it("validates grouped Team CSV review responses and blocker semantics", () => {
+    const review = teamCsvImportReviewResponseSchema.parse({
+      teams: [
+        {
+          sourceRowNumber: 2,
+          name: "Falcons",
+          captain: "Priya Captain"
+        }
+      ],
+      issueGroups: [
+        {
+          severity: "must_fix",
+          count: 1,
+          issues: [
+            {
+              id: "row-3-team-name-missing",
+              severity: "must_fix",
+              code: "missing_team_name",
+              message: "Row 3 is missing Team Name.",
+              sourceColumn: "Team Name",
+              sourceRowNumber: 3
+            }
+          ]
+        },
+        {
+          severity: "can_proceed_with_placeholder",
+          count: 0,
+          issues: []
+        },
+        {
+          severity: "ignored_source_field",
+          count: 1,
+          issues: [
+            {
+              id: "ignored-budget",
+              severity: "ignored_source_field",
+              code: "ignored_source_field",
+              message: "Budget is ignored for Team CSV setup.",
+              sourceColumn: "Budget"
+            }
+          ]
+        }
+      ],
+      summary: {
+        totalRows: 2,
+        importedTeams: 1,
+        mustFixCount: 1,
+        canProceedWithPlaceholderCount: 0,
+        ignoredSourceFieldCount: 1,
+        startAuctionBlocked: true
+      }
+    });
+
+    expect(review.teams[0]?.captain).toBe("Priya Captain");
+    expect(review.issueGroups.map((group) => group.severity)).toEqual(
+      importIssueSeverityValues
+    );
+    expect(() =>
+      teamCsvImportReviewResponseSchema.parse({
+        ...review,
+        summary: {
+          ...review.summary,
+          startAuctionBlocked: false
+        }
+      })
+    ).toThrow();
+  });
+
+  it("exposes strict privacy-safe logo review records with only internal asset IDs", () => {
+    expect(mediaMatchStatusValues).toEqual(photoMatchStatusValues);
+    expect(importIssueCodeValues).toEqual(
+      expect.arrayContaining([
+        "missing_team_name",
+        "missing_captain_name",
+        "duplicate_team_name",
+        "missing_team_logo",
+        "ambiguous_logo_match",
+        "unmatched_logo_file",
+        "logo_not_decodable",
+        "logo_storage_failed"
+      ])
+    );
+
+    const matchRecord = teamLogoMatchRecordSchema.parse({
+      team: {
+        sourceRowNumber: 2,
+        name: "Falcons",
+        captain: "Priya Captain"
+      },
+      status: "matched",
+      logoAssetId: "asset-team-falcons"
+    });
+
+    expect(matchRecord.logoAssetId).toBe("asset-team-falcons");
+    expect(JSON.stringify(matchRecord)).not.toContain("falcons.png");
+    expect(JSON.stringify(matchRecord)).not.toContain("/Users/operator/Desktop");
+
+    expect(() =>
+      teamLogoMatchRecordSchema.parse({
+        ...matchRecord,
+        sourcePath: "/Users/operator/Desktop/falcons.png"
+      })
+    ).toThrow();
+
+    expect(() =>
+      teamLogoMatchRecordSchema.parse({
+        team: matchRecord.team,
+        status: "matched"
+      })
+    ).toThrow();
+  });
+
+  it("keeps logo placeholders out of start-auction blocking logic", () => {
+    const review = teamLogoReviewResponseSchema.parse({
+      teams: [
+        {
+          team: {
+            sourceRowNumber: 2,
+            name: "Falcons",
+            captain: "Priya Captain"
+          },
+          status: "matched",
+          logoAssetId: "asset-team-falcons"
+        },
+        {
+          team: {
+            sourceRowNumber: 3,
+            name: "Tigers",
+            captain: "Rahul Captain"
+          },
+          status: "missing_uses_placeholder"
+        }
+      ],
+      issueGroups: [
+        {
+          severity: "must_fix",
+          count: 0,
+          issues: []
+        },
+        {
+          severity: "can_proceed_with_placeholder",
+          count: 1,
+          issues: [
+            {
+              id: "logo-missing-3",
+              severity: "can_proceed_with_placeholder",
+              code: "missing_team_logo",
+              message: "Tigers has no matched logo; team placeholder will be used.",
+              teamName: "Tigers"
+            }
+          ]
+        },
+        {
+          severity: "ignored_source_field",
+          count: 0,
+          issues: []
+        }
+      ],
+      summary: {
+        totalTeams: 2,
+        matchedLogos: 1,
+        placeholderLogos: 1,
+        mustFixCount: 0,
+        canProceedWithPlaceholderCount: 1,
+        ignoredSourceFieldCount: 0,
+        startAuctionBlocked: false
+      }
+    });
+
+    expect(review.summary.startAuctionBlocked).toBe(false);
+    expect(review.summary.placeholderLogos).toBe(1);
+    expect(() =>
+      teamLogoReviewResponseSchema.parse({
+        ...review,
+        summary: {
+          ...review.summary,
+          startAuctionBlocked: true
+        }
+      })
+    ).toThrow();
   });
 });

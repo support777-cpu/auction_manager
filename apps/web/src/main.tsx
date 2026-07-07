@@ -12,9 +12,13 @@ import {
 import {
   playerCsvImportReviewResponseSchema,
   playerPhotoReviewResponseSchema,
+  teamCsvImportReviewResponseSchema,
+  teamLogoReviewResponseSchema,
   type ImportIssueSeverity,
   type PlayerCsvImportReviewResponse,
-  type PlayerPhotoReviewResponse
+  type PlayerPhotoReviewResponse,
+  type TeamCsvImportReviewResponse,
+  type TeamLogoReviewResponse
 } from "@auction-manager/shared";
 import "./styles.css";
 
@@ -53,21 +57,42 @@ const emptyIssueGroups: PlayerCsvImportReviewResponse["issueGroups"] = [
 function App() {
   const uploadGenerationRef = useRef(0);
   const photoUploadGenerationRef = useRef(0);
+  const teamUploadGenerationRef = useRef(0);
+  const logoUploadGenerationRef = useRef(0);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedPhotoFileNames, setSelectedPhotoFileNames] = useState<string[]>([]);
+  const [selectedTeamFileName, setSelectedTeamFileName] = useState<string | null>(null);
+  const [selectedLogoFileNames, setSelectedLogoFileNames] = useState<string[]>([]);
   const [review, setReview] = useState<PlayerCsvImportReviewResponse | null>(null);
   const [photoReview, setPhotoReview] = useState<PlayerPhotoReviewResponse | null>(null);
+  const [teamReview, setTeamReview] = useState<TeamCsvImportReviewResponse | null>(null);
+  const [logoReview, setLogoReview] = useState<TeamLogoReviewResponse | null>(null);
   const [uploadState, setUploadState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
   const [photoUploadState, setPhotoUploadState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
+  const [teamUploadState, setTeamUploadState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
+  const [logoUploadState, setLogoUploadState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle"
+  );
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
-  const issueGroups = mergeIssueGroups(review?.issueGroups, photoReview?.issueGroups);
+  const [teamUploadError, setTeamUploadError] = useState<string | null>(null);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const issueGroups = mergeIssueGroups(
+    review?.issueGroups,
+    photoReview?.issueGroups,
+    teamReview?.issueGroups,
+    logoReview?.issueGroups
+  );
   const photoUploadDisabled =
     !review || review.summary.startAuctionBlocked || review.summary.importedPlayers === 0;
+  const logoUploadDisabled =
+    !teamReview || teamReview.summary.startAuctionBlocked || teamReview.summary.importedTeams === 0;
   const reviewStatus = useMemo(() => {
     if (!review) {
       return {
@@ -88,6 +113,26 @@ function App() {
       label: "CSV reviewed"
     };
   }, [review]);
+  const teamReviewStatus = useMemo(() => {
+    if (!teamReview) {
+      return {
+        className: "review-state",
+        label: "Awaiting Team CSV"
+      };
+    }
+
+    if (teamReview.summary.startAuctionBlocked) {
+      return {
+        className: "review-state review-state-warning",
+        label: "Review complete — fixes required"
+      };
+    }
+
+    return {
+      className: "review-state review-state-ready",
+      label: "Team CSV reviewed"
+    };
+  }, [teamReview]);
   const blockerText = useMemo(() => {
     if (!review) {
       return "Blocked: Player CSV must be imported before Start Auction.";
@@ -102,8 +147,21 @@ function App() {
       return "Blocked: Player CSV must include at least one valid Player row.";
     }
 
-    return "Start Auction stays disabled until Team CSV and auction parameters are added in later setup steps.";
-  }, [review]);
+    if (!teamReview) {
+      return "Blocked: Team CSV must be imported before Start Auction.";
+    }
+
+    if (teamReview.summary.startAuctionBlocked) {
+      if (teamReview.summary.mustFixCount > 0) {
+        const issueLabel = teamReview.summary.mustFixCount === 1 ? "issue" : "issues";
+        return `Blocked: ${teamReview.summary.mustFixCount} Team CSV ${issueLabel} must be fixed in the source CSV and reimported.`;
+      }
+
+      return "Blocked: Team CSV must include at least one valid Team row.";
+    }
+
+    return "Start Auction stays disabled until auction parameters are added in the next setup step.";
+  }, [review, teamReview]);
 
   async function handlePlayerCsvChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -233,6 +291,140 @@ function App() {
       setPhotoReview(previousPhotoReview);
       setPhotoUploadState("error");
       setPhotoUploadError("Player photos could not be reviewed. Check the files and try again.");
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+
+  async function handleTeamCsvChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const previousTeamReview = teamReview;
+    const previousLogoReview = logoReview;
+    const uploadGeneration = ++teamUploadGenerationRef.current;
+    logoUploadGenerationRef.current++;
+
+    setSelectedTeamFileName(file.name);
+    setTeamReview(null);
+    setLogoReview(null);
+    setSelectedLogoFileNames([]);
+    setTeamUploadError(null);
+    setLogoUploadError(null);
+    setLogoUploadState("idle");
+    setTeamUploadState("loading");
+
+    try {
+      const csvText = await file.text();
+      const response = await fetch("/api/setup/team-csv/preview", {
+        method: "POST",
+        headers: {
+          "content-type": "text/csv"
+        },
+        body: csvText
+      });
+
+      if (uploadGeneration !== teamUploadGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok) {
+        setTeamReview(previousTeamReview);
+        setLogoReview(previousLogoReview);
+        setTeamUploadState("error");
+        setTeamUploadError(await readTeamUploadErrorMessage(response));
+        return;
+      }
+
+      const parsedReview = teamCsvImportReviewResponseSchema.safeParse(
+        await response.json()
+      );
+
+      if (!parsedReview.success) {
+        setTeamReview(previousTeamReview);
+        setLogoReview(previousLogoReview);
+        setTeamUploadState("error");
+        setTeamUploadError("Team CSV preview returned an unexpected response. Try again.");
+        return;
+      }
+
+      setTeamReview(parsedReview.data);
+      setLogoReview(null);
+      setTeamUploadState("ready");
+    } catch {
+      if (uploadGeneration !== teamUploadGenerationRef.current) {
+        return;
+      }
+
+      setTeamReview(previousTeamReview);
+      setLogoReview(previousLogoReview);
+      setTeamUploadState("error");
+      setTeamUploadError("Team CSV could not be reviewed. Check the file and try again.");
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+
+  async function handleTeamLogosChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+
+    if (files.length === 0 || logoUploadDisabled) {
+      event.currentTarget.value = "";
+      return;
+    }
+
+    const previousLogoReview = logoReview;
+    const uploadGeneration = ++logoUploadGenerationRef.current;
+
+    setSelectedLogoFileNames(files.map((file) => file.name));
+    setLogoReview(null);
+    setLogoUploadError(null);
+    setLogoUploadState("loading");
+
+    try {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("logos", file);
+      }
+
+      const response = await fetch("/api/setup/team-logos", {
+        method: "POST",
+        body: formData
+      });
+
+      if (uploadGeneration !== logoUploadGenerationRef.current) {
+        return;
+      }
+
+      if (!response.ok) {
+        setLogoReview(previousLogoReview);
+        setLogoUploadState("error");
+        setLogoUploadError(await readLogoUploadErrorMessage(response));
+        return;
+      }
+
+      const parsedReview = teamLogoReviewResponseSchema.safeParse(await response.json());
+
+      if (!parsedReview.success) {
+        setLogoReview(previousLogoReview);
+        setLogoUploadState("error");
+        setLogoUploadError("Team logo review returned an unexpected response. Try again.");
+        return;
+      }
+
+      setLogoReview(parsedReview.data);
+      setLogoUploadState("ready");
+    } catch {
+      if (uploadGeneration !== logoUploadGenerationRef.current) {
+        return;
+      }
+
+      setLogoReview(previousLogoReview);
+      setLogoUploadState("error");
+      setLogoUploadError("Team logos could not be reviewed. Check the files and try again.");
     } finally {
       event.currentTarget.value = "";
     }
@@ -543,6 +735,187 @@ function App() {
         </div>
       </section>
 
+      <section
+        className="setup-team-csv"
+        data-testid="setup-team-csv"
+        aria-labelledby="team-csv-title"
+      >
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Setup checklist</p>
+            <h2 id="team-csv-title">Team CSV review</h2>
+          </div>
+          <span className={teamReviewStatus.className}>
+            <ListChecks aria-hidden="true" size={18} />
+            {teamReviewStatus.label}
+          </span>
+        </div>
+
+        <div className="csv-upload-row">
+          <label className="csv-upload-control" htmlFor="team-csv-input">
+            <Upload aria-hidden="true" size={20} />
+            <span>Choose Team CSV</span>
+            <input
+              accept=".csv,text/csv"
+              data-testid="team-csv-input"
+              id="team-csv-input"
+              onChange={handleTeamCsvChange}
+              type="file"
+            />
+          </label>
+          <div className="csv-upload-status" aria-live="polite">
+            <strong>{selectedTeamFileName ?? "No file selected"}</strong>
+            <span>
+              {teamUploadState === "loading"
+                ? "Reviewing Team CSV..."
+                : teamUploadState === "error"
+                  ? "Upload failed. Fix the file or try again."
+                  : "Team and Captain fixes stay in the CSV, then reimport."}
+            </span>
+          </div>
+        </div>
+
+        {teamUploadError ? (
+          <p className="csv-error" role="alert">
+            <FileWarning aria-hidden="true" size={18} />
+            <span>{teamUploadError}</span>
+          </p>
+        ) : null}
+
+        <div className="csv-summary-grid" data-testid="team-csv-summary">
+          <article>
+            <span className="status-label">Imported Teams</span>
+            <strong>{teamReview?.summary.importedTeams ?? 0} imported</strong>
+          </article>
+          <article>
+            <span className="status-label">Required fixes</span>
+            <strong>{teamReview?.summary.mustFixCount ?? 0} must fix</strong>
+          </article>
+          <article>
+            <span className="status-label">Ignored fields</span>
+            <strong>{teamReview?.summary.ignoredSourceFieldCount ?? 0} ignored</strong>
+          </article>
+        </div>
+
+        <section aria-label="Imported Team preview">
+          <div className="subsection-heading">
+            <h3>Imported Teams</h3>
+            <span>{teamReview?.teams.length ?? 0}</span>
+          </div>
+          <div className="table-scroll">
+            <table className="data-table team-data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Row</th>
+                  <th scope="col">Team</th>
+                  <th scope="col">Captain</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamReview?.teams.length ? (
+                  teamReview.teams.map((team) => (
+                    <tr
+                      data-testid={`team-preview-row-${team.sourceRowNumber}`}
+                      key={`${team.sourceRowNumber}-${team.name}`}
+                    >
+                      <td>{team.sourceRowNumber}</td>
+                      <td>{team.name}</td>
+                      <td>{team.captain}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3}>No Team CSV has been reviewed yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section
+        className="setup-team-logos"
+        data-testid="setup-team-logos"
+        aria-labelledby="team-logos-title"
+      >
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Setup checklist</p>
+            <h2 id="team-logos-title">Team logos</h2>
+          </div>
+          <span className={logoReview ? "review-state review-state-ready" : "review-state"}>
+            <Upload aria-hidden="true" size={18} />
+            {logoReview ? "Logos reviewed" : "Awaiting logos"}
+          </span>
+        </div>
+
+        <div className="csv-upload-row">
+          <label
+            className={
+              logoUploadDisabled
+                ? "csv-upload-control csv-upload-control-disabled"
+                : "csv-upload-control"
+            }
+            htmlFor="team-logos-input"
+          >
+            <Upload aria-hidden="true" size={20} />
+            <span>Choose Team logos</span>
+            <input
+              accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic,image/heif"
+              data-testid="team-logos-input"
+              disabled={logoUploadDisabled}
+              id="team-logos-input"
+              multiple
+              onChange={handleTeamLogosChange}
+              type="file"
+            />
+          </label>
+          <div className="csv-upload-status" aria-live="polite">
+            <strong>
+              {selectedLogoFileNames.length
+                ? `${selectedLogoFileNames.length} logo file${selectedLogoFileNames.length === 1 ? "" : "s"} selected`
+                : "No logo files selected"}
+            </strong>
+            <span>
+              {logoUploadDisabled
+                ? "Import a valid Team CSV before adding logos."
+                : logoUploadState === "loading"
+                  ? "Reviewing Team logos..."
+                  : logoUploadState === "error"
+                    ? "Logo upload failed. Fix the files or try again."
+                    : "JPEG, PNG, WebP, and HEIC files are accepted where this event PC can decode them."}
+            </span>
+          </div>
+        </div>
+
+        {logoUploadError ? (
+          <p className="csv-error" role="alert">
+            <FileWarning aria-hidden="true" size={18} />
+            <span>{logoUploadError}</span>
+          </p>
+        ) : null}
+
+        <div className="csv-summary-grid photo-summary-grid" data-testid="team-logos-summary">
+          <article>
+            <span className="status-label">Matched logos</span>
+            <strong>{logoReview?.summary.matchedLogos ?? 0} matched</strong>
+          </article>
+          <article>
+            <span className="status-label">Placeholders</span>
+            <strong>
+              {logoReview?.summary.placeholderLogos ?? 0}{" "}
+              {(logoReview?.summary.placeholderLogos ?? 0) === 1 ? "placeholder" : "placeholders"}
+            </strong>
+          </article>
+          <article className="neutral-summary">
+            <span className="status-label">Auction readiness</span>
+            <strong>Logos are non-blocking</strong>
+            <span>Start Auction is not blocked by missing logos.</span>
+          </article>
+        </div>
+      </section>
+
       <div className="start-auction-row">
         <p data-testid="start-auction-blocker">{blockerText}</p>
         <button
@@ -597,18 +970,61 @@ async function readPhotoUploadErrorMessage(response: Response): Promise<string> 
   return "Player photos could not be reviewed. Check the files and try again.";
 }
 
+async function readTeamUploadErrorMessage(response: Response): Promise<string> {
+  if (response.status === 413) {
+    return "Team CSV exceeds the 256 KB upload limit.";
+  }
+
+  if (response.status === 415) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    return body?.message ?? "Upload the Team CSV as text/csv.";
+  }
+
+  return "Team CSV could not be reviewed. Check the file and try again.";
+}
+
+async function readLogoUploadErrorMessage(response: Response): Promise<string> {
+  if (response.status === 409) {
+    return "Import the Team CSV before uploading Team logos.";
+  }
+
+  if (response.status === 413) {
+    return "A Team logo exceeds the 10 MB upload limit.";
+  }
+
+  if (response.status === 400 || response.status === 415) {
+    const body = (await response.json().catch(() => null)) as { message?: string } | null;
+    return body?.message ?? "Upload Team logos as JPEG, PNG, WebP, or HEIC files.";
+  }
+
+  return "Team logos could not be reviewed. Check the files and try again.";
+}
+
 function mergeIssueGroups(
   csvGroups: PlayerCsvImportReviewResponse["issueGroups"] | undefined,
-  photoGroups: PlayerPhotoReviewResponse["issueGroups"] | undefined
+  photoGroups: PlayerPhotoReviewResponse["issueGroups"] | undefined,
+  teamCsvGroups: TeamCsvImportReviewResponse["issueGroups"] | undefined,
+  logoGroups: TeamLogoReviewResponse["issueGroups"] | undefined
 ): PlayerCsvImportReviewResponse["issueGroups"] {
   const sourceCsvGroups = csvGroups ?? emptyIssueGroups;
   const sourcePhotoGroups = photoGroups ?? emptyIssueGroups;
+  const sourceTeamCsvGroups = teamCsvGroups ?? emptyIssueGroups;
+  const sourceLogoGroups = logoGroups ?? emptyIssueGroups;
 
   return emptyIssueGroups.map((emptyGroup) => {
     const csvGroup = sourceCsvGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
     const photoGroup =
       sourcePhotoGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
-    const issues = [...csvGroup.issues, ...photoGroup.issues];
+    const teamCsvGroup =
+      sourceTeamCsvGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
+    const logoGroup =
+      sourceLogoGroups.find((group) => group.severity === emptyGroup.severity) ?? emptyGroup;
+    const issues = [
+      ...csvGroup.issues,
+      ...photoGroup.issues,
+      ...teamCsvGroup.issues,
+      ...logoGroup.issues
+    ];
 
     return {
       severity: emptyGroup.severity,

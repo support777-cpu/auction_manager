@@ -87,6 +87,8 @@ button:focus-visible {
 .setup-panel,
 .setup-player-csv,
 .setup-player-photos,
+.setup-team-csv,
+.setup-team-logos,
 .start-auction-row {
   max-width: 1120px;
   margin: 0 auto 16px;
@@ -207,7 +209,9 @@ button:focus-visible {
 }
 
 .setup-player-csv,
-.setup-player-photos {
+.setup-player-photos,
+.setup-team-csv,
+.setup-team-logos {
   border: 1px solid #d8dee6;
   border-radius: 8px;
   padding: 24px;
@@ -421,6 +425,10 @@ button:focus-visible {
 
 .issues-table {
   min-width: 520px;
+}
+
+.team-data-table {
+  min-width: 420px;
 }
 
 .data-table th,

@@ -10,6 +10,14 @@ const invalidCsvPath = join(
   process.cwd(),
   "_bmad-output/test-artifacts/sample-test-data/players-invalid.csv"
 );
+const validTeamCsvPath = join(
+  process.cwd(),
+  "_bmad-output/test-artifacts/sample-test-data/teams-valid.csv"
+);
+const invalidTeamCsvPath = join(
+  process.cwd(),
+  "_bmad-output/test-artifacts/sample-test-data/teams-invalid.csv"
+);
 const tinyPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
   "base64"
@@ -100,4 +108,71 @@ test("uploads Player photos in event mode and keeps missing photos non-blocking"
   );
   await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
   await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/photo/i);
+});
+
+test("keeps Start Auction blocked for invalid Team CSV in event mode", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("team-csv-input").setInputFiles({
+    name: "teams-invalid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(invalidTeamCsvPath)
+  });
+
+  await expect(page.getByTestId("team-csv-summary")).toContainText("3 must fix");
+  await expect(page.getByTestId("import-issues-table")).toContainText(
+    "Row 2 is missing Team Name."
+  );
+  await expect(page.getByTestId("start-auction-blocker")).toContainText(
+    "Blocked: 3 Team CSV issues must be fixed in the source CSV and reimported."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+});
+
+test("uploads Team logos in event mode and keeps missing logos non-blocking", async ({
+  page
+}) => {
+  await page.goto("/");
+
+  await page.getByTestId("player-csv-input").setInputFiles({
+    name: "players-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validCsvPath)
+  });
+  await expect(page.getByTestId("player-csv-summary")).toContainText("8 imported");
+
+  await page.getByTestId("team-csv-input").setInputFiles({
+    name: "teams-valid.csv",
+    mimeType: "text/csv",
+    buffer: await readFile(validTeamCsvPath)
+  });
+  await expect(page.getByTestId("team-csv-summary")).toContainText("4 imported");
+  await expect(page.getByTestId("team-preview-row-2")).toContainText("Falcons");
+  await expect(page.getByTestId("team-preview-row-2")).toContainText("Priya Captain");
+
+  await page.getByTestId("team-logos-input").setInputFiles([
+    {
+      name: "falcons.png",
+      mimeType: "image/png",
+      buffer: tinyPng
+    }
+  ]);
+
+  await expect(page.getByTestId("team-logos-summary")).toContainText("1 matched");
+  await expect(page.getByTestId("team-logos-summary")).toContainText("3 placeholders");
+  await expect(page.getByTestId("import-issue-group-can_proceed_with_placeholder")).toContainText(
+    "Tigers has no matched logo; team placeholder will be used."
+  );
+  await expect(page.getByTestId("team-logos-summary")).toContainText(
+    "Start Auction is not blocked by missing logos."
+  );
+  await expect(page.getByTestId("setup-start-auction")).toBeDisabled();
+  await expect(page.getByTestId("start-auction-blocker")).not.toContainText(/logo/i);
 });
