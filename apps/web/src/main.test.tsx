@@ -183,9 +183,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     expect(await screen.findByTestId("mark-sold-blocked-reason")).toHaveTextContent(
       "Blocked: Falcons have 8 remaining; current bid is 10."
     );
-    expect(screen.getByTestId("selected-team")).toHaveTextContent(
-      "Blocked: Falcons have 8 remaining; current bid is 10."
-    );
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
   });
 
   it("shows API conflict text in mark-sold-error without duplicating capacity blockers", async () => {
@@ -771,9 +769,17 @@ describe("Board and roster view switching", () => {
     expect(await screen.findByTestId("app-shell")).toHaveClass("live-app-shell");
 
     const counters = await screen.findByTestId("live-status-counters");
-    expect(counters).toHaveTextContent("Current phase");
-    expect(counters).toHaveTextContent("Initial Auction");
+    expect(counters).toHaveTextContent("Ordered");
+    expect(counters).toHaveTextContent("Revealed");
+    expect(counters).toHaveTextContent("Pending");
+    expect(counters).toHaveTextContent("Unsold");
+    expect(counters).toHaveTextContent("Category");
     expect(counters).toHaveTextContent("Teams");
+    expect(screen.getByTestId("phase1-ordered-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("phase1-revealed-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("phase1-pending-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("live-unsold-count")).toHaveTextContent("0");
+    expect(screen.getByTestId("live-teams-counter")).toHaveTextContent("1");
 
     const stage = screen.getByTestId("live-board-stage");
     expect(within(stage).getByTestId("current-player-panel")).toHaveTextContent(
@@ -781,7 +787,7 @@ describe("Board and roster view switching", () => {
     );
     expect(within(stage).getByTestId("current-bid")).toHaveTextContent("10");
 
-    const commandStrip = screen.getByTestId("live-command-strip");
+    const commandStrip = within(stage).getByTestId("live-command-strip");
     expect(
       within(commandStrip).getByRole("button", { name: /Increase Bid/ })
     ).toBeEnabled();
@@ -794,7 +800,7 @@ describe("Board and roster view switching", () => {
     expect(within(commandStrip).getByTestId("mark-sold")).toBeEnabled();
     expect(within(commandStrip).getByTestId("mark-unsold")).toBeEnabled();
     expect(within(commandStrip).getByTestId("undo-action")).toBeDisabled();
-    expect(within(commandStrip).getByTestId("undo-summary")).toHaveTextContent(
+    expect(screen.getByTestId("undo-summary")).toHaveTextContent(
       "No actions to undo."
     );
 
@@ -805,6 +811,148 @@ describe("Board and roster view switching", () => {
     expect(
       within(teamMatrix).getByRole("button", { name: /View Falcons details/ })
     ).toBeInTheDocument();
+  });
+
+  it("renders eight team tiles with operational counters from authoritative board state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createEightTeamBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+
+    expect(screen.getAllByTestId("team-tile")).toHaveLength(7);
+    expect(screen.getByTestId("team-tile-selected")).toBeInTheDocument();
+    expect(
+      screen.getAllByTestId("team-tile").length +
+        screen.queryAllByTestId("team-tile-selected").length
+    ).toBe(8);
+    expect(screen.getByTestId("phase1-ordered-count")).toHaveTextContent("8");
+    expect(screen.getByTestId("phase1-pending-count")).toHaveTextContent("7");
+    expect(screen.getByTestId("phase1-revealed-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("live-unsold-count")).toHaveTextContent("2");
+    expect(screen.getByTestId("live-category-counter")).toHaveTextContent("Ace Men");
+    expect(screen.getByTestId("live-teams-counter")).toHaveTextContent("8");
+    expect(screen.getByTestId("auction-board")).not.toHaveTextContent(
+      "private-player@example.com"
+    );
+    expect(screen.getByTestId("auction-board")).not.toHaveTextContent("UPI-PRIVATE");
+  });
+
+  it("keeps command strip controls visible across disabled and blocked states", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createBlockedBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("live-command-strip");
+
+    const commandStrip = screen.getByTestId("live-command-strip");
+    expect(within(commandStrip).getByTestId("mark-sold")).toBeDisabled();
+    expect(within(commandStrip).getByRole("button", { name: /Mark Sold/ })).toBeInTheDocument();
+    expect(within(commandStrip).getByRole("button", { name: /Increase Bid/ })).toBeEnabled();
+    expect(screen.getByTestId("mark-sold-blocked-reason")).toHaveTextContent(
+      "Blocked: Falcons have 8 remaining; current bid is 10."
+    );
+    expect(screen.getByTestId("team-tile-selected")).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(screen.getByTestId("team-tile-selected")).getByTestId(
+        "team-tile-capacity-reason"
+      )
+    ).toHaveTextContent("Falcons have 8 remaining; current bid is 10.");
+  });
+
+  it("shows persistence warning without breaking live board layout anchors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          const board = createEightTeamBoardState();
+          board.persistenceFailure = "snapshot_write_failed";
+          return jsonResponse(createAuctionAppState(board));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("persistence-warning");
+
+    expect(screen.getByTestId("persistence-warning")).toHaveTextContent(
+      "Local recovery snapshot could not be written"
+    );
+    expect(screen.getByTestId("live-command-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("team-matrix")).toBeInTheDocument();
+  });
+
+  it("updates operational counters when authoritative board state changes", async () => {
+    let stateFetchCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          stateFetchCount += 1;
+          if (stateFetchCount === 1) {
+            return jsonResponse(createAuctionAppState(createEightTeamBoardState()));
+          }
+
+          const updatedBoard = createEightTeamBoardState();
+          updatedBoard.phase1Progress = {
+            ...updatedBoard.phase1Progress,
+            pendingPlayerCount: 5,
+            revealedPlayerCount: 3
+          };
+          updatedBoard.phase2PoolCount = 4;
+          return jsonResponse(createAuctionAppState(updatedBoard));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("phase1-pending-count");
+
+    expect(screen.getByTestId("phase1-pending-count")).toHaveTextContent("5");
+    expect(screen.getByTestId("phase1-revealed-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("live-unsold-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("live-command-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("team-matrix")).toBeInTheDocument();
   });
 
   it("renders empty roster copy for teams without sold players", async () => {
@@ -900,7 +1048,7 @@ describe("Board and roster view switching", () => {
     expect(drawer).toHaveAttribute("aria-modal", "true");
     expect(drawer).toHaveTextContent("Falcons");
     expect(drawer).toHaveTextContent("Falcons have 8 remaining; current bid is 10.");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+    expect(screen.getByTestId("mark-sold-blocked-reason")).toHaveTextContent(
       "Blocked: Falcons have 8 remaining; current bid is 10."
     );
 
@@ -1079,6 +1227,105 @@ function createEligibleBoardState(): BoardStateDto {
     lastUndoAction: null,
     persistenceFailure: null,
     phase2PoolCount: 0
+  };
+}
+
+function createEightTeamBoardState(): BoardStateDto {
+  const teamNames = [
+    "Falcons",
+    "Tigers",
+    "Royals",
+    "Warriors",
+    "Lions",
+    "Sharks",
+    "Eagles",
+    "Hurricanes"
+  ] as const;
+  const teams = teamNames.map((name, index) => ({
+    id: `team-${index + 1}`,
+    name,
+    captain: `${name} Captain`,
+    budget: 170,
+    remainingBudget: 170,
+    squadCount: 0,
+    roleCounts: {
+      Ace: 0,
+      Batting: 0,
+      Bowling: 0,
+      AllRounder: 0,
+      Girls: 0
+    },
+    currentPlayerCapacity: {
+      teamId: `team-${index + 1}`,
+      canBuy: true,
+      reasons: [] as string[]
+    }
+  }));
+  teams[0]!.currentPlayerCapacity = {
+    teamId: "team-1",
+    canBuy: true,
+    reasons: []
+  };
+
+  return {
+    auctionId: "auction-1",
+    phase: "InitialAuction",
+    parameters: createAuctionParameters(),
+    players: [
+      {
+        id: "player-1",
+        name: "Aarav Menon",
+        role: "Ace",
+        phase1Category: "Ace Men",
+        basePrice: 10,
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      }
+    ],
+    teams,
+    teamRosters: teams.map((team) => ({
+      teamId: team.id,
+      name: team.name,
+      captain: team.captain,
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: { ...team.roleCounts },
+      roster: []
+    })),
+    currentPlayer: {
+      id: "player-1",
+      name: "Aarav Menon",
+      role: "Ace",
+      phase1Category: "Ace Men",
+      basePrice: 10,
+      status: "Current",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    },
+    currentBid: 10,
+    selectedTeamId: "team-1",
+    phase1Progress: {
+      currentCategory: "Ace Men",
+      orderedPlayerCount: 8,
+      pendingPlayerCount: 7,
+      revealedPlayerCount: 1,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 8,
+          pending: 7,
+          completed: 0
+        }
+      ]
+    },
+    canUndo: false,
+    lastUndoAction: null,
+    persistenceFailure: null,
+    phase2PoolCount: 2
   };
 }
 

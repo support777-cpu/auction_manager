@@ -25,7 +25,7 @@
     "test:integration": "vitest run apps/server/src/app.test.ts packages/shared/src/workspace-boundaries.test.ts",
     "test:watch": "vitest",
     "test:e2e": "npm run build --workspace @auction-manager/web && playwright test",
-    "test:e2e:event": "playwright test --config playwright.event.config.ts",
+    "test:e2e:event": "playwright test --config playwright.event.config.ts && playwright test --config playwright.event-layout.config.ts",
     "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {

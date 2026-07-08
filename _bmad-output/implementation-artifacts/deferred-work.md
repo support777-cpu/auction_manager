@@ -72,3 +72,8 @@
 - Dev Gate build step not evidenced in completion notes — CI/build gate tracked separately
 - Screenshot captured at only 1366x768 viewport — Story 2.5.5 owns multi-viewport visual QA
 - E2E does not assert screenshot artifact existence — manual artifact path recorded in Dev Agent Record
+
+## Deferred from: code review of 2-5-2-redesign-the-live-auction-board-layout (2026-07-08)
+
+- Phase 1 per-category breakdown grid removed — intentional per story layout scope; aggregate counters replace per-category grid
+- 390×844 mobile viewport proof not automated — CSS stacking exists without dedicated Playwright profile

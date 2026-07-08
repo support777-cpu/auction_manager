@@ -2604,33 +2604,69 @@ function AuctionBoard({
       </header>
 
       <section
-        className="status-grid"
+        className="live-topbar"
         aria-label="Auction status"
         data-testid="live-status-counters"
       >
-        <article>
-          <span className="status-label">Current phase</span>
-          <strong>Initial Auction</strong>
-        </article>
-        <article>
-          <span className="status-label">Auction state</span>
-          <strong>{boardState.phase1Progress.pendingPlayerCount} pending</strong>
-        </article>
-        <article>
-          <span className="status-label">Teams</span>
-          <strong>{boardState.teams.length}</strong>
-        </article>
-        {boardState.persistenceFailure ? (
+        <div className="live-brand-block">
+          <span className="eyebrow">Initial Auction</span>
+          <strong>Auction Manager</strong>
+          <p
+            className="phase1-progress-compact"
+            data-testid="phase1-progress"
+          >
+            {getPhase1OrderStatusLabel(boardState.phase1Progress)}
+          </p>
+        </div>
+        <div className="live-counter-band">
           <article>
-            <span className="status-label">Recovery</span>
-            <strong>Snapshot warning</strong>
-            <span>
-              Local recovery snapshot could not be written. Resolve persistence before
-              the next command.
-            </span>
+            <span className="status-label">Ordered</span>
+            <strong data-testid="phase1-ordered-count">
+              {boardState.phase1Progress.orderedPlayerCount}
+            </strong>
           </article>
-        ) : null}
+          <article>
+            <span className="status-label">Revealed</span>
+            <strong data-testid="phase1-revealed-count">
+              {boardState.phase1Progress.revealedPlayerCount}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Pending</span>
+            <strong data-testid="phase1-pending-count">
+              {boardState.phase1Progress.pendingPlayerCount}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Unsold</span>
+            <strong data-testid="live-unsold-count">{boardState.phase2PoolCount}</strong>
+          </article>
+          <article>
+            <span className="status-label">Category</span>
+            <strong data-testid="live-category-counter">
+              {boardState.phase1Progress.currentCategory ?? "None"}
+            </strong>
+          </article>
+          <article>
+            <span className="status-label">Teams</span>
+            <strong data-testid="live-teams-counter">{boardState.teams.length}</strong>
+          </article>
+        </div>
       </section>
+
+      {boardState.persistenceFailure ? (
+        <div
+          className="persistence-warning"
+          data-testid="persistence-warning"
+          role="alert"
+        >
+          <AlertCircle aria-hidden="true" size={18} />
+          <span>
+            Local recovery snapshot could not be written. Resolve persistence before
+            the next command.
+          </span>
+        </div>
+      ) : null}
 
       <section
         className="phase-strip"
@@ -2676,146 +2712,186 @@ function AuctionBoard({
         id="live-view-panel-board"
         role="tabpanel"
       >
-        <div className="board-main" data-testid="live-board-stage">
-          <section
-            className="current-player-panel"
-            data-testid="current-player-panel"
-            aria-labelledby="current-player-title"
-          >
-            {currentPlayer ? (
-              <div className="current-player-layout">
-                <div className="current-player-media">
-                  {currentPlayer.photoAssetId ? (
-                    <img
-                      alt={`${currentPlayer.name} player photo`}
-                      data-testid="current-player-photo"
-                      src={`/assets/players/${currentPlayer.photoAssetId}.webp`}
-                    />
-                  ) : (
-                    <div
-                      aria-label="Player photo placeholder"
-                      className="player-photo-placeholder"
-                      data-testid="current-player-photo-placeholder"
-                      role="img"
-                    >
-                      Player photo placeholder
+        <div className="live-layout">
+          <div className="board-column">
+            <section
+              className="live-board-stage"
+              data-testid="live-board-stage"
+              aria-label="Current player, bid, and commands"
+            >
+              <section className="player-stage" aria-label="Current player and bid">
+              <section
+                className="current-player-panel"
+                data-testid="current-player-panel"
+                aria-labelledby="current-player-title"
+              >
+                {currentPlayer ? (
+                  <div className="current-player-layout">
+                    <div className="current-player-media">
+                      {currentPlayer.photoAssetId ? (
+                        <>
+                          <img
+                            alt={`${currentPlayer.name} player photo`}
+                            data-testid="current-player-photo"
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                              const fallback = event.currentTarget.parentElement?.querySelector(
+                                ".player-photo-fallback"
+                              );
+                              if (fallback instanceof HTMLElement) {
+                                fallback.hidden = false;
+                              }
+                            }}
+                            src={`/assets/players/${currentPlayer.photoAssetId}.webp`}
+                          />
+                          <div
+                            aria-label="Player photo placeholder"
+                            className="player-photo-placeholder player-photo-fallback"
+                            data-testid="current-player-photo-placeholder"
+                            hidden
+                            role="img"
+                          >
+                            Player photo placeholder
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          aria-label="Player photo placeholder"
+                          className="player-photo-placeholder"
+                          data-testid="current-player-photo-placeholder"
+                          role="img"
+                        >
+                          Player photo placeholder
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="current-player-details">
-                  <h2 id="current-player-title" data-testid="current-player-name">
-                    {currentPlayer.name}
-                  </h2>
-                  <dl className="current-player-facts">
-                    <div>
-                      <dt>Role</dt>
-                      <dd data-testid="current-player-role">{currentPlayer.role}</dd>
+                    <div className="current-player-details">
+                      <h2 id="current-player-title" data-testid="current-player-name">
+                        {currentPlayer.name}
+                      </h2>
+                      <dl className="current-player-facts">
+                        <div>
+                          <dt>Role</dt>
+                          <dd data-testid="current-player-role">{currentPlayer.role}</dd>
+                        </div>
+                        <div>
+                          <dt>Base price</dt>
+                          <dd data-testid="current-player-base-price">
+                            {currentPlayer.basePrice}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Category</dt>
+                          <dd data-testid="phase1-current-category">
+                            Current category:{" "}
+                            {boardState.phase1Progress.currentCategory ?? "None"}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
-                    <div>
-                      <dt>Base price</dt>
-                      <dd data-testid="current-player-base-price">
-                        {currentPlayer.basePrice}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p data-testid="phase1-current-category">
-                    Current category: {boardState.phase1Progress.currentCategory ?? "None"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <h2 id="current-player-title">No Current Player</h2>
-                <p data-testid="phase1-current-category">
-                  Current category: {boardState.phase1Progress.currentCategory ?? "None"}
-                </p>
-              </>
-            )}
-          </section>
+                  </div>
+                ) : (
+                  <>
+                    <h2 id="current-player-title">No Current Player</h2>
+                    <p data-testid="phase1-current-category">
+                      Current category:{" "}
+                      {boardState.phase1Progress.currentCategory ?? "None"}
+                    </p>
+                  </>
+                )}
+              </section>
 
-          <section
-            className="bid-panel"
-            aria-label="Current bid and command controls"
-            data-testid="live-command-strip"
-          >
-            <span className="status-label">Current bid</span>
-            <strong
-              className={
-                currentPlayer && boardState.currentBid !== null
-                  ? "current-bid-live"
-                  : undefined
-              }
-              data-testid="current-bid"
-            >
-              {currentPlayer && boardState.currentBid !== null
-                ? boardState.currentBid
-                : "No current bid"}
-            </strong>
-            <button
-              aria-busy={increaseBidState === "loading"}
-              className={
-                increaseBidDisabled
-                  ? "live-action live-action-disabled"
-                  : "live-action"
-              }
-              data-testid="increase-bid"
-              disabled={increaseBidDisabled}
-              onClick={onIncreaseBid}
-              type="button"
-            >
-              <span>{increaseBidState === "loading" ? "Increasing..." : "Increase Bid"}</span>
-              <span className="bid-increment-chip">
-                +{boardState.parameters.bidIncrement}
-              </span>
-            </button>
-            <button
-              className={
-                revealDisabled
-                  ? "primary-action primary-action-disabled"
-                  : "primary-action"
-              }
-              data-testid="reveal-next"
-              disabled={revealDisabled}
-              onClick={onRevealNext}
-              type="button"
-            >
-              <PlayCircle aria-hidden="true" size={20} />
-              <span>
-                {revealNextState === "loading"
-                  ? "Revealing Player..."
-                  : "Reveal Next Player"}
-              </span>
-            </button>
-            <div className="selected-team-panel" data-testid="selected-team">
-              <span className="status-label">Selected Team</span>
-              <strong>
-                {selectTeamState === "loading"
-                  ? "Selecting Team..."
-                  : (selectedTeam?.name ??
-                    (boardState.selectedTeamId !== null ? "Unknown Team" : "None"))}
-              </strong>
-              {selectedTeamCapacity && !selectedTeamCapacity.canBuy ? (
-                <ul>
-                  {selectedTeamCapacity.reasons.map((reason, index) => (
-                    <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
-                      Blocked: {reason}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {boardState.selectedTeamId !== null ? (
-                <button
-                  className="secondary-action"
-                  data-testid="clear-selected-team"
-                  disabled={!selectionEnabled}
-                  onClick={() => onSelectTeam(null)}
-                  type="button"
+              <div className="current-bid-hero">
+                <span className="status-label">Current bid</span>
+                <strong
+                  className={
+                    currentPlayer && boardState.currentBid !== null
+                      ? "current-bid-live"
+                      : undefined
+                  }
+                  data-testid="current-bid"
                 >
-                  Clear selected Team
-                </button>
-              ) : null}
-            </div>
-            <div className="undo-panel" aria-live="polite">
+                  {currentPlayer && boardState.currentBid !== null
+                    ? boardState.currentBid
+                    : "No current bid"}
+                </strong>
+              </div>
+            </section>
+
+            <section
+              className="live-command-strip"
+              aria-label="Live auction commands"
+              data-testid="live-command-strip"
+            >
+              <button
+                aria-busy={revealNextState === "loading"}
+                className={
+                  revealDisabled
+                    ? "primary-action primary-action-disabled"
+                    : "primary-action"
+                }
+                data-testid="reveal-next"
+                disabled={revealDisabled}
+                onClick={onRevealNext}
+                type="button"
+              >
+                <PlayCircle aria-hidden="true" size={20} />
+                <span>
+                  {revealNextState === "loading"
+                    ? "Revealing..."
+                    : "Reveal Next Player"}
+                </span>
+              </button>
+              <button
+                aria-busy={increaseBidState === "loading"}
+                className={
+                  increaseBidDisabled
+                    ? "live-action live-action-disabled"
+                    : "live-action"
+                }
+                data-testid="increase-bid"
+                disabled={increaseBidDisabled}
+                onClick={onIncreaseBid}
+                type="button"
+              >
+                <span>
+                  {increaseBidState === "loading" ? "Increasing..." : "Increase Bid"}
+                </span>
+                <span className="bid-increment-chip">
+                  +{boardState.parameters.bidIncrement}
+                </span>
+              </button>
+              <button
+                aria-busy={markSoldState === "loading"}
+                className={
+                  markSoldDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="mark-sold"
+                disabled={markSoldDisabled}
+                onClick={onMarkSold}
+                type="button"
+              >
+                <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
+              </button>
+              <button
+                aria-busy={markUnsoldState === "loading"}
+                aria-label="Mark Unsold"
+                className={
+                  markUnsoldDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="mark-unsold"
+                disabled={markUnsoldDisabled}
+                onClick={onMarkUnsold}
+                type="button"
+              >
+                <span>
+                  {markUnsoldState === "loading" ? "Marking Unsold..." : "Mark Unsold"}
+                </span>
+              </button>
               <button
                 aria-busy={undoState === "loading"}
                 aria-label={
@@ -2838,9 +2914,81 @@ function AuctionBoard({
                 <RotateCcw aria-hidden="true" size={18} />
                 <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
               </button>
+            </section>
+            </section>
+
+            <div className="live-outcome-region" data-testid="live-outcome-region">
+              <div className="selected-team-panel" data-testid="selected-team">
+                <span className="status-label">Selected Team</span>
+                <strong>
+                  {selectTeamState === "loading"
+                    ? "Selecting Team..."
+                    : (selectedTeam?.name ??
+                      (boardState.selectedTeamId !== null ? "Unknown Team" : "None"))}
+                </strong>
+                {selectedTeamCapacity &&
+                !selectedTeamCapacity.canBuy &&
+                markSoldBlockedReasons.length === 0 ? (
+                  <ul>
+                    {selectedTeamCapacity.reasons.map((reason, index) => (
+                      <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
+                        Blocked: {reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {boardState.selectedTeamId !== null ? (
+                  <button
+                    className="secondary-action"
+                    data-testid="clear-selected-team"
+                    disabled={!selectionEnabled}
+                    onClick={() => onSelectTeam(null)}
+                    type="button"
+                  >
+                    Clear selected Team
+                  </button>
+                ) : null}
+              </div>
+
+              {markSoldBlockedReasons.length > 0 ? (
+                <div
+                  aria-live="assertive"
+                  className="blocked-reason-panel"
+                  data-testid="mark-sold-blocked-reason"
+                  role="alert"
+                >
+                  {markSoldBlockedReasons.map((reason, index) => (
+                    <p key={`${reason}-${index}`}>{reason}</p>
+                  ))}
+                </div>
+              ) : null}
+
               <p className="undo-summary" data-testid="undo-summary">
                 {boardState.lastUndoAction?.summary ?? "No actions to undo."}
               </p>
+
+              {revealNextError ? (
+                <p className="command-error" role="alert">
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{revealNextError}</span>
+                </p>
+              ) : null}
+              {selectTeamError ? (
+                <p className="command-error" role="alert">
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{selectTeamError}</span>
+                </p>
+              ) : null}
+              {increaseBidError ? (
+                <p
+                  className="command-error"
+                  data-testid="increase-bid-error"
+                  role="alert"
+                >
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{increaseBidError}</span>
+                </p>
+              ) : null}
               {undoError ? (
                 <p className="command-error" data-testid="undo-error" role="alert">
                   <AlertCircle aria-hidden="true" size={18} />
@@ -2852,187 +3000,84 @@ function AuctionBoard({
                   {undoSummary}
                 </p>
               ) : null}
-            </div>
-            {revealNextError ? (
-              <p className="command-error" role="alert">
-                <AlertCircle aria-hidden="true" size={18} />
-                <span>{revealNextError}</span>
-              </p>
-            ) : null}
-            {selectTeamError ? (
-              <p className="command-error" role="alert">
-                <AlertCircle aria-hidden="true" size={18} />
-                <span>{selectTeamError}</span>
-              </p>
-            ) : null}
-            {increaseBidError ? (
-              <p
-                className="command-error"
-                data-testid="increase-bid-error"
-                role="alert"
-              >
-                <AlertCircle aria-hidden="true" size={18} />
-                <span>{increaseBidError}</span>
-              </p>
-            ) : null}
-            <div className="outcome-controls" aria-label="Player outcome controls">
-              <div className="mark-sold-panel" aria-live="polite">
-                <button
-                  aria-busy={markSoldState === "loading"}
-                  className={
-                    markSoldDisabled
-                      ? "secondary-action secondary-action-disabled"
-                      : "secondary-action"
-                  }
-                  data-testid="mark-sold"
-                  disabled={markSoldDisabled}
-                  onClick={onMarkSold}
-                  type="button"
+              {markSoldError ? (
+                <p
+                  className="command-error"
+                  data-testid="mark-sold-error"
+                  role="alert"
                 >
-                  <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
-                </button>
-                {markSoldBlockedReasons.length > 0 ? (
-                  <div
-                    className="blocked-reason-panel"
-                    data-testid="mark-sold-blocked-reason"
-                    role="alert"
-                  >
-                    {markSoldBlockedReasons.map((reason, index) => (
-                      <p key={`${reason}-${index}`}>{reason}</p>
-                    ))}
-                  </div>
-                ) : null}
-                {markSoldError ? (
-                  <p
-                    className="command-error"
-                    data-testid="mark-sold-error"
-                    role="alert"
-                  >
-                    <AlertCircle aria-hidden="true" size={18} />
-                    <span>{markSoldError}</span>
-                  </p>
-                ) : null}
-                {markSoldSummary ? (
-                  <p
-                    className="sale-summary"
-                    data-testid="mark-sold-success"
-                    role="status"
-                  >
-                    {markSoldSummary}
-                  </p>
-                ) : null}
-              </div>
-              <div className="mark-unsold-panel" aria-live="polite">
-                <button
-                  aria-busy={markUnsoldState === "loading"}
-                  aria-label="Mark Unsold"
-                  className={
-                    markUnsoldDisabled
-                      ? "secondary-action secondary-action-disabled"
-                      : "secondary-action"
-                  }
-                  data-testid="mark-unsold"
-                  disabled={markUnsoldDisabled}
-                  onClick={onMarkUnsold}
-                  type="button"
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{markSoldError}</span>
+                </p>
+              ) : null}
+              {markSoldSummary ? (
+                <p
+                  className="sale-summary"
+                  data-testid="mark-sold-success"
+                  role="status"
                 >
-                  <span>
-                    {markUnsoldState === "loading" ? "Marking Unsold..." : "Mark Unsold"}
-                  </span>
-                </button>
-                {markUnsoldError ? (
-                  <p
-                    className="command-error"
-                    data-testid="mark-unsold-error"
-                    role="alert"
-                  >
-                    <AlertCircle aria-hidden="true" size={18} />
-                    <span>{markUnsoldError}</span>
-                  </p>
-                ) : null}
-                {markUnsoldSummary ? (
-                  <p
-                    className="unsold-summary"
-                    data-testid="mark-unsold-success"
-                    role="status"
-                  >
-                    {markUnsoldSummary}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        </div>
+                  {markSoldSummary}
+                </p>
+              ) : null}
+              {markUnsoldError ? (
+                <p
+                  className="command-error"
+                  data-testid="mark-unsold-error"
+                  role="alert"
+                >
+                  <AlertCircle aria-hidden="true" size={18} />
+                  <span>{markUnsoldError}</span>
+                </p>
+              ) : null}
+              {markUnsoldSummary ? (
+                <p
+                  className="unsold-summary"
+                  data-testid="mark-unsold-success"
+                  role="status"
+                >
+                  {markUnsoldSummary}
+                </p>
+              ) : null}
 
-        <section
-          className="phase1-progress-panel"
-          data-testid="phase1-progress"
-          aria-label="Phase 1 order progress"
-        >
-          <div>
-            <span className="status-label">Phase 1 order</span>
-            <strong>{getPhase1OrderStatusLabel(boardState.phase1Progress)}</strong>
+              <p className="unsold-pool-summary" data-testid="unsold-pool-summary">
+                Unsold (Phase 2 rebid): {boardState.phase2PoolCount}
+              </p>
+
+              {showPhase1Complete ? (
+                <div className="phase1-complete-panel" data-testid="phase1-complete">
+                  <p>Phase 1 complete.</p>
+                  <button
+                    className="secondary-action secondary-action-disabled start-unsold-bidding-preview"
+                    data-testid="start-unsold-bidding-preview"
+                    disabled
+                    type="button"
+                  >
+                    Start Unsold Bidding will rebid {boardState.phase2PoolCount} unsold
+                    {boardState.phase2PoolCount === 1 ? " player" : " players"}.
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
-          <dl className="phase1-progress-summary">
-            <div>
-              <dt>Ordered</dt>
-              <dd data-testid="phase1-ordered-count">
-                {boardState.phase1Progress.orderedPlayerCount}
-              </dd>
-            </div>
-            <div>
-              <dt>Pending</dt>
-              <dd data-testid="phase1-pending-count">
-                {boardState.phase1Progress.pendingPlayerCount}
-              </dd>
-            </div>
-            <div>
-              <dt>Revealed</dt>
-              <dd data-testid="phase1-revealed-count">
-                {boardState.phase1Progress.revealedPlayerCount}
-              </dd>
-            </div>
-          </dl>
-          <div className="phase1-category-grid" aria-label="Phase 1 categories">
-            {boardState.phase1Progress.categories.map((category) => (
-              <article key={category.category}>
-                <strong>{category.category}</strong>
-                <span>
-                  {category.pending} pending of {category.total}
+
+          <section
+            aria-busy={selectTeamState === "loading"}
+            className="team-board"
+            aria-label="Initialized Teams"
+            data-testid="team-matrix"
+          >
+            <div className="matrix-header">
+              <div className="subsection-heading">
+                <h3>Teams</h3>
+                <span>{boardState.teams.length}</span>
+              </div>
+              {selectedTeam ? (
+                <span className="selected-team-tag" title={`${selectedTeam.name} selected`}>
+                  {selectedTeam.name} selected
                 </span>
-              </article>
-            ))}
-          </div>
-          <p className="unsold-pool-summary" data-testid="unsold-pool-summary">
-            Unsold (Phase 2 rebid): {boardState.phase2PoolCount}
-          </p>
-          {showPhase1Complete ? (
-            <div className="phase1-complete-panel" data-testid="phase1-complete">
-              <p>Phase 1 complete.</p>
-              <button
-                className="secondary-action secondary-action-disabled start-unsold-bidding-preview"
-                data-testid="start-unsold-bidding-preview"
-                disabled
-                type="button"
-              >
-                Start Unsold Bidding will rebid {boardState.phase2PoolCount} unsold
-                {boardState.phase2PoolCount === 1 ? " player" : " players"}.
-              </button>
+              ) : null}
             </div>
-          ) : null}
-        </section>
-
-        <section
-          aria-busy={selectTeamState === "loading"}
-          className="team-board"
-          aria-label="Initialized Teams"
-          data-testid="team-matrix"
-        >
-          <div className="subsection-heading">
-            <h3>Teams</h3>
-            <span>{boardState.teams.length}</span>
-          </div>
-          <div className="team-board-grid">
+            <div className="team-board-grid">
             {boardState.teams.map((team) => {
               const isSelected = team.id === boardState.selectedTeamId;
               const capacity = team.currentPlayerCapacity;
@@ -3103,7 +3148,9 @@ function AuctionBoard({
                   <span
                     className="team-capacity-text"
                     data-testid={
-                      capacity && !capacity.canBuy ? "team-capacity-reason" : undefined
+                      capacity && !capacity.canBuy
+                        ? "team-tile-capacity-reason"
+                        : undefined
                     }
                   >
                     {capacityText}
@@ -3124,6 +3171,7 @@ function AuctionBoard({
             })}
           </div>
         </section>
+        </div>
       </section>
       )}
 

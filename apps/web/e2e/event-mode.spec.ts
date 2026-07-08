@@ -496,19 +496,26 @@ test("reviews and saves auction parameters before starting the auction", async (
   }
 
   await expect(page.getByTestId("mark-sold")).toBeDisabled();
-  await expect(page.getByTestId("selected-team")).toContainText("Blocked:");
   await expect(page.getByTestId("mark-sold-blocked-reason")).toContainText(
     /Blocked: Falcons have 180 remaining; current bid is \d+\./
   );
+  await expect
+    .poll(async () => {
+      const blockedMessage = (
+        await page.getByTestId("mark-sold-blocked-reason").textContent()
+      )?.trim();
+      const displayedBid = (await page.getByTestId("current-bid").textContent())?.trim() ?? "";
+      return blockedMessage?.includes(`current bid is ${displayedBid}.`) ?? false;
+    })
+    .toBe(true);
   const blockedMessage = (
     await page.getByTestId("mark-sold-blocked-reason").textContent()
   )?.trim();
   expect(blockedMessage).toMatch(
     /^Blocked: Falcons have 180 remaining; current bid is \d+\.$/
   );
-  const blockedBid = blockedMessage?.match(/current bid is (\d+)\./)?.[1] ?? "";
-  await expect(page.getByTestId("current-bid")).toHaveText(blockedBid);
-  await expect(page.getByTestId("selected-team")).toContainText(blockedMessage ?? "");
+  const displayedBid = (await page.getByTestId("current-bid").textContent())?.trim() ?? "";
+  const blockedBid = displayedBid;
 
   const rejectedMarkSold = await request.post("/api/auction/mark-sold", {
     data: { clientCommandId: "e2e-mark-sold-blocked" }
