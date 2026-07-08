@@ -213,7 +213,8 @@ test("blocks Start Auction when an imported role base price is missing", async (
 test("reviews and saves auction parameters before starting the auction", async ({
   page,
   request
-}) => {
+}, testInfo) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
   test.setTimeout(120_000);
   await page.goto("/");
 
@@ -262,6 +263,10 @@ test("reviews and saves auction parameters before starting the auction", async (
   await page.getByTestId("setup-start-auction").click();
 
   await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("live-status-counters")).toBeVisible();
+  await expect(page.getByTestId("live-board-stage")).toBeVisible();
+  await expect(page.getByTestId("live-command-strip")).toBeVisible();
+  await expect(page.getByTestId("team-matrix")).toBeVisible();
   await expect(page.getByTestId("phase-indicator")).toContainText("Initial Auction");
   await expect(page.getByTestId("current-player-panel")).toContainText(
     "No Current Player"
@@ -290,6 +295,9 @@ test("reviews and saves auction parameters before starting the auction", async (
   });
 
   await expect(page.getByTestId("current-player-panel")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("live-board-stage")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("live-command-strip")).toContainText("Increase Bid");
+  await expect(page.getByTestId("team-matrix")).toContainText("Falcons");
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
   await expect(page.getByTestId("current-player-role")).toContainText("Ace");
   await expect(page.getByTestId("current-player-base-price")).toContainText("10");
@@ -299,6 +307,10 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("current-bid")).toContainText("10");
   await expect(page.getByTestId("increase-bid")).toContainText("+5");
   await expect(page.getByTestId("increase-bid")).toBeEnabled();
+  await page.waitForFunction(() => document.fonts.ready);
+  await page.getByTestId("app-shell").screenshot({
+    path: testInfo.outputPath("live-frame-1366x768.png")
+  });
   await page.getByTestId("increase-bid").click();
   await expect(page.getByTestId("current-bid")).toHaveText("15");
   await page.keyboard.press("+");

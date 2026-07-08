@@ -230,7 +230,7 @@ UX-DR34: Build Manual Assignment as its own focused surface using the redesign p
 
 UX-DR35: Build the roster and Closed surfaces with dense dark roster cards, Board/Rosters switch, final roster title treatment, and all-Team visibility matching the redesign hierarchy while preserving privacy allowlists.
 
-UX-DR36: Add visual QA gates for the redesigned surfaces at 1440x900, 1366x768, 1920x1080, and 390x844, including checks that command controls, counters, player stage, Team matrix, blocked reasons, and roster cards do not overlap or push critical content out of workflow order.
+UX-DR36: Add full redesign QA gates for the redesigned surfaces, combining unit/component tests, E2E functional regression tests, accessibility checks, and visual QA screenshots at 1440x900, 1366x768, 1920x1080, and 390x844. The gate must prove command controls, counters, player stage, Team matrix, blocked reasons, roster cards, and core auction actions work correctly and do not overlap or push critical content out of workflow order.
 
 ### FR Coverage Map
 
@@ -1140,13 +1140,23 @@ So that the room can inspect Teams without returning to Excel.
 **When** a second agent reviews it
 **Then** the reviewer checks all-Team visibility, row readability, closed-state readiness, privacy, non-mutation behavior, and consistency with the redesign mockup.
 
-### Story 2.5.5: Run Redesign Visual QA and Regression Gates
+### Story 2.5.5: Run Redesign Functional, E2E, Unit, and Visual QA Gates
 
 As an event organizer,
-I want the redesigned surfaces verified across target viewports before Epic 3 starts,
+I want the redesigned surfaces verified functionally and visually before Epic 3 starts,
 So that unsold-player implementation builds on a stable, readable UI foundation.
 
 **Acceptance Criteria:**
+
+**Given** Epic 2.5 implementation is complete
+**When** unit and component tests run
+**Then** redesigned shell components, Current Player stage, command strip, Team matrix, Board/Rosters switch, roster cards, blocked-reason rendering, keyboard behavior, and privacy-safe rendering are covered
+**And** tests use stable `data-testid` anchors rather than brittle CSS-only selectors where behavior matters.
+
+**Given** Epic 2.5 implementation is complete
+**When** full E2E regression tests run
+**Then** setup-to-start, reveal, select Team, increase bid, blocked sale, mark sold, mark unsold, roster view switch, resume, undo, command-in-flight protection, keyboard operation, and live-board privacy still pass against the redesigned UI
+**And** E2E tests are updated for any renamed controls, moved controls, or new stable selectors introduced by the redesign.
 
 **Given** Epic 2.5 implementation is complete
 **When** visual QA runs
@@ -1157,8 +1167,8 @@ So that unsold-player implementation builds on a stable, readable UI foundation.
 **Then** counters, Current Player, Current Bid, command strip, Team matrix, blocked reasons, assignment pool, roster cards, and Board/Rosters switch do not overlap or truncate critical text incoherently.
 
 **Given** existing Epic 2 behavior is retested
-**When** reveal, select Team, increase bid, blocked sale, mark sold, mark unsold, roster view switch, resume, and undo tests run
-**Then** the redesign has not regressed domain command behavior, persistence, privacy, or Undo semantics.
+**When** automated regression results are reviewed
+**Then** the redesign has not regressed domain command behavior, API reconciliation, persistence, privacy, accessibility, keyboard operation, or Undo semantics.
 
 **Given** narrow fallback is tested
 **When** the viewport is 390x844
@@ -1167,11 +1177,11 @@ So that unsold-player implementation builds on a stable, readable UI foundation.
 
 **Given** a developer finishes this story
 **When** they run the story's Dev Gate
-**Then** build, typecheck, unit/component tests, relevant existing Epic 2 E2E tests, and the redesign visual QA screenshot suite pass or any exception is explicitly triaged.
+**Then** build, typecheck, full relevant unit/component tests, full relevant E2E tests, accessibility checks, and the redesign visual QA screenshot suite pass or any exception is explicitly triaged with owner, risk, and follow-up.
 
 **Given** the dev agent marks the story complete
 **When** a second agent reviews it
-**Then** the reviewer compares screenshots against the redesign mockup, verifies no critical overlap, reruns high-risk regression tests, and blocks Epic 3 start for any issue that would make live operation unreliable.
+**Then** the reviewer compares screenshots against the redesign mockup, verifies no critical overlap, reviews updated unit/E2E assertions, reruns high-risk regression tests, and blocks Epic 3 start for any issue that would make live operation unreliable.
 
 ## Epic 3: Resolve Unsold Players
 

@@ -31,7 +31,7 @@ Epic 1 is not affected.
 
 Epic 2 behavior remains valid and complete, but the UI output from Epic 2 now needs a redesign implementation pass.
 
-Epic 2.5 is added as an interstitial epic before Epic 3. It implements the redesigned live board, Manual Assignment shell, roster/closed-state shell, and visual QA gates.
+Epic 2.5 is added as an interstitial epic before Epic 3. It implements the redesigned live board, Manual Assignment shell, roster/closed-state shell, and a full QA gate covering unit/component tests, E2E functional regressions, accessibility checks, and visual QA.
 
 Epic 3 should not begin until Epic 2.5 is complete. Phase 2 and Phase 3 behavior will be easier and safer to implement once the target surfaces are stable.
 
@@ -45,7 +45,7 @@ New stories added:
 - 2.5.2 Redesign the Live Auction Board Layout
 - 2.5.3 Prepare the Focused Manual Assignment Surface
 - 2.5.4 Redesign Rosters and Closed-State Display
-- 2.5.5 Run Redesign Visual QA and Regression Gates
+- 2.5.5 Run Redesign Functional, E2E, Unit, and Visual QA Gates
 
 Existing Story 2.5, "Block Invalid Sales With Clear Reasons", remains unchanged. The new epic is numbered `Epic 2.5`; its stories use `2.5.x` naming to avoid conflict.
 
@@ -65,11 +65,11 @@ UX docs were updated:
 
 - `DESIGN.md` now makes the red/black event-console direction authoritative for live and closed surfaces.
 - `EXPERIENCE.md` now references the redesign review mockup and adds structure for top counters, command strip, Team matrix, focused Manual Assignment, and roster/closed-state behavior.
-- `epics.md` now includes UX-DR31 through UX-DR36 to capture the redesign requirements and visual QA gates.
+- `epics.md` now includes UX-DR31 through UX-DR36 to capture the redesign requirements plus unit, E2E, accessibility, and visual QA gates.
 
 ### Technical Impact
 
-Implementation will likely touch React view components, styling tokens, Playwright screenshot coverage, component accessibility tests, and existing Epic 2 E2E tests. Domain, persistence, and API changes should be avoided unless regression tests expose a pre-existing mismatch.
+Implementation will likely touch React view components, styling tokens, Playwright screenshot coverage, component/unit tests, accessibility tests, and existing Epic 2 E2E tests. Domain, persistence, and API changes should be avoided unless regression tests expose a pre-existing mismatch.
 
 ## 3. Recommended Approach
 
@@ -80,7 +80,7 @@ Rationale:
 - The redesigned UI is an implementation target refinement, not a product or architecture pivot.
 - Adding an interstitial Epic 2.5 preserves Epic 3's behavioral focus.
 - The redesign prepares Manual Assignment and Closed surfaces before their domain stories depend on them.
-- A dedicated visual QA story reduces the risk of carrying layout regressions into unsold-player workflows.
+- A dedicated full QA story reduces the risk of carrying functional, accessibility, or layout regressions into unsold-player workflows.
 
 Effort estimate: Medium.
 
@@ -159,7 +159,7 @@ Change:
 
 - Add UX-DR31 through UX-DR36.
 - Add Epic 2.5 to the epic list.
-- Add five implementation stories for tokens/app frame, live board redesign, Manual Assignment shell, roster/closed display, and visual QA/regression gates.
+- Add five implementation stories for tokens/app frame, live board redesign, Manual Assignment shell, roster/closed display, and functional/E2E/unit/visual QA regression gates.
 
 Rationale:
 
@@ -187,7 +187,7 @@ Responsibilities:
 
 - Create and implement Epic 2.5 stories in order.
 - Preserve existing Epic 2 domain/API/persistence behavior.
-- Add visual QA screenshots and regression evidence before Epic 3 begins.
+- Add unit/component, E2E, accessibility, visual QA screenshot, and regression evidence before Epic 3 begins.
 - Keep UX docs and implementation aligned when story-level details reveal necessary refinements.
 
 Success criteria:
@@ -195,4 +195,5 @@ Success criteria:
 - Epic 2.5 stories reach `done`.
 - Existing Epic 2 flows still pass.
 - Redesigned live board, Manual Assignment shell, roster, and closed-state fixtures match the review hierarchy at target viewports.
+- Unit/component and full relevant E2E tests pass against updated UI selectors and flows.
 - No privacy, undo, command, persistence, or accessibility regression is introduced.

@@ -66,3 +66,9 @@
 
 - DOM-level roster privacy allowlist test — relies on existing shared contract tests; dedicated DOM scan deferred
 - Full enabled/disabled control-state preservation test beyond AC5 minimum — E2E covers reveal-next; exhaustive control matrix deferred
+
+## Deferred from: code review of 2-5-1-apply-red-black-event-console-tokens-and-app-frame (2026-07-08)
+
+- Dev Gate build step not evidenced in completion notes — CI/build gate tracked separately
+- Screenshot captured at only 1366x768 viewport — Story 2.5.5 owns multi-viewport visual QA
+- E2E does not assert screenshot artifact existence — manual artifact path recorded in Dev Agent Record

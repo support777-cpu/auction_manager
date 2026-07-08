@@ -62,6 +62,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     await import("./main.js");
 
     expect(await screen.findByTestId("resume-start-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("app-shell")).toHaveClass("live-app-shell");
     expect(screen.getByTestId("resume-phase")).toHaveTextContent("Initial Auction");
     expect(screen.getByTestId("resume-last-action")).toHaveTextContent(
       "Reveal Next Player"
@@ -762,6 +763,48 @@ describe("Board and roster view switching", () => {
     fireEvent.keyDown(tabs[0]!, { key: "ArrowRight" });
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+  });
+
+  it("renders redesigned live-board structural anchors with existing command controls", async () => {
+    await loadEligibleBoard();
+
+    expect(await screen.findByTestId("app-shell")).toHaveClass("live-app-shell");
+
+    const counters = await screen.findByTestId("live-status-counters");
+    expect(counters).toHaveTextContent("Current phase");
+    expect(counters).toHaveTextContent("Initial Auction");
+    expect(counters).toHaveTextContent("Teams");
+
+    const stage = screen.getByTestId("live-board-stage");
+    expect(within(stage).getByTestId("current-player-panel")).toHaveTextContent(
+      "Aarav Menon"
+    );
+    expect(within(stage).getByTestId("current-bid")).toHaveTextContent("10");
+
+    const commandStrip = screen.getByTestId("live-command-strip");
+    expect(
+      within(commandStrip).getByRole("button", { name: /Increase Bid/ })
+    ).toBeEnabled();
+    expect(
+      within(commandStrip).getByRole("button", { name: /Reveal Next Player/ })
+    ).toBeDisabled();
+    expect(within(commandStrip).getByRole("button", { name: /Undo/ })).toBeDisabled();
+    expect(within(commandStrip).getByTestId("reveal-next")).toBeDisabled();
+    expect(within(commandStrip).getByTestId("increase-bid")).toBeEnabled();
+    expect(within(commandStrip).getByTestId("mark-sold")).toBeEnabled();
+    expect(within(commandStrip).getByTestId("mark-unsold")).toBeEnabled();
+    expect(within(commandStrip).getByTestId("undo-action")).toBeDisabled();
+    expect(within(commandStrip).getByTestId("undo-summary")).toHaveTextContent(
+      "No actions to undo."
+    );
+
+    const teamMatrix = screen.getByTestId("team-matrix");
+    expect(within(teamMatrix).getByTestId("team-tile-selected")).toHaveTextContent(
+      "Falcons"
+    );
+    expect(
+      within(teamMatrix).getByRole("button", { name: /View Falcons details/ })
+    ).toBeInTheDocument();
   });
 
   it("renders empty roster copy for teams without sold players", async () => {

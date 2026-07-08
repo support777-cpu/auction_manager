@@ -2059,7 +2059,7 @@ function ResumeStartSurface({
   readonly onResume: () => void | Promise<void>;
 }) {
   return (
-    <main className="app-shell" data-testid="app-shell">
+    <main className="app-shell live-app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
         <h1 id="app-title">Auction Manager</h1>
       </header>
@@ -2598,12 +2598,16 @@ function AuctionBoard({
     boardState.phase2PoolCount > 0;
 
   return (
-    <main className="app-shell" data-testid="app-shell">
+    <main className="app-shell live-app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
         <h1 id="app-title">Auction Manager</h1>
       </header>
 
-      <section className="status-grid" aria-label="Auction status">
+      <section
+        className="status-grid"
+        aria-label="Auction status"
+        data-testid="live-status-counters"
+      >
         <article>
           <span className="status-label">Current phase</span>
           <strong>Initial Auction</strong>
@@ -2672,7 +2676,7 @@ function AuctionBoard({
         id="live-view-panel-board"
         role="tabpanel"
       >
-        <div className="board-main">
+        <div className="board-main" data-testid="live-board-stage">
           <section
             className="current-player-panel"
             data-testid="current-player-panel"
@@ -2729,7 +2733,11 @@ function AuctionBoard({
             )}
           </section>
 
-          <section className="bid-panel" aria-label="Current bid">
+          <section
+            className="bid-panel"
+            aria-label="Current bid and command controls"
+            data-testid="live-command-strip"
+          >
             <span className="status-label">Current bid</span>
             <strong
               className={
@@ -2812,8 +2820,10 @@ function AuctionBoard({
                 aria-busy={undoState === "loading"}
                 aria-label={
                   boardState.lastUndoAction
-                    ? boardState.lastUndoAction.summary
-                    : "No actions to undo."
+                    ? boardState.lastUndoAction.summary.startsWith("Undo")
+                      ? boardState.lastUndoAction.summary
+                      : `Undo: ${boardState.lastUndoAction.summary}`
+                    : "Undo: No actions to undo."
                 }
                 className={
                   undoDisabled
@@ -2871,8 +2881,8 @@ function AuctionBoard({
                   aria-busy={markSoldState === "loading"}
                   className={
                     markSoldDisabled
-                      ? "live-action live-action-disabled"
-                      : "live-action"
+                      ? "secondary-action secondary-action-disabled"
+                      : "secondary-action"
                   }
                   data-testid="mark-sold"
                   disabled={markSoldDisabled}
@@ -2918,8 +2928,8 @@ function AuctionBoard({
                   aria-label="Mark Unsold"
                   className={
                     markUnsoldDisabled
-                      ? "live-action live-action-disabled"
-                      : "live-action"
+                      ? "secondary-action secondary-action-disabled"
+                      : "secondary-action"
                   }
                   data-testid="mark-unsold"
                   disabled={markUnsoldDisabled}
@@ -3000,7 +3010,7 @@ function AuctionBoard({
             <div className="phase1-complete-panel" data-testid="phase1-complete">
               <p>Phase 1 complete.</p>
               <button
-                className="live-action live-action-disabled start-unsold-bidding-preview"
+                className="secondary-action secondary-action-disabled start-unsold-bidding-preview"
                 data-testid="start-unsold-bidding-preview"
                 disabled
                 type="button"
@@ -3016,6 +3026,7 @@ function AuctionBoard({
           aria-busy={selectTeamState === "loading"}
           className="team-board"
           aria-label="Initialized Teams"
+          data-testid="team-matrix"
         >
           <div className="subsection-heading">
             <h3>Teams</h3>

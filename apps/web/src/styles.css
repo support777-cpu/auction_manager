@@ -2,11 +2,34 @@
 
 :root {
   color-scheme: light;
+  --surface-base: #08090b;
+  --surface-raised: #111318;
+  --surface-muted: #191c22;
+  --surface-panel-soft: #22262e;
+  --ink-inverse: #f9fafb;
+  --ink-inverse-secondary: #d1d5db;
+  --command-red: #e01f2d;
+  --command-red-strong: #af121f;
+  --live-red: #ff3347;
+  --border-subtle: #30343d;
+  --border-strong: #4b5563;
+  --focus-ring: #ff3347;
+  --button-live-background: #f7f4ee;
+  --on-accent-foreground: #ffffff;
+  --ink-disabled: #9ca3af;
+  --alert-surface: #450a0a;
+  --alert-ink: #fecaca;
+  --alert-border: #fca5a5;
+  --setup-surface-base: #f7f8fa;
+  --setup-surface-raised: #ffffff;
+  --setup-ink-primary: #111827;
+  --setup-ink-secondary: #4b5563;
+  --setup-border-subtle: #d8dee6;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #f7f8fa;
-  color: #111827;
+  background: var(--setup-surface-base);
+  color: var(--setup-ink-primary);
 }
 
 * {
@@ -16,7 +39,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f7f8fa;
+  background: var(--setup-surface-base);
 }
 
 button {
@@ -31,8 +54,8 @@ button:focus-visible {
 .app-shell {
   min-height: 100vh;
   padding: 24px;
-  background: #f7f8fa;
-  color: #111827;
+  background: var(--setup-surface-base);
+  color: var(--setup-ink-primary);
 }
 
 .app-header {
@@ -1566,5 +1589,343 @@ button:focus-visible {
 
   .team-detail-drawer-summary {
     grid-template-columns: 1fr;
+  }
+}
+
+.live-app-shell {
+  color-scheme: dark;
+  background: var(--surface-base);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .resume-start-panel {
+  border-color: var(--border-subtle);
+  background: var(--surface-raised);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .resume-summary-grid article {
+  border-color: var(--border-subtle);
+  background: var(--surface-muted);
+}
+
+.live-app-shell .resume-summary-grid strong {
+  color: var(--ink-inverse);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-app-shell .setup-copy h2 {
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .setup-copy p:last-child,
+.live-app-shell .setup-actions p {
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell button:focus-visible,
+.live-app-shell .team-tile:focus-visible,
+.live-app-shell .board-rosters-switch-tab:focus-visible,
+.live-app-shell .team-detail-trigger:focus-visible,
+.live-app-shell .team-detail-drawer-close:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.live-app-shell .primary-action:focus-visible,
+.live-app-shell .live-action:focus-visible,
+.live-app-shell .board-rosters-switch-tab-active:focus-visible {
+  outline-color: var(--ink-inverse);
+}
+
+.live-app-shell .app-header,
+.live-app-shell .status-grid,
+.live-app-shell .phase-strip,
+.live-app-shell .board-rosters-switch,
+.live-app-shell .auction-board,
+.live-app-shell .team-rosters-view {
+  max-width: 1180px;
+}
+
+.live-app-shell .app-header h1,
+.live-app-shell .subsection-heading h2,
+.live-app-shell .subsection-heading h3,
+.live-app-shell .current-player-panel h2,
+.live-app-shell .phase1-progress-panel strong,
+.live-app-shell .team-tile strong,
+.live-app-shell .selected-team-panel strong,
+.live-app-shell .roster-team-section-heading h3,
+.live-app-shell .team-detail-drawer-heading h2,
+.live-app-shell .roster-player-name {
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .eyebrow,
+.live-app-shell .status-label,
+.live-app-shell .phase1-progress-summary dt,
+.live-app-shell .current-player-facts dt,
+.live-app-shell .team-tile dt,
+.live-app-shell .roster-team-summary dt,
+.live-app-shell .team-detail-drawer-summary dt,
+.live-app-shell .roster-role-counts,
+.live-app-shell .roster-empty-copy,
+.live-app-shell .team-detail-capacity,
+.live-app-shell .undo-summary,
+.live-app-shell .board-rosters-switch-disabled-copy,
+.live-app-shell .current-player-panel p:last-child,
+.live-app-shell .phase1-category-grid article span,
+.live-app-shell .roster-team-section-heading p,
+.live-app-shell .team-detail-drawer-heading p,
+.live-app-shell .team-tile span {
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .status-grid article,
+.live-app-shell .phase-strip,
+.live-app-shell .board-rosters-switch-tabs,
+.live-app-shell .auction-board,
+.live-app-shell .team-rosters-view {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.live-app-shell .status-grid article {
+  min-height: 96px;
+  background: var(--surface-muted);
+}
+
+.live-app-shell .status-grid strong {
+  color: var(--ink-inverse);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-app-shell .phase-strip {
+  background: var(--surface-raised);
+}
+
+.live-app-shell .phase-step {
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .phase-step-active {
+  background: var(--live-red);
+  color: var(--on-accent-foreground);
+}
+
+.live-app-shell .board-rosters-switch-tabs {
+  background: var(--surface-muted);
+}
+
+.live-app-shell .board-rosters-switch-tab {
+  border-radius: 6px;
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .board-rosters-switch-tab-active {
+  border-color: var(--command-red);
+  background: var(--command-red);
+  color: var(--on-accent-foreground);
+}
+
+.live-app-shell .auction-board,
+.live-app-shell .team-rosters-view {
+  padding: 20px;
+}
+
+.live-app-shell .current-player-panel,
+.live-app-shell .bid-panel,
+.live-app-shell .phase1-progress-panel,
+.live-app-shell .team-board,
+.live-app-shell .roster-team-section,
+.live-app-shell .team-detail-drawer {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .current-player-media,
+.live-app-shell .team-logo-placeholder {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel-soft);
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .current-player-facts div,
+.live-app-shell .phase1-progress-summary div,
+.live-app-shell .phase1-category-grid article,
+.live-app-shell .undo-panel,
+.live-app-shell .selected-team-panel,
+.live-app-shell .roster-team-summary div,
+.live-app-shell .team-detail-drawer-summary div {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-panel-soft);
+}
+
+.live-app-shell .current-player-facts dd,
+.live-app-shell .phase1-progress-summary dd,
+.live-app-shell .team-tile dd,
+.live-app-shell .roster-team-summary dd,
+.live-app-shell .team-detail-drawer-summary dd,
+.live-app-shell .bid-panel strong {
+  color: var(--ink-inverse);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-app-shell .bid-panel .current-bid-live {
+  color: var(--live-red);
+  font-size: clamp(44px, 8vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.live-app-shell .primary-action {
+  border: 1px solid var(--command-red);
+  border-radius: 6px;
+  background: var(--command-red);
+  color: var(--on-accent-foreground);
+}
+
+.live-app-shell .primary-action:hover {
+  background: var(--command-red-strong);
+}
+
+.live-app-shell .live-action {
+  border-color: var(--live-red);
+  border-radius: 6px;
+  background: var(--button-live-background);
+  color: var(--command-red-strong);
+}
+
+.live-app-shell .live-action:hover {
+  background: #fff1f2;
+}
+
+.live-app-shell .bid-increment-chip {
+  background: var(--on-accent-foreground);
+  color: var(--command-red-strong);
+}
+
+.live-app-shell .live-action-disabled,
+.live-app-shell .live-action-disabled:hover,
+.live-app-shell .primary-action-disabled,
+.live-app-shell .primary-action-disabled:hover,
+.live-app-shell .secondary-action-disabled,
+.live-app-shell .secondary-action-disabled:hover {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel-soft);
+  color: var(--ink-disabled);
+}
+
+.live-app-shell .secondary-action,
+.live-app-shell .team-detail-trigger,
+.live-app-shell .team-detail-drawer-close {
+  border-color: var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .outcome-controls .secondary-action {
+  display: inline-flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+}
+
+.live-app-shell .team-tile {
+  border-color: var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .team-tile-selected {
+  border-color: var(--command-red);
+  background: var(--command-red);
+  color: var(--on-accent-foreground);
+}
+
+.live-app-shell .team-tile-selected .team-logo-placeholder {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.live-app-shell .team-capacity-text {
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .selected-team-panel {
+  border-top: 0;
+  padding: 12px;
+}
+
+.live-app-shell .selected-team-panel ul {
+  color: var(--alert-ink);
+}
+
+.live-app-shell .blocked-reason-panel,
+.live-app-shell .command-error {
+  border: 1px solid var(--alert-border);
+  border-radius: 6px;
+  background: var(--alert-surface);
+  color: var(--alert-ink);
+}
+
+.live-app-shell .sale-summary,
+.live-app-shell .unsold-summary,
+.live-app-shell .phase1-complete-panel {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel-soft);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .unsold-pool-summary {
+  color: var(--ink-inverse-secondary);
+}
+
+.live-app-shell .team-rosters-grid {
+  gap: 12px;
+}
+
+.live-app-shell .roster-player-row {
+  border-color: var(--border-subtle);
+  border-radius: 4px;
+  background: var(--surface-panel-soft);
+  color: var(--ink-inverse-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-app-shell .team-detail-drawer-overlay {
+  background: rgba(8, 9, 11, 0.76);
+}
+
+.live-app-shell .team-detail-drawer {
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 760px) {
+  .live-app-shell .auction-board,
+  .live-app-shell .team-rosters-view {
+    padding: 14px;
+  }
+
+  .live-app-shell .status-grid article {
+    min-height: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  .live-app-shell .primary-action,
+  .live-app-shell .live-action,
+  .live-app-shell .team-tile-selected,
+  .live-app-shell .board-rosters-switch-tab-active {
+    border: 2px solid ButtonText;
   }
 }
