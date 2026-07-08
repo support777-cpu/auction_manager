@@ -785,6 +785,21 @@ export const soldRosterRowSchema = z
   })
   .strict();
 
+export const assignedRosterRowSchema = z
+  .object({
+    playerId: opaqueIdSchema,
+    name: z.string().trim().min(1),
+    role: auctionRoleSchema,
+    acquisitionType: z.literal("ManualAssignment"),
+    soldPrice: z.null()
+  })
+  .strict();
+
+export const rosterRowSchema = z.union([
+  soldRosterRowSchema,
+  assignedRosterRowSchema
+]);
+
 export const teamRosterDtoSchema = z
   .object({
     teamId: opaqueIdSchema,
@@ -795,7 +810,7 @@ export const teamRosterDtoSchema = z
     remainingBudget: nonnegativeIntegerSchema,
     squadCount: nonnegativeIntegerSchema,
     roleCounts: roleTargetsSchema,
-    roster: z.array(soldRosterRowSchema)
+    roster: z.array(rosterRowSchema)
   })
   .strict();
 
@@ -1169,6 +1184,8 @@ export type MarkUnsoldRejectedResponse = z.infer<
 export type MarkUnsoldResponse = z.infer<typeof markUnsoldResponseSchema>;
 export type UndoResponse = z.infer<typeof undoResponseSchema>;
 export type SoldRosterRow = z.infer<typeof soldRosterRowSchema>;
+export type AssignedRosterRow = z.infer<typeof assignedRosterRowSchema>;
+export type RosterRow = z.infer<typeof rosterRowSchema>;
 export type ResumeSummary = z.infer<typeof resumeSummarySchema>;
 export type AppStateResponse = z.infer<typeof appStateResponseSchema>;
 

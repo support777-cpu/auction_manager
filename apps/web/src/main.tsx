@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type RefObject } from "react";
 import {
+  Check,
   CheckCircle2,
   Circle,
   AlertCircle,
@@ -57,6 +58,9 @@ import {
   canUndo,
   formatAuctionRoleLabel,
   formatRoleCountsSummary,
+  getManualAssignmentBlockedReasons,
+  getManualAssignmentCounters,
+  getManualAssignmentPoolPlayers,
   getPhase1OrderStatusLabel,
   getSoldRosterRowsForTeam,
   getTeamCapacityCopy,
@@ -2120,6 +2124,50 @@ function ResumeStartSurface({
 
 type LiveView = "board" | "rosters";
 
+function getPhaseDisplayLabel(phase: BoardStateDto["phase"]): string {
+  if (phase === "InitialAuction") {
+    return "Initial Auction";
+  }
+
+  if (phase === "UnsoldBidding") {
+    return "Unsold Bidding";
+  }
+
+  if (phase === "ManualAssignment") {
+    return "Manual Assignment";
+  }
+
+  return phase;
+}
+
+function getPrimaryRoleMetric(
+  roleCounts: BoardStateDto["teamRosters"][number]["roleCounts"],
+  parameters: BoardStateDto["parameters"]
+): { label: string; value: string } {
+  const firstActiveRole = auctionRoleValues.find((role) => roleCounts[role] > 0);
+
+  if (firstActiveRole === undefined) {
+    return { label: "Roles", value: "—" };
+  }
+
+  return {
+    label: formatAuctionRoleLabel(firstActiveRole),
+    value: `${roleCounts[firstActiveRole]} / ${parameters.roleTargets[firstActiveRole]}`
+  };
+}
+
+function formatRosterRowPrice(
+  player: BoardStateDto["teamRosters"][number]["roster"][number]
+): string {
+  return typeof player.soldPrice === "number" ? String(player.soldPrice) : "No price";
+}
+
+function formatRosterAcquisitionType(
+  player: BoardStateDto["teamRosters"][number]["roster"][number]
+): string {
+  return player.acquisitionType === "ManualAssignment" ? "Assigned" : player.acquisitionType;
+}
+
 function BoardRostersSwitch({
   liveView,
   onChange,
@@ -2258,6 +2306,10 @@ function TeamRostersView({
   readonly boardState: BoardStateDto;
   readonly onOpenTeamDetail: (teamId: string, trigger: HTMLButtonElement) => void;
 }) {
+  const isClosed = boardState.phase === "Closed";
+  const phaseLabel = isClosed ? "Auction Closed" : "Live Rosters";
+  const title = isClosed ? "Final Rosters" : "Team Rosters";
+
   return (
     <section
       aria-labelledby="live-view-tab-rosters team-rosters-title"
@@ -2266,19 +2318,38 @@ function TeamRostersView({
       id="live-view-panel-rosters"
       role="tabpanel"
     >
-      <div className="subsection-heading">
-        <h2 id="team-rosters-title">Team rosters</h2>
-        <span>{boardState.teamRosters.length}</span>
+      <div
+        className={isClosed ? "roster-board roster-board-closed" : "roster-board"}
+        data-testid="roster-board"
+      >
+      {isClosed ? <span data-testid="closed-rosters-view" hidden /> : null}
+      <div className="roster-board-header" data-testid="roster-board-header">
+        <div>
+          <span className="eyebrow">{phaseLabel}</span>
+          <h2 data-testid="roster-board-title" id="team-rosters-title">
+            {title}
+          </h2>
+        </div>
+        <div className="roster-board-count" aria-label={`${boardState.teamRosters.length} teams`}>
+          <span className="status-label">Teams</span>
+          <strong>{boardState.teamRosters.length}</strong>
+        </div>
       </div>
-      <div className="team-rosters-grid">
+      <div className="team-rosters-grid" data-testid="roster-team-grid">
         {boardState.teamRosters.map((teamRoster) => {
           const team = boardState.teams.find((entry) => entry.id === teamRoster.teamId);
           const logoAssetId = teamRoster.logoAssetId ?? team?.logoAssetId;
+          const roleMetric = getPrimaryRoleMetric(
+            teamRoster.roleCounts,
+            boardState.parameters
+          );
           return (
             <article
+              aria-label={`${teamRoster.name} roster`}
               className="roster-team-section"
               data-testid="roster-team-section"
               key={teamRoster.teamId}
+              role="region"
             >
               <div className="roster-team-section-header">
                 <div className="roster-team-section-heading">
@@ -2302,19 +2373,25 @@ function TeamRostersView({
                   <span>Details</span>
                 </button>
               </div>
-              <dl className="roster-team-summary">
+              <dl className="roster-team-summary" data-testid="roster-team-summary">
                 <div>
-                  <dt>Remaining budget</dt>
+                  <dt>Budget</dt>
                   <dd>{teamRoster.remainingBudget}</dd>
                 </div>
                 <div>
                   <dt>Squad</dt>
                   <dd>{teamRoster.squadCount}</dd>
                 </div>
+                <div>
+                  <dt>{roleMetric.label}</dt>
+                  <dd>{roleMetric.value}</dd>
+                </div>
               </dl>
               <p className="roster-role-counts">{formatRoleCountsSummary(teamRoster.roleCounts)}</p>
               {teamRoster.roster.length === 0 ? (
-                <p className="roster-empty-copy">No players bought yet.</p>
+                <p className="roster-empty-copy" data-testid="roster-empty-team">
+                  No players bought yet.
+                </p>
               ) : (
                 <ul className="roster-player-list">
                   {teamRoster.roster.map((player) => (
@@ -2325,8 +2402,8 @@ function TeamRostersView({
                     >
                       <span className="roster-player-name">{player.name}</span>
                       <span>{formatAuctionRoleLabel(player.role)}</span>
-                      <span>{player.acquisitionType}</span>
-                      <span>{player.soldPrice}</span>
+                      <span>{formatRosterAcquisitionType(player)}</span>
+                      <span>{formatRosterRowPrice(player)}</span>
                     </li>
                   ))}
                 </ul>
@@ -2334,6 +2411,7 @@ function TeamRostersView({
             </article>
           );
         })}
+      </div>
       </div>
     </section>
   );
@@ -2489,6 +2567,458 @@ function TeamDetailDrawer({
   );
 }
 
+function ManualAssignmentSurface({
+  boardState,
+  detailTeamId,
+  detailTriggerRef,
+  liveView,
+  onCloseTeamDetail,
+  onLiveViewChange,
+  onOpenTeamDetail,
+  onUndo,
+  undoDisabled,
+  undoError,
+  undoState,
+  undoSummary
+}: {
+  readonly boardState: BoardStateDto;
+  readonly detailTeamId: string | null;
+  readonly detailTriggerRef: RefObject<HTMLButtonElement | null>;
+  readonly liveView: LiveView;
+  readonly onCloseTeamDetail: () => void;
+  readonly onLiveViewChange: (view: LiveView) => void;
+  readonly onOpenTeamDetail: (teamId: string, trigger: HTMLButtonElement) => void;
+  readonly onUndo: () => void;
+  readonly undoDisabled: boolean;
+  readonly undoError: string | null;
+  readonly undoState: "idle" | "loading" | "ready" | "error";
+  readonly undoSummary: string | null;
+}) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    boardState.selectedTeamId
+  );
+
+  useEffect(() => {
+    setSelectedTeamId(boardState.selectedTeamId);
+  }, [boardState.selectedTeamId]);
+
+  useEffect(() => {
+    if (selectedTeamId === null) {
+      return;
+    }
+
+    const team = boardState.teams.find((entry) => entry.id === selectedTeamId);
+    if (team === undefined) {
+      setSelectedTeamId(boardState.selectedTeamId);
+      return;
+    }
+
+    const capacity = team.currentPlayerCapacity;
+    if (capacity !== undefined && !capacity.canBuy) {
+      const fallbackTeam = boardState.teams.find(
+        (entry) => entry.currentPlayerCapacity?.canBuy === true
+      );
+      setSelectedTeamId(fallbackTeam?.id ?? boardState.selectedTeamId);
+    }
+  }, [boardState.selectedTeamId, boardState.teams, selectedTeamId]);
+
+  const assignmentPlayer = boardState.currentPlayer;
+  const poolPlayers = getManualAssignmentPoolPlayers(boardState);
+  const counters = getManualAssignmentCounters(boardState);
+  const blockedReasons = getManualAssignmentBlockedReasons(boardState);
+  const selectedTeam =
+    selectedTeamId === null
+      ? null
+      : boardState.teams.find((team) => team.id === selectedTeamId) ?? null;
+  const teamSelectionEnabled = boardState.persistenceFailure === null;
+
+  return (
+    <main className="app-shell live-app-shell manual-app-shell" data-testid="app-shell">
+      <header className="app-header" aria-labelledby="app-title">
+        <h1 id="app-title">Auction Manager</h1>
+      </header>
+
+      <section
+        aria-label="Manual assignment status"
+        className="manual-assignment-topbar"
+        data-testid="manual-assignment-counters"
+      >
+        <div className="manual-brand-block">
+          <span className="eyebrow">Auction Manager</span>
+          <strong>Manual Assignment</strong>
+        </div>
+        <div className="manual-counter-band">
+          <article>
+            <span className="status-label">Pool</span>
+            <strong data-testid="manual-pool-count">{counters.pool}</strong>
+          </article>
+          <article>
+            <span className="status-label">Assigned</span>
+            <strong data-testid="manual-assigned-count">{counters.assigned}</strong>
+          </article>
+          <article>
+            <span className="status-label">Remaining</span>
+            <strong data-testid="manual-remaining-count">{counters.remaining}</strong>
+          </article>
+          <article>
+            <span className="status-label">Valid</span>
+            <strong data-testid="manual-valid-count">{counters.valid}</strong>
+          </article>
+          <article>
+            <span className="status-label">Blocked</span>
+            <strong data-testid="manual-blocked-count">{counters.blocked}</strong>
+          </article>
+          <article>
+            <span className="status-label">Teams</span>
+            <strong data-testid="manual-teams-count">{counters.teams}</strong>
+          </article>
+        </div>
+      </section>
+
+      {boardState.persistenceFailure ? (
+        <div
+          className="persistence-warning"
+          data-testid="persistence-warning"
+          role="alert"
+        >
+          <AlertCircle aria-hidden="true" size={18} />
+          <span>
+            Local recovery snapshot could not be written. Resolve persistence before
+            the next command.
+          </span>
+        </div>
+      ) : null}
+
+      <section
+        aria-label="Auction phases"
+        className="phase-strip"
+        data-testid="phase-indicator"
+      >
+        {phases.map((phase) => {
+          const isActive = phase === "Manual Assignment";
+          return (
+            <div
+              aria-current={isActive ? "step" : undefined}
+              className={isActive ? "phase-step phase-step-active" : "phase-step"}
+              key={phase}
+            >
+              {isActive ? (
+                <CheckCircle2 aria-hidden="true" size={18} />
+              ) : (
+                <Circle aria-hidden="true" size={18} />
+              )}
+              <span>{phase}</span>
+            </div>
+          );
+        })}
+      </section>
+
+      <BoardRostersSwitch
+        disabled={!canSwitchLiveView(boardState)}
+        liveView={liveView}
+        onChange={onLiveViewChange}
+      />
+
+      {liveView === "rosters" ? (
+        <TeamRostersView
+          boardState={boardState}
+          onOpenTeamDetail={onOpenTeamDetail}
+        />
+      ) : (
+        <section
+          aria-labelledby="live-view-tab-board"
+          className="manual-assignment-surface"
+          data-testid="manual-assignment-surface"
+          id="live-view-panel-board"
+          role="tabpanel"
+        >
+          <div className="manual-layout">
+            <aside className="manual-column" aria-label="Assignment player and pool">
+              <section
+                aria-labelledby="manual-assignment-player-title"
+                className="manual-assignment-player-card"
+                data-testid="manual-assignment-player-card"
+              >
+                {assignmentPlayer ? (
+                  <div className="manual-assignment-player-layout">
+                    <div className="manual-assignment-player-media">
+                      {assignmentPlayer.photoAssetId ? (
+                        <>
+                          <img
+                            alt={`${assignmentPlayer.name} player photo`}
+                            data-testid="manual-assignment-player-photo"
+                            onError={(event) => {
+                              event.currentTarget.hidden = true;
+                              const fallback = event.currentTarget.parentElement?.querySelector(
+                                ".player-photo-fallback"
+                              );
+                              if (fallback instanceof HTMLElement) {
+                                fallback.hidden = false;
+                              }
+                            }}
+                            src={`/assets/players/${assignmentPlayer.photoAssetId}.webp`}
+                          />
+                          <div
+                            aria-label="Player photo placeholder"
+                            className="player-photo-placeholder player-photo-fallback"
+                            hidden
+                            role="img"
+                          >
+                            Player photo placeholder
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          aria-label="Player photo placeholder"
+                          className="player-photo-placeholder"
+                          role="img"
+                        >
+                          Player photo placeholder
+                        </div>
+                      )}
+                    </div>
+                    <div className="manual-assignment-player-details">
+                      <span className="eyebrow">Assign Player</span>
+                      <h2
+                        data-testid="manual-assignment-player-name"
+                        id="manual-assignment-player-title"
+                      >
+                        {assignmentPlayer.name}
+                      </h2>
+                      <dl className="manual-assignment-player-facts">
+                        <div>
+                          <dt>Role</dt>
+                          <dd data-testid="manual-assignment-player-role">
+                            {formatAuctionRoleLabel(assignmentPlayer.role)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Base price</dt>
+                          <dd data-testid="manual-assignment-player-base-price">
+                            {assignmentPlayer.basePrice}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+                ) : (
+                  <h2 id="manual-assignment-player-title">No assignment player</h2>
+                )}
+              </section>
+
+              <section
+                aria-label="Manual assignment pool"
+                className="manual-assignment-pool"
+                data-testid="manual-assignment-pool"
+              >
+                {poolPlayers.length === 0 ? (
+                  <p className="roster-empty-copy">No players in assignment pool.</p>
+                ) : null}
+                {poolPlayers.map((player, index) => {
+                  const isActive = assignmentPlayer?.id === player.id;
+                  return (
+                    <article
+                      aria-current={isActive ? "true" : undefined}
+                      className={
+                        isActive
+                          ? "manual-assignment-pool-row manual-assignment-pool-row-active"
+                          : "manual-assignment-pool-row"
+                      }
+                      data-testid="manual-assignment-pool-row"
+                      key={player.id}
+                    >
+                      <span className="manual-assignment-pool-order">{index + 1}</span>
+                      <strong>{player.name}</strong>
+                      <span>{formatAuctionRoleLabel(player.role)}</span>
+                    </article>
+                  );
+                })}
+              </section>
+
+              <div className="manual-assignment-command-region">
+                <button
+                  className="primary-action primary-action-disabled manual-assignment-command"
+                  data-testid="manual-assignment-command"
+                  disabled
+                  type="button"
+                >
+                  <Check aria-hidden="true" size={20} />
+                  <span>
+                    {selectedTeam
+                      ? `Assign to ${selectedTeam.name}`
+                      : "Assign Player"}
+                  </span>
+                </button>
+                {canUndo(boardState) ? (
+                  <button
+                    aria-busy={undoState === "loading"}
+                    aria-label={
+                      boardState.lastUndoAction
+                        ? boardState.lastUndoAction.summary.startsWith("Undo")
+                          ? boardState.lastUndoAction.summary
+                          : `Undo: ${boardState.lastUndoAction.summary}`
+                        : "Undo: No actions to undo."
+                    }
+                    className={
+                      undoDisabled
+                        ? "secondary-action secondary-action-disabled"
+                        : "secondary-action"
+                    }
+                    data-testid="undo-action"
+                    disabled={undoDisabled}
+                    onClick={onUndo}
+                    type="button"
+                  >
+                    <RotateCcw aria-hidden="true" size={18} />
+                    <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
+                  </button>
+                ) : null}
+              </div>
+            </aside>
+
+            <section
+              aria-label="Eligible teams"
+              className="manual-assignment-team-matrix"
+              data-testid="manual-assignment-team-matrix"
+            >
+              <div className="matrix-header">
+                <div className="subsection-heading">
+                  <h3>Eligible Teams</h3>
+                  <span>{boardState.teams.length}</span>
+                </div>
+                {selectedTeam ? (
+                  <span className="selected-team-tag">
+                    Selected: {selectedTeam.name}
+                  </span>
+                ) : null}
+              </div>
+              <div className="manual-assignment-team-grid">
+                {boardState.teams.map((team) => {
+                  const isSelected = team.id === selectedTeamId;
+                  const capacity = team.currentPlayerCapacity;
+                  const isBlocked = capacity !== undefined && !capacity.canBuy;
+                  const displayRole = assignmentPlayer?.role;
+                  const roleCount =
+                    displayRole === undefined ? undefined : team.roleCounts[displayRole];
+                  const roleTarget =
+                    displayRole === undefined
+                      ? undefined
+                      : boardState.parameters.roleTargets[displayRole];
+                  const roleCapacityLabel =
+                    roleCount === undefined || roleTarget === undefined
+                      ? "—"
+                      : `${roleCount} / ${roleTarget}`;
+
+                  return (
+                    <article className="manual-assignment-team-option-shell" key={team.id}>
+                      <button
+                        aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${displayRole ? formatAuctionRoleLabel(displayRole) : "Role"} ${roleCapacityLabel}`}
+                        aria-pressed={isSelected}
+                        className={[
+                          "manual-assignment-team-option",
+                          isSelected ? "manual-assignment-team-selected" : null,
+                          isBlocked ? "manual-assignment-team-blocked" : null
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        data-testid={
+                          isSelected
+                            ? "manual-assignment-team-selected"
+                            : isBlocked
+                              ? "manual-assignment-team-blocked"
+                              : "manual-assignment-team-option"
+                        }
+                        disabled={!teamSelectionEnabled || isBlocked}
+                        onClick={() => {
+                          if (!isBlocked) {
+                            setSelectedTeamId(team.id);
+                          }
+                        }}
+                        type="button"
+                      >
+                        <div className="team-tile-heading">
+                          <TeamLogo
+                            teamName={team.name}
+                            {...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {})}
+                          />
+                          <span>
+                            <strong>{team.name}</strong>
+                            <span>{team.captain}</span>
+                          </span>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Remaining</dt>
+                            <dd>{team.remainingBudget}</dd>
+                          </div>
+                          <div>
+                            <dt>Squad</dt>
+                            <dd>{team.squadCount}</dd>
+                          </div>
+                          <div>
+                            <dt>
+                              {displayRole ? formatAuctionRoleLabel(displayRole) : "Role"}
+                            </dt>
+                            <dd>{roleCapacityLabel}</dd>
+                          </div>
+                        </dl>
+                      </button>
+                      <button
+                        aria-label={`View ${team.name} details`}
+                        className="team-detail-trigger"
+                        data-testid="team-detail-trigger"
+                        onClick={(event) => onOpenTeamDetail(team.id, event.currentTarget)}
+                        type="button"
+                      >
+                        <Info aria-hidden="true" size={18} />
+                        <span>Details</span>
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {blockedReasons.length > 0 ? (
+                <div
+                  aria-live="polite"
+                  className="manual-assignment-blocked-reason"
+                  data-testid="manual-assignment-blocked-reason"
+                  role="status"
+                >
+                  {blockedReasons.map((reason, index) => (
+                    <p key={`${reason}-${index}`}>{reason}</p>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          </div>
+
+          {undoError ? (
+            <p className="command-error" data-testid="undo-error" role="alert">
+              <AlertCircle aria-hidden="true" size={18} />
+              <span>{undoError}</span>
+            </p>
+          ) : null}
+          {undoSummary ? (
+            <p className="undo-success" data-testid="undo-success" role="status">
+              {undoSummary}
+            </p>
+          ) : null}
+        </section>
+      )}
+
+      {detailTeamId ? (
+        <TeamDetailDrawer
+          boardState={boardState}
+          onClose={onCloseTeamDetail}
+          teamId={detailTeamId}
+          triggerRef={detailTriggerRef}
+        />
+      ) : null}
+    </main>
+  );
+}
+
 function AuctionBoard({
   boardState,
   onRevealNext,
@@ -2536,9 +3066,14 @@ function AuctionBoard({
   readonly selectTeamError: string | null;
   readonly selectTeamState: "idle" | "loading" | "ready" | "error";
 }) {
-  const [liveView, setLiveView] = useState<LiveView>("board");
+  const [liveView, setLiveView] = useState<LiveView>(() =>
+    boardState.phase === "Closed" ? "rosters" : "board"
+  );
   const [detailTeamId, setDetailTeamId] = useState<string | null>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const previousPhaseRef = useRef(boardState.phase);
+  const phaseDisplayLabel = getPhaseDisplayLabel(boardState.phase);
+  const isClosedPhase = boardState.phase === "Closed";
 
   useEffect(() => {
     if (!canSwitchLiveView(boardState) && liveView === "rosters") {
@@ -2546,6 +3081,21 @@ function AuctionBoard({
       setDetailTeamId(null);
     }
   }, [boardState.persistenceFailure, liveView]);
+
+  useEffect(() => {
+    if (boardState.phase === "ManualAssignment" && liveView === "rosters") {
+      setLiveView("board");
+      setDetailTeamId(null);
+    }
+  }, [boardState.phase, liveView]);
+
+  useEffect(() => {
+    if (previousPhaseRef.current !== "Closed" && boardState.phase === "Closed") {
+      setLiveView("rosters");
+      setDetailTeamId(null);
+    }
+    previousPhaseRef.current = boardState.phase;
+  }, [boardState.phase]);
 
   function handleLiveViewChange(view: LiveView) {
     setDetailTeamId(null);
@@ -2597,6 +3147,25 @@ function AuctionBoard({
     boardState.phase1Progress.pendingPlayerCount === 0 &&
     boardState.phase2PoolCount > 0;
 
+  if (boardState.phase === "ManualAssignment") {
+    return (
+      <ManualAssignmentSurface
+        boardState={boardState}
+        detailTeamId={detailTeamId}
+        detailTriggerRef={detailTriggerRef}
+        liveView={liveView}
+        onCloseTeamDetail={() => setDetailTeamId(null)}
+        onLiveViewChange={handleLiveViewChange}
+        onOpenTeamDetail={handleOpenTeamDetail}
+        onUndo={onUndo}
+        undoDisabled={undoDisabled}
+        undoError={undoError}
+        undoState={undoState}
+        undoSummary={undoSummary}
+      />
+    );
+  }
+
   return (
     <main className="app-shell live-app-shell" data-testid="app-shell">
       <header className="app-header" aria-labelledby="app-title">
@@ -2609,13 +3178,17 @@ function AuctionBoard({
         data-testid="live-status-counters"
       >
         <div className="live-brand-block">
-          <span className="eyebrow">Initial Auction</span>
+          <span className="eyebrow">
+            {isClosedPhase ? "Auction Closed" : phaseDisplayLabel}
+          </span>
           <strong>Auction Manager</strong>
           <p
             className="phase1-progress-compact"
             data-testid="phase1-progress"
           >
-            {getPhase1OrderStatusLabel(boardState.phase1Progress)}
+            {isClosedPhase
+              ? "Final room-facing roster state"
+              : getPhase1OrderStatusLabel(boardState.phase1Progress)}
           </p>
         </div>
         <div className="live-counter-band">
@@ -2674,7 +3247,7 @@ function AuctionBoard({
         aria-label="Auction phases"
       >
         {phases.map((phase) => {
-          const isActive = phase === "Initial Auction";
+          const isActive = phase === phaseDisplayLabel;
           return (
             <div
               className={isActive ? "phase-step phase-step-active" : "phase-step"}
@@ -2703,6 +3276,22 @@ function AuctionBoard({
           boardState={boardState}
           onOpenTeamDetail={handleOpenTeamDetail}
         />
+      ) : isClosedPhase ? (
+        <section
+          aria-labelledby="live-view-tab-board"
+          className="auction-board auction-board-closed"
+          data-testid="auction-board"
+          id="live-view-panel-board"
+          role="tabpanel"
+        >
+          <div className="closed-board-panel">
+            <span className="eyebrow">Auction Closed</span>
+            <h2>Final Rosters are the active display</h2>
+            <p>
+              Routine bidding controls are unavailable after the auction is closed.
+            </p>
+          </div>
+        </section>
       ) : (
       <section
         aria-labelledby="live-view-tab-board"
@@ -3193,7 +3782,14 @@ if (!root) {
   throw new Error("Root element #root was not found.");
 }
 
-createRoot(root).render(<App />);
+type RootElement = HTMLElement & {
+  __auctionManagerRoot?: ReturnType<typeof createRoot>;
+};
+
+const rootElement = root as RootElement;
+const reactRoot = rootElement.__auctionManagerRoot ?? createRoot(root);
+rootElement.__auctionManagerRoot = reactRoot;
+reactRoot.render(<App />);
 
 async function readApiErrorMessage(
   response: Response,

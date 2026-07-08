@@ -63,7 +63,11 @@ export function getSoldRosterRowsForTeam(
   boardState: BoardStateDto,
   teamId: string
 ): SoldRosterRow[] {
-  return getTeamRoster(boardState, teamId)?.roster ?? [];
+  return (
+    getTeamRoster(boardState, teamId)?.roster.filter(
+      (player): player is SoldRosterRow => player.acquisitionType === "Sold"
+    ) ?? []
+  );
 }
 
 export function getPhase1OrderStatusLabel(progress: Phase1ProgressDto): string {
@@ -128,6 +132,70 @@ export function canAttemptMarkUnsold(boardState: BoardStateDto): boolean {
 
 export function canUndo(boardState: BoardStateDto): boolean {
   return boardState.canUndo && boardState.persistenceFailure === null;
+}
+
+export type ManualAssignmentCounters = {
+  pool: number;
+  assigned: number;
+  remaining: number;
+  valid: number;
+  blocked: number;
+  teams: number;
+};
+
+export function getManualAssignmentPoolPlayers(
+  boardState: BoardStateDto
+): BoardStateDto["players"] {
+  return boardState.players.filter(
+    (player) => player.status === "Unsold" || player.status === "Current"
+  );
+}
+
+export function getManualAssignmentCounters(
+  boardState: BoardStateDto
+): ManualAssignmentCounters {
+  const poolPlayers = getManualAssignmentPoolPlayers(boardState);
+  const assignedCount = boardState.players.filter(
+    (player) => player.status === "Assigned"
+  ).length;
+  const blockedTeams = boardState.teams.filter(
+    (team) =>
+      team.currentPlayerCapacity !== undefined &&
+      !team.currentPlayerCapacity.canBuy
+  ).length;
+  const validTeams = boardState.teams.filter(
+    (team) => team.currentPlayerCapacity?.canBuy === true
+  ).length;
+
+  return {
+    pool: poolPlayers.length + assignedCount,
+    assigned: assignedCount,
+    remaining: poolPlayers.length,
+    valid: validTeams,
+    blocked: blockedTeams,
+    teams: boardState.teams.length
+  };
+}
+
+export function getManualAssignmentBlockedReasons(
+  boardState: BoardStateDto
+): string[] {
+  if (boardState.currentPlayer === null) {
+    return [];
+  }
+
+  return boardState.teams
+    .filter(
+      (team) =>
+        team.currentPlayerCapacity !== undefined &&
+        !team.currentPlayerCapacity.canBuy
+    )
+    .map((team) => {
+      const reasons =
+        team.currentPlayerCapacity!.reasons.join(". ") ||
+        "Cannot buy current player";
+      return `${team.name} blocked: ${reasons}`;
+    });
 }
 
 export function isEditableShortcutTarget(target: EventTarget | null): boolean {

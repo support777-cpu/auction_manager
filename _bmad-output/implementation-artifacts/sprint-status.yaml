@@ -1,5 +1,5 @@
 # generated: 2026-07-06T21:32:18+0530
-# last_updated: 2026-07-08T10:05:00+0530
+# last_updated: 2026-07-08T11:15:38+0530
 # project: auction_manager
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-06T21:32:18+0530
-last_updated: 2026-07-08T10:05:00+0530
+last_updated: 2026-07-08T12:21:00+0530
 project: auction_manager
 project_key: NOKEY
 tracking_system: file-system
@@ -73,8 +73,8 @@ development_status:
   epic-2-5: in-progress
   2-5-1-apply-red-black-event-console-tokens-and-app-frame: done
   2-5-2-redesign-the-live-auction-board-layout: done
-  2-5-3-prepare-the-focused-manual-assignment-surface: backlog
-  2-5-4-redesign-rosters-and-closed-state-display: backlog
+  2-5-3-prepare-the-focused-manual-assignment-surface: done
+  2-5-4-redesign-rosters-and-closed-state-display: done
   2-5-5-run-redesign-functional-e2e-unit-and-visual-qa-gates: backlog
   epic-2-5-retrospective: optional
 

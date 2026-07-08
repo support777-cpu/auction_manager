@@ -2,13 +2,21 @@
  * @vitest-environment jsdom
  */
 import { screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AuctionParameters,
   AuctionParameterReviewResponse,
   BoardStateDto
 } from "@auction-manager/shared";
 import "@testing-library/jest-dom/vitest";
+
+afterEach(() => {
+  const root = document.getElementById("root") as
+    | (HTMLElement & { __auctionManagerRoot?: { unmount: () => void } })
+    | null;
+  root?.__auctionManagerRoot?.unmount();
+  vi.unstubAllGlobals();
+});
 
 describe("AuctionBoard Mark Sold blocked state", () => {
   beforeEach(() => {
@@ -955,40 +963,138 @@ describe("Board and roster view switching", () => {
     expect(screen.getByTestId("team-matrix")).toBeInTheDocument();
   });
 
-  it("renders empty roster copy for teams without sold players", async () => {
-    await loadEligibleBoard();
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
-    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
-    expect(screen.getAllByTestId("roster-team-section")).toHaveLength(1);
-    expect(screen.getByText("No players bought yet.")).toBeInTheDocument();
-  });
+  it("renders the redesigned roster board with every team, compact metrics, rows, and privacy boundaries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createMultiTeamRosterBoardState()));
+        }
 
-  it("renders sold player rows from authoritative teamRosters", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === "/api/state") {
-        return jsonResponse(createAuctionAppState(createSoldBoardState()));
-      }
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
 
-      if (url === "/api/setup/auction-parameters") {
-        return jsonResponse(createParameterReview());
-      }
+        return jsonResponse({}, 404);
+      })
+    );
 
-      return jsonResponse({}, 404);
-    });
-    vi.stubGlobal("fetch", fetchMock);
     await import("./main.js");
     await resumeSavedAuction();
     await screen.findByTestId("board-rosters-switch");
 
     fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
 
+    const rosterView = await screen.findByTestId("team-rosters-view");
+    expect(screen.getByTestId("roster-board")).toBeInTheDocument();
+    expect(screen.getByTestId("roster-board-header")).toHaveTextContent("Live Rosters");
+    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Team Rosters");
+    expect(screen.getByTestId("roster-team-grid")).toBeInTheDocument();
+    expect(screen.getAllByTestId("roster-team-section")).toHaveLength(8);
+    expect(screen.getAllByTestId("roster-team-summary")).toHaveLength(8);
+    expect(screen.getAllByTestId("roster-empty-team")).toHaveLength(6);
+
+    const falcons = within(rosterView).getByRole("region", {
+      name: /Falcons roster/
+    });
+    expect(falcons).toHaveTextContent("Falcons");
+    expect(falcons).toHaveTextContent("Priya Captain");
+    expect(falcons).toHaveTextContent("Budget");
+    expect(falcons).toHaveTextContent("160");
+    expect(falcons).toHaveTextContent("Squad");
+    expect(falcons).toHaveTextContent("1");
+    expect(falcons).toHaveTextContent("Ace");
+    expect(falcons).toHaveTextContent("1 / 2");
+    expect(falcons).toHaveTextContent("Aarav Menon");
+    expect(falcons).toHaveTextContent("Sold");
+    expect(falcons).toHaveTextContent("10");
+
+    const tigers = within(rosterView).getByRole("region", {
+      name: /Tigers roster/
+    });
+    expect(tigers).toHaveTextContent("Assigned");
+    expect(tigers).toHaveTextContent("No price");
+
+    const rowText = screen
+      .getAllByTestId("roster-player-row")
+      .map((row) => row.textContent ?? "")
+      .join(" ");
+    expect(rowText).toContain("Aarav Menon");
+    expect(rowText).toContain("Riya Shah");
+    expect(rowText).toContain("Sold");
+    expect(rowText).toContain("Assigned");
+
+    for (const privateValue of [
+      "private-player@example.com",
+      "+1-555-0100",
+      "paid_via_upi",
+      "txn-private-001",
+      "2026-07-01T10:00:00.000Z",
+      "ignored private note"
+    ]) {
+      expect(rosterView).not.toHaveTextContent(privateValue);
+    }
+  });
+
+  it("defaults Closed auction fixtures to final rosters without enabled live controls", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(createClosedRosterBoardState()));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      if (url.startsWith("/api/auction/") && init?.method === "POST") {
+        return jsonResponse({}, 500);
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await import("./main.js");
+    await resumeSavedAuction();
+
+    const rosterView = await screen.findByTestId("team-rosters-view");
+    expect(screen.getByTestId("closed-rosters-view")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Rosters" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByTestId("live-status-counters")).toHaveTextContent(
+      "Auction Closed"
+    );
+    expect(screen.getByTestId("roster-board-header")).toHaveTextContent(
+      "Auction Closed"
+    );
+    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Final Rosters");
+    expect(rosterView).toHaveTextContent("Falcons");
+    expect(rosterView).toHaveTextContent("Aarav Menon");
+
+    expect(screen.queryByTestId("live-command-strip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reveal-next")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("increase-bid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mark-sold")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mark-unsold")).not.toBeInTheDocument();
+
+    const postCallCountBefore = fetchMock.mock.calls.filter((call) => {
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return init?.method === "POST";
+    }).length;
+    fireEvent.click(screen.getByRole("tab", { name: "Board" }));
+    expect(await screen.findByTestId("auction-board")).toBeInTheDocument();
+    expect(screen.queryByTestId("live-command-strip")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
     expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
-    expect(screen.getAllByTestId("roster-team-section")).toHaveLength(1);
-    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("Aarav Menon");
-    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("Sold");
-    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("10");
-    expect(screen.getAllByTestId("roster-player-row")).toHaveLength(1);
+    const postCallCountAfter = fetchMock.mock.calls.filter((call) => {
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return init?.method === "POST";
+    }).length;
+    expect(postCallCountAfter).toBe(postCallCountBefore);
   });
 
   it("preserves board bidding state when switching back from Rosters without POSTs", async () => {
@@ -1107,6 +1213,235 @@ describe("Board and roster view switching", () => {
       expect(screen.queryByTestId("team-detail-drawer")).not.toBeInTheDocument();
     });
     expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+  });
+});
+
+describe("Manual Assignment surface", () => {
+  const privateFixtureStrings = [
+    "private-player@example.com",
+    "+1-555-0100",
+    "UPI-PRIVATE",
+    "paid_via_upi",
+    "txn-abc-123"
+  ] as const;
+
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="root"></div>';
+  });
+
+  it("renders the Manual Assignment surface with counters and hides bidding controls", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createManualAssignmentBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("manual-assignment-surface");
+
+    expect(screen.getByTestId("manual-assignment-counters")).toBeInTheDocument();
+    expect(screen.getByTestId("manual-pool-count")).toHaveTextContent("5");
+    expect(screen.getByTestId("manual-assigned-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("manual-remaining-count")).toHaveTextContent("4");
+    expect(screen.getByTestId("manual-valid-count")).toHaveTextContent("6");
+    expect(screen.getByTestId("manual-blocked-count")).toHaveTextContent("2");
+    expect(screen.getByTestId("manual-teams-count")).toHaveTextContent("8");
+
+    expect(screen.getByTestId("manual-assignment-player-card")).toBeInTheDocument();
+    expect(screen.getByTestId("manual-assignment-player-name")).toHaveTextContent(
+      "Nisha George"
+    );
+    expect(screen.getByTestId("manual-assignment-pool")).toBeInTheDocument();
+    expect(screen.getAllByTestId("manual-assignment-pool-row")).toHaveLength(4);
+    expect(screen.getByTestId("manual-assignment-team-matrix")).toBeInTheDocument();
+    expect(screen.getByTestId("manual-assignment-blocked-reason")).toHaveTextContent(
+      "Lions blocked:"
+    );
+    expect(screen.getByTestId("manual-assignment-command")).toBeDisabled();
+    expect(screen.getByTestId("manual-assignment-command")).toHaveTextContent(
+      "Assign to Falcons"
+    );
+
+    expect(screen.queryByTestId("live-command-strip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reveal-next")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("increase-bid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mark-sold")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mark-unsold")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("current-bid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("live-board-stage")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reveal Next Player/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Increase Bid/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mark Sold/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mark Unsold/ })).not.toBeInTheDocument();
+  });
+
+  it("shows pool rows with order, name, and role only and preserves privacy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createManualAssignmentBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("manual-assignment-pool");
+
+    const poolRows = screen.getAllByTestId("manual-assignment-pool-row");
+    expect(poolRows[0]).toHaveTextContent("1");
+    expect(poolRows[0]).toHaveTextContent("Nisha George");
+    expect(poolRows[0]).toHaveTextContent("Girls");
+    expect(poolRows[1]).toHaveTextContent("Rohan Iyer");
+    expect(poolRows[1]).toHaveTextContent("Bowling");
+    for (const poolRow of poolRows) {
+      expect(poolRow).not.toHaveTextContent("Ace Women");
+      expect(poolRow).not.toHaveTextContent("Men Bowlers");
+      expect(poolRow).not.toHaveTextContent("Men Batsmen");
+    }
+
+    const surface = screen.getByTestId("manual-assignment-surface");
+    for (const privateValue of privateFixtureStrings) {
+      expect(surface).not.toHaveTextContent(privateValue);
+    }
+  });
+
+  it("exposes selected and blocked team states accessibly", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createManualAssignmentBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("manual-assignment-team-matrix");
+
+    expect(screen.getByTestId("manual-assignment-team-selected")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getAllByTestId("manual-assignment-team-blocked")).toHaveLength(2);
+    expect(screen.getByTestId("manual-assignment-blocked-reason")).toHaveTextContent(
+      "Royals blocked: squad cap reached."
+    );
+
+    fireEvent.click(screen.getAllByTestId("manual-assignment-team-option")[0]!);
+    expect(screen.getByTestId("manual-assignment-team-selected")).toHaveTextContent("Eagles");
+    expect(screen.getByTestId("manual-assignment-command")).toHaveTextContent(
+      "Assign to Eagles"
+    );
+
+    const falconsOption = screen.getByRole("button", {
+      name: /Falcons, captain Falcons Captain/
+    });
+    expect(falconsOption).not.toHaveAttribute("disabled");
+    falconsOption.focus();
+    expect(document.activeElement).toBe(falconsOption);
+    fireEvent.click(falconsOption);
+    expect(screen.getByTestId("manual-assignment-team-selected")).toHaveTextContent(
+      "Falcons"
+    );
+  });
+
+  it("keeps board and rosters switching read-only on Manual Assignment", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(createManualAssignmentBoardState()));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+
+    const postCallsBefore = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return String(url).startsWith("/api/auction/") && init?.method === "POST";
+    }).length;
+
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    expect(screen.queryByTestId("team-rosters-view")).not.toBeInTheDocument();
+    expect(screen.getByTestId("manual-assignment-surface")).toBeInTheDocument();
+
+    const postCallsAfter = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return String(url).startsWith("/api/auction/") && init?.method === "POST";
+    }).length;
+
+    expect(postCallsAfter).toBe(postCallsBefore);
+  });
+
+  it("keeps the inert assignment command from posting or mutating rendered state", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(createManualAssignmentBoardState()));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("manual-assignment-command");
+
+    const postCallsBefore = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return String(url).startsWith("/api/auction/") && init?.method === "POST";
+    }).length;
+
+    fireEvent.click(screen.getByTestId("manual-assignment-command"));
+
+    const postCallsAfter = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return String(url).startsWith("/api/auction/") && init?.method === "POST";
+    }).length;
+
+    expect(postCallsAfter).toBe(postCallsBefore);
+    expect(screen.getByTestId("manual-pool-count")).toHaveTextContent("5");
+    expect(screen.getByTestId("manual-assigned-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("manual-assignment-player-name")).toHaveTextContent(
+      "Nisha George"
+    );
   });
 });
 
@@ -1326,6 +1661,281 @@ function createEightTeamBoardState(): BoardStateDto {
     lastUndoAction: null,
     persistenceFailure: null,
     phase2PoolCount: 2
+  };
+}
+
+function createMultiTeamRosterBoardState(): BoardStateDto {
+  const baseState = createEightTeamBoardState();
+  const teamNames = [
+    "Falcons",
+    "Tigers",
+    "Royals",
+    "Warriors",
+    "Lions",
+    "Sharks",
+    "Eagles",
+    "Hurricanes"
+  ] as const;
+  const teams = teamNames.map((name, index) => ({
+    id: `team-${index + 1}`,
+    name,
+    captain: index === 0 ? "Priya Captain" : `${name} Captain`,
+    budget: 170,
+    remainingBudget: index === 0 ? 160 : index === 1 ? 170 : 150 - index * 4,
+    squadCount: index === 0 || index === 1 ? 1 : index % 2,
+    roleCounts: {
+      Ace: index === 0 ? 1 : 0,
+      Batting: index === 1 ? 1 : 0,
+      Bowling: 0,
+      AllRounder: 0,
+      Girls: 0
+    },
+    currentPlayerCapacity: {
+      teamId: `team-${index + 1}`,
+      canBuy: true,
+      reasons: [] as string[]
+    }
+  }));
+
+  return {
+    ...baseState,
+    players: [
+      {
+        id: "player-1",
+        name: "Aarav Menon",
+        role: "Ace",
+        phase1Category: "Ace Men",
+        basePrice: 10,
+        status: "Sold",
+        soldPrice: 10,
+        winningTeamId: "team-1",
+        acquisitionType: "Auction"
+      },
+      {
+        id: "player-2",
+        name: "Riya Shah",
+        role: "Batting",
+        phase1Category: "Men Batsmen",
+        basePrice: 8,
+        status: "Assigned",
+        soldPrice: null,
+        winningTeamId: "team-2",
+        acquisitionType: "ManualAssignment"
+      }
+    ],
+    teams,
+    teamRosters: teams.map((team, index) => ({
+      teamId: team.id,
+      name: team.name,
+      captain: team.captain,
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: { ...team.roleCounts },
+      roster:
+        index === 0
+          ? [
+              {
+                playerId: "player-1",
+                name: "Aarav Menon",
+                role: "Ace",
+                acquisitionType: "Sold",
+                soldPrice: 10
+              }
+            ]
+          : index === 1
+            ? [
+                {
+                  playerId: "player-2",
+                  name: "Riya Shah",
+                  role: "Batting",
+                  acquisitionType: "ManualAssignment",
+                  soldPrice: null
+                }
+              ]
+            : []
+    })),
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    phase1Progress: {
+      currentCategory: "Men Batsmen",
+      orderedPlayerCount: 8,
+      pendingPlayerCount: 6,
+      revealedPlayerCount: 2,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 1,
+          pending: 0,
+          completed: 1
+        },
+        {
+          category: "Men Batsmen",
+          total: 7,
+          pending: 6,
+          completed: 1
+        }
+      ]
+    },
+    phase2PoolCount: 1
+  } as unknown as BoardStateDto;
+}
+
+function createClosedRosterBoardState(): BoardStateDto {
+  const rosterState = createMultiTeamRosterBoardState();
+
+  return {
+    ...rosterState,
+    phase: "Closed",
+    currentPlayer: null,
+    currentBid: null,
+    selectedTeamId: null,
+    canUndo: false,
+    lastUndoAction: null,
+    phase1Progress: {
+      ...rosterState.phase1Progress,
+      currentCategory: null,
+      pendingPlayerCount: 0,
+      revealedPlayerCount: 8
+    },
+    phase2PoolCount: 0
+  };
+}
+
+function createManualAssignmentBoardState(): BoardStateDto {
+  const teamNames = [
+    "Eagles",
+    "Lions",
+    "Falcons",
+    "Warriors",
+    "Titans",
+    "Royals",
+    "Strikers",
+    "Kings"
+  ] as const;
+  const teams = teamNames.map((name, index) => ({
+    id: `team-${index + 1}`,
+    name,
+    captain: `${name} Captain`,
+    budget: 170,
+    remainingBudget: index === 1 ? 52 : index === 5 ? 60 : 88 - index * 4,
+    squadCount: index === 1 || index === 5 ? 8 : 5 + (index % 3),
+    roleCounts: {
+      Ace: 0,
+      Batting: 1,
+      Bowling: 1,
+      AllRounder: 1,
+      Girls: index === 1 ? 3 : index === 2 ? 1 : 2
+    },
+    currentPlayerCapacity: {
+      teamId: `team-${index + 1}`,
+      canBuy: index !== 1 && index !== 5,
+      reasons:
+        index === 1
+          ? ["Girls slot full."]
+          : index === 5
+            ? ["squad cap reached."]
+            : []
+    }
+  }));
+
+  return {
+    auctionId: "auction-1",
+    phase: "ManualAssignment",
+    parameters: createAuctionParameters(),
+    players: [
+      {
+        id: "player-1",
+        name: "Nisha George",
+        role: "Girls",
+        phase1Category: "Ace Women",
+        basePrice: 8,
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-2",
+        name: "Rohan Iyer",
+        role: "Bowling",
+        phase1Category: "Men Bowlers",
+        basePrice: 6,
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-3",
+        name: "Kevin Thomas",
+        role: "Batting",
+        phase1Category: "Men Batsmen",
+        basePrice: 8,
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-4",
+        name: "Meera Paul",
+        role: "Girls",
+        phase1Category: "Ace Women",
+        basePrice: 8,
+        status: "Unsold",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      {
+        id: "player-5",
+        name: "Assigned Player",
+        role: "Ace",
+        phase1Category: "Ace Men",
+        basePrice: 10,
+        status: "Assigned",
+        soldPrice: null,
+        winningTeamId: "team-3",
+        acquisitionType: "ManualAssignment"
+      }
+    ],
+    teams,
+    teamRosters: teams.map((team) => ({
+      teamId: team.id,
+      name: team.name,
+      captain: team.captain,
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: { ...team.roleCounts },
+      roster: []
+    })),
+    currentPlayer: {
+      id: "player-1",
+      name: "Nisha George",
+      role: "Girls",
+      phase1Category: "Ace Women",
+      basePrice: 8,
+      status: "Current",
+      soldPrice: null,
+      winningTeamId: null,
+      acquisitionType: null
+    },
+    currentBid: null,
+    selectedTeamId: "team-3",
+    phase1Progress: {
+      currentCategory: null,
+      orderedPlayerCount: 8,
+      pendingPlayerCount: 0,
+      revealedPlayerCount: 8,
+      categories: []
+    },
+    canUndo: false,
+    lastUndoAction: null,
+    persistenceFailure: null,
+    phase2PoolCount: 0
   };
 }
 

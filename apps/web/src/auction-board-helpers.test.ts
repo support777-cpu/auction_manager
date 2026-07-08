@@ -13,6 +13,9 @@ import {
   canSwitchLiveView,
   formatAuctionRoleLabel,
   formatRoleCountsSummary,
+  getManualAssignmentBlockedReasons,
+  getManualAssignmentCounters,
+  getManualAssignmentPoolPlayers,
   getPhase1OrderStatusLabel,
   getSoldRosterRowsForTeam,
   getTeamCapacityCopy,
@@ -522,5 +525,117 @@ describe("auction board helpers", () => {
     });
 
     expect(getTeamCapacityCopy(blockedBoardState, "team-1")).toBe("Cannot buy current player");
+  });
+
+  it("derives manual assignment counters and blocked reasons from capacity state", () => {
+    const boardState = createBoardState({
+      phase: "ManualAssignment",
+      currentPlayer: {
+        id: "player-1",
+        name: "Nisha George",
+        role: "Girls",
+        phase1Category: "Ace Women",
+        basePrice: 8,
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      players: [
+        {
+          id: "player-1",
+          name: "Nisha George",
+          role: "Girls",
+          phase1Category: "Ace Women",
+          basePrice: 8,
+          status: "Current",
+          soldPrice: null,
+          winningTeamId: null,
+          acquisitionType: null
+        },
+        {
+          id: "player-2",
+          name: "Assigned Player",
+          role: "Ace",
+          phase1Category: "Ace Men",
+          basePrice: 10,
+          status: "Assigned",
+          soldPrice: null,
+          winningTeamId: "team-1",
+          acquisitionType: "ManualAssignment"
+        }
+      ],
+      teams: [
+        {
+          id: "team-1",
+          name: "Falcons",
+          captain: "Falcons Captain",
+          budget: 170,
+          remainingBudget: 80,
+          squadCount: 5,
+          roleCounts: {
+            Ace: 0,
+            Batting: 1,
+            Bowling: 1,
+            AllRounder: 1,
+            Girls: 1
+          },
+          currentPlayerCapacity: {
+            teamId: "team-1",
+            canBuy: true,
+            reasons: []
+          }
+        },
+        {
+          id: "team-2",
+          name: "Lions",
+          captain: "Lions Captain",
+          budget: 170,
+          remainingBudget: 52,
+          squadCount: 8,
+          roleCounts: {
+            Ace: 0,
+            Batting: 1,
+            Bowling: 1,
+            AllRounder: 1,
+            Girls: 3
+          },
+          currentPlayerCapacity: {
+            teamId: "team-2",
+            canBuy: false,
+            reasons: []
+          }
+        },
+        {
+          id: "team-3",
+          name: "Royals",
+          captain: "Royals Captain",
+          budget: 170,
+          remainingBudget: 60,
+          squadCount: 8,
+          roleCounts: {
+            Ace: 0,
+            Batting: 1,
+            Bowling: 1,
+            AllRounder: 1,
+            Girls: 2
+          }
+        }
+      ]
+    });
+
+    expect(getManualAssignmentPoolPlayers(boardState)).toHaveLength(1);
+    expect(getManualAssignmentCounters(boardState)).toEqual({
+      pool: 2,
+      assigned: 1,
+      remaining: 1,
+      valid: 1,
+      blocked: 1,
+      teams: 3
+    });
+    expect(getManualAssignmentBlockedReasons(boardState)).toEqual([
+      "Lions blocked: Cannot buy current player"
+    ]);
+    expect(getManualAssignmentBlockedReasons(createBoardState())).toEqual([]);
   });
 });

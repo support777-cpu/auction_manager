@@ -77,3 +77,14 @@
 
 - Phase 1 per-category breakdown grid removed — intentional per story layout scope; aggregate counters replace per-category grid
 - 390×844 mobile viewport proof not automated — CSS stacking exists without dedicated Playwright profile
+
+## Deferred from: code review of 2-5-3-prepare-the-focused-manual-assignment-surface (2026-07-08)
+
+- No `onSelectTeam` / assign callback props on `ManualAssignmentSurface` — Epic 3 owns command handler wiring into the prepared surface
+- Compact layout hides `board-rosters-switch` by design for first-viewport fit — board view is forced when rosters would trap the operator
+
+## Deferred from: code review of 2-5-4-redesign-rosters-and-closed-state-display (2026-07-08)
+
+- Privacy fixture injection blocked by strict `appStateResponseSchema` — roster row extra fields fail load validation; privacy enforced at schema boundary
+- Story 2.5.3 Manual Assignment bundled in same diff — intentional combined worktree state; split review only, no revert
+- 1920×1080 screenshot proof — explicit handoff to Story 2.5.5 full visual QA gate

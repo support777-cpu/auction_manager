@@ -7,7 +7,7 @@ const eventDataDirectory = mkdtempSync(join(tmpdir(), "auction-manager-event-lay
 
 export default defineConfig({
   testDir: "./apps/web/e2e",
-  testMatch: "**/event-mode-layout.spec.ts",
+  testMatch: "**/{event-mode-layout,manual-assignment-layout,roster-layout}.spec.ts",
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["html"], ["line"]] : "list",

@@ -543,6 +543,13 @@ describe("auction state contracts", () => {
           role: "Ace" as const,
           acquisitionType: "Sold" as const,
           soldPrice: 40
+        },
+        {
+          playerId: "player-2",
+          name: "Nisha Rao",
+          role: "Batting" as const,
+          acquisitionType: "ManualAssignment" as const,
+          soldPrice: null
         }
       ]
     };
@@ -560,6 +567,20 @@ describe("auction state contracts", () => {
         teamRosters: [roster]
       }).success
     ).toBe(true);
+    expect(
+      teamRosterDtoSchema.safeParse({
+        ...roster,
+        roster: [
+          {
+            playerId: "player-2",
+            name: "Nisha Rao",
+            role: "Batting" as const,
+            acquisitionType: "ManualAssignment" as const,
+            soldPrice: 12
+          }
+        ]
+      }).success
+    ).toBe(false);
     expect(
       boardStateDtoSchema.safeParse({
         ...boardState,
