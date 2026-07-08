@@ -3222,3 +3222,238 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Visual weight reduction: idle surfaces separate by tone/elevation; borders signal state. */
+:root {
+  --setup-surface-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --setup-panel-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+  --live-surface-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  --live-soft-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.runtime-pill,
+.status-grid article,
+.setup-panel,
+.resume-start-panel,
+.resume-summary-grid article,
+.setup-player-csv,
+.setup-player-photos,
+.setup-team-csv,
+.setup-team-logos,
+.setup-auction-parameters,
+.csv-upload-row,
+.csv-summary-grid article,
+.auction-parameters-summary article,
+.parameter-actions,
+.start-auction-row {
+  border-color: transparent;
+  box-shadow: var(--setup-surface-shadow);
+}
+
+.setup-panel,
+.resume-start-panel,
+.setup-player-csv,
+.setup-player-photos,
+.setup-team-csv,
+.setup-team-logos,
+.setup-auction-parameters {
+  box-shadow: var(--setup-panel-shadow);
+}
+
+.status-grid,
+.csv-summary-grid,
+.auction-parameters-summary,
+.resume-summary-grid {
+  gap: 16px;
+}
+
+.phase-strip,
+.board-rosters-switch-tabs {
+  border-color: transparent;
+  background: #eef2f7;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.05);
+}
+
+.review-state {
+  border-color: transparent;
+}
+
+.review-state-ready {
+  background: #e8f8ee;
+}
+
+.review-state-warning {
+  border-color: #fecaca;
+}
+
+.table-scroll {
+  border-color: transparent;
+  background: #ffffff;
+  box-shadow: var(--setup-surface-shadow);
+}
+
+.parameter-field input,
+.parameter-field select,
+.secondary-action,
+.csv-upload-control,
+.team-detail-trigger,
+.team-detail-drawer-close {
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.csv-upload-control {
+  box-shadow: inset 0 0 0 1px rgba(19, 111, 69, 0.32);
+}
+
+.current-player-panel,
+.bid-panel,
+.phase1-progress-panel,
+.team-board {
+  border-color: transparent;
+  box-shadow: var(--setup-panel-shadow);
+}
+
+.current-player-media,
+.current-player-facts div,
+.phase1-progress-summary div,
+.phase1-category-grid article,
+.team-tile,
+.undo-panel,
+.unsold-summary,
+.phase1-complete-panel,
+.sale-summary {
+  border-color: transparent;
+}
+
+.team-tile {
+  background: #f4f6f8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.team-tile-selected {
+  border-color: #166534;
+  box-shadow: inset 0 0 0 1px #166534;
+}
+
+.team-logo-placeholder {
+  border-color: transparent;
+}
+
+.blocked-reason-panel,
+.csv-error,
+.command-error {
+  border-color: #fecaca;
+}
+
+.undo-success {
+  border-color: transparent;
+}
+
+.live-app-shell .live-topbar,
+.live-app-shell .live-counter-band article,
+.live-app-shell .phase-strip,
+.live-app-shell .board-rosters-switch-tabs,
+.live-app-shell .auction-board,
+.live-app-shell .team-rosters-view,
+.live-app-shell .player-stage,
+.live-app-shell .live-command-strip,
+.live-app-shell .live-outcome-region,
+.live-app-shell .team-board,
+.live-app-shell .roster-team-section,
+.live-app-shell .team-detail-drawer,
+.live-brand-block,
+.live-counter-band,
+.manual-brand-block,
+.manual-counter-band,
+.manual-assignment-surface,
+.manual-assignment-player-card,
+.manual-assignment-pool,
+.manual-assignment-team-matrix {
+  border-color: transparent;
+  box-shadow: var(--live-soft-shadow);
+}
+
+.live-app-shell .auction-board,
+.live-app-shell .team-rosters-view,
+.manual-assignment-surface {
+  background: var(--surface-base);
+  box-shadow: none;
+}
+
+.live-brand-block,
+.manual-brand-block,
+.live-app-shell .player-stage,
+.live-app-shell .live-command-strip,
+.live-app-shell .team-board,
+.live-app-shell .team-rosters-view,
+.manual-assignment-player-card,
+.manual-assignment-team-matrix {
+  background: var(--surface-raised);
+  box-shadow: var(--live-surface-shadow), var(--live-soft-shadow);
+}
+
+.live-counter-band,
+.manual-counter-band {
+  gap: 3px;
+  overflow: visible;
+  background: transparent;
+}
+
+.live-app-shell .live-counter-band article,
+.manual-counter-band article,
+.live-app-shell .current-player-facts div,
+.live-app-shell .phase1-progress-summary div,
+.live-app-shell .phase1-category-grid article,
+.live-app-shell .undo-panel,
+.live-app-shell .selected-team-panel,
+.live-app-shell .roster-team-summary div,
+.live-app-shell .team-detail-drawer-summary div {
+  border-color: transparent;
+  background: var(--surface-panel-soft);
+  box-shadow: var(--live-soft-shadow);
+}
+
+.live-app-shell .current-player-media,
+.live-app-shell .team-logo-placeholder {
+  border-color: transparent;
+}
+
+.live-app-shell .team-tile,
+.manual-assignment-team-option,
+.roster-team-section,
+.roster-player-row {
+  border-color: transparent;
+  background: var(--surface-muted);
+  box-shadow: var(--live-soft-shadow);
+}
+
+.live-app-shell .team-tile-selected,
+.manual-assignment-team-selected,
+.manual-assignment-pool-row-active,
+.live-app-shell .board-rosters-switch-tab-active {
+  border-color: var(--command-red);
+  box-shadow:
+    inset 0 0 0 1px var(--command-red),
+    0 0 0 1px rgba(224, 31, 45, 0.14);
+}
+
+.manual-assignment-pool-row-active {
+  outline: 0;
+}
+
+.manual-assignment-blocked-reason {
+  border-color: transparent;
+  background: var(--surface-muted);
+}
+
+.live-app-shell .blocked-reason-panel,
+.live-app-shell .command-error,
+.persistence-warning {
+  border-color: var(--alert-border);
+}
+
+.live-app-shell .primary-action,
+.live-app-shell .live-action {
+  box-shadow: none;
+}
