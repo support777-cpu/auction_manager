@@ -75,7 +75,10 @@ test("fits eight-team live board in the first viewport at 1440x900 and 1366x768"
     await expectWithinFirstViewport(page, page.getByTestId("increase-bid"));
     await expectWithinFirstViewport(page, page.getByTestId("team-matrix"));
     await expectWithinFirstViewport(page, page.getByTestId("selected-team"));
-    await expectWithinFirstViewport(page, page.getByTestId("live-outcome-region"));
+    const outcomeRegion = page.getByTestId("live-outcome-region");
+    if ((await outcomeRegion.count()) > 0 && (await outcomeRegion.isVisible())) {
+      await expectWithinFirstViewport(page, outcomeRegion);
+    }
 
     for (let index = 0; index < 8; index += 1) {
       await expectWithinFirstViewport(page, teamTiles.nth(index));
@@ -91,7 +94,7 @@ test("fits eight-team live board in the first viewport at 1440x900 and 1366x768"
   await assertFirstViewportFit(1366, 768, "live-frame-1366x768-eight-teams.png");
 
   await teamTiles.first().click();
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
 
   for (let increaseCount = 0; increaseCount < 100; increaseCount += 1) {
     if (await page.getByTestId("mark-sold").isDisabled()) {

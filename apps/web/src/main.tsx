@@ -57,6 +57,7 @@ import {
   canSwitchLiveView,
   canUndo,
   formatAuctionRoleLabel,
+  formatLiveBiddingStatus,
   formatRoleCountsSummary,
   getManualAssignmentBlockedReasons,
   getManualAssignmentCounters,
@@ -2999,11 +3000,6 @@ function ManualAssignmentSurface({
               <span>{undoError}</span>
             </p>
           ) : null}
-          {undoSummary ? (
-            <p className="undo-success" data-testid="undo-success" role="status">
-              {undoSummary}
-            </p>
-          ) : null}
         </section>
       )}
 
@@ -3316,67 +3312,116 @@ function AuctionBoard({
               >
                 {currentPlayer ? (
                   <div className="current-player-layout">
-                    <div className="current-player-media">
-                      {currentPlayer.photoAssetId ? (
-                        <>
-                          <img
-                            alt={`${currentPlayer.name} player photo`}
-                            data-testid="current-player-photo"
-                            onError={(event) => {
-                              event.currentTarget.hidden = true;
-                              const fallback = event.currentTarget.parentElement?.querySelector(
-                                ".player-photo-fallback"
-                              );
-                              if (fallback instanceof HTMLElement) {
-                                fallback.hidden = false;
-                              }
-                            }}
-                            src={`/assets/players/${currentPlayer.photoAssetId}.webp`}
-                          />
+                    <h2 id="current-player-title" data-testid="current-player-name">
+                      {currentPlayer.name}
+                    </h2>
+                    <div className="current-player-body">
+                      <div className="current-player-media">
+                        {currentPlayer.photoAssetId ? (
+                          <>
+                            <img
+                              alt={`${currentPlayer.name} player photo`}
+                              data-testid="current-player-photo"
+                              onError={(event) => {
+                                event.currentTarget.hidden = true;
+                                const fallback = event.currentTarget.parentElement?.querySelector(
+                                  ".player-photo-fallback"
+                                );
+                                if (fallback instanceof HTMLElement) {
+                                  fallback.hidden = false;
+                                }
+                              }}
+                              src={`/assets/players/${currentPlayer.photoAssetId}.webp`}
+                            />
+                            <div
+                              aria-label="Player photo placeholder"
+                              className="player-photo-placeholder player-photo-fallback"
+                              data-testid="current-player-photo-placeholder"
+                              hidden
+                              role="img"
+                            >
+                              Player photo placeholder
+                            </div>
+                          </>
+                        ) : (
                           <div
                             aria-label="Player photo placeholder"
-                            className="player-photo-placeholder player-photo-fallback"
+                            className="player-photo-placeholder"
                             data-testid="current-player-photo-placeholder"
-                            hidden
                             role="img"
                           >
                             Player photo placeholder
                           </div>
-                        </>
-                      ) : (
-                        <div
-                          aria-label="Player photo placeholder"
-                          className="player-photo-placeholder"
-                          data-testid="current-player-photo-placeholder"
-                          role="img"
-                        >
-                          Player photo placeholder
+                        )}
+                      </div>
+                      <div className="current-player-side">
+                        <dl className="current-player-facts">
+                          <div>
+                            <dt>Role</dt>
+                            <dd data-testid="current-player-role">{currentPlayer.role}</dd>
+                          </div>
+                          <div>
+                            <dt>Base price</dt>
+                            <dd data-testid="current-player-base-price">
+                              {currentPlayer.basePrice}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Category</dt>
+                            <dd data-testid="phase1-current-category">
+                              Current category:{" "}
+                              {boardState.phase1Progress.currentCategory ?? "None"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <div className="current-bid-hero" data-testid="selected-team">
+                          <div className="current-bid-primary">
+                            <span className="status-label">Current bid</span>
+                            <strong
+                              className={
+                                boardState.currentBid !== null ? "current-bid-live" : undefined
+                              }
+                              data-testid="current-bid"
+                            >
+                              {boardState.currentBid !== null
+                                ? boardState.currentBid
+                                : "No current bid"}
+                            </strong>
+                          </div>
+                          <strong
+                            className="current-bid-team-status"
+                            data-testid="live-bidding-status"
+                          >
+                            {formatLiveBiddingStatus(boardState, {
+                              selecting: selectTeamState === "loading"
+                            })}
+                          </strong>
                         </div>
-                      )}
-                    </div>
-                    <div className="current-player-details">
-                      <h2 id="current-player-title" data-testid="current-player-name">
-                        {currentPlayer.name}
-                      </h2>
-                      <dl className="current-player-facts">
-                        <div>
-                          <dt>Role</dt>
-                          <dd data-testid="current-player-role">{currentPlayer.role}</dd>
-                        </div>
-                        <div>
-                          <dt>Base price</dt>
-                          <dd data-testid="current-player-base-price">
-                            {currentPlayer.basePrice}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Category</dt>
-                          <dd data-testid="phase1-current-category">
-                            Current category:{" "}
-                            {boardState.phase1Progress.currentCategory ?? "None"}
-                          </dd>
-                        </div>
-                      </dl>
+                        {markSoldBlockedReasons.length > 0 ? (
+                          <div
+                            aria-live="assertive"
+                            className="blocked-reason-panel bid-feedback-panel"
+                            data-testid="mark-sold-blocked-reason"
+                            role="alert"
+                          >
+                            {markSoldBlockedReasons.map((reason, index) => (
+                              <p key={`${reason}-${index}`}>{reason}</p>
+                            ))}
+                          </div>
+                        ) : selectedTeamCapacity &&
+                          !selectedTeamCapacity.canBuy ? (
+                          <ul
+                            className="team-capacity-reasons bid-feedback-panel"
+                            data-testid="selected-team-capacity-reasons"
+                          >
+                            {selectedTeamCapacity.reasons.map((reason, index) => (
+                              <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
+                                Blocked: {reason}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -3386,26 +3431,136 @@ function AuctionBoard({
                       Current category:{" "}
                       {boardState.phase1Progress.currentCategory ?? "None"}
                     </p>
+                    <div className="current-bid-hero" data-testid="selected-team">
+                      <div className="current-bid-primary">
+                        <span className="status-label">Current bid</span>
+                        <strong data-testid="current-bid">No current bid</strong>
+                      </div>
+                      <strong
+                        className="current-bid-team-status"
+                        data-testid="live-bidding-status"
+                      >
+                        {formatLiveBiddingStatus(boardState, {
+                          selecting: selectTeamState === "loading"
+                        })}
+                      </strong>
+                    </div>
                   </>
                 )}
               </section>
-
-              <div className="current-bid-hero">
-                <span className="status-label">Current bid</span>
-                <strong
-                  className={
-                    currentPlayer && boardState.currentBid !== null
-                      ? "current-bid-live"
-                      : undefined
-                  }
-                  data-testid="current-bid"
-                >
-                  {currentPlayer && boardState.currentBid !== null
-                    ? boardState.currentBid
-                    : "No current bid"}
-                </strong>
-              </div>
             </section>
+
+            <section
+              aria-busy={selectTeamState === "loading"}
+              className="team-board"
+              aria-label="Initialized Teams"
+              data-testid="team-matrix"
+            >
+              <div className="matrix-header">
+                <div className="subsection-heading">
+                  <h3>Teams</h3>
+                  <span>{boardState.teams.length}</span>
+                </div>
+                {selectedTeam ? (
+                  <span className="selected-team-tag" title={`${selectedTeam.name} selected`}>
+                    {selectedTeam.name} selected
+                  </span>
+                ) : null}
+              </div>
+              <div className="team-board-grid">
+              {boardState.teams.map((team) => {
+                const isSelected = team.id === boardState.selectedTeamId;
+                const capacity = team.currentPlayerCapacity;
+                const soldRosterRows = getSoldRosterRowsForTeam(boardState, team.id);
+                const displayRole =
+                  currentPlayer?.role ?? soldRosterRows.at(-1)?.role;
+                const roleCount =
+                  displayRole === undefined
+                    ? undefined
+                    : team.roleCounts[displayRole];
+                const roleTarget =
+                  displayRole === undefined
+                    ? undefined
+                    : boardState.parameters.roleTargets[displayRole];
+                const roleCapacityLabel =
+                  roleCount === undefined || roleTarget === undefined
+                    ? currentPlayer === null
+                      ? "—"
+                      : "Unknown"
+                    : currentPlayer !== null && capacity && !capacity.canBuy
+                      ? "Blocked"
+                      : `${roleCount} of ${roleTarget}`;
+                const capacityText =
+                  currentPlayer === null
+                    ? soldRosterRows.length > 0
+                      ? `${soldRosterRows.length} sold player(s) on squad`
+                      : "Capacity pending Current Player"
+                    : capacity
+                      ? capacity.canBuy
+                        ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${formatAuctionRoleLabel(currentPlayer.role)} slots available`
+                        : capacity.reasons.join(" ")
+                      : "Capacity pending Current Player";
+                return (
+                  <article className="team-tile-shell" key={team.id}>
+                  <button
+                    aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
+                    aria-pressed={isSelected}
+                    className={isSelected ? "team-tile team-tile-selected" : "team-tile"}
+                    data-testid={isSelected ? "team-tile-selected" : "team-tile"}
+                    disabled={!selectionEnabled}
+                    onClick={() => onSelectTeam(team.id)}
+                    type="button"
+                  >
+                    <div className="team-tile-heading">
+                      <TeamLogo
+                        teamName={team.name}
+                        {...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {})}
+                      />
+                      <span>
+                        <strong>{team.name}</strong>
+                        <span>{team.captain}</span>
+                      </span>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Remaining</dt>
+                        <dd>{team.remainingBudget}</dd>
+                      </div>
+                      <div>
+                        <dt>Squad</dt>
+                        <dd>{team.squadCount}</dd>
+                      </div>
+                      <div>
+                        <dt>{displayRole ? formatAuctionRoleLabel(displayRole) : "Role"}</dt>
+                        <dd>{roleCapacityLabel}</dd>
+                      </div>
+                    </dl>
+                    <span
+                      className="team-capacity-text"
+                      data-testid={
+                        capacity && !capacity.canBuy
+                          ? "team-tile-capacity-reason"
+                          : undefined
+                      }
+                    >
+                      {capacityText}
+                    </span>
+                  </button>
+                  <button
+                    aria-label={`View ${team.name} details`}
+                    className="team-detail-trigger"
+                    data-testid="team-detail-trigger"
+                    onClick={(event) => handleOpenTeamDetail(team.id, event.currentTarget)}
+                    type="button"
+                  >
+                    <Info aria-hidden="true" size={18} />
+                    <span>Details</span>
+                  </button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
 
             <section
               className="live-command-strip"
@@ -3504,58 +3659,8 @@ function AuctionBoard({
                 <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
               </button>
             </section>
-            </section>
 
             <div className="live-outcome-region" data-testid="live-outcome-region">
-              <div className="selected-team-panel" data-testid="selected-team">
-                <span className="status-label">Selected Team</span>
-                <strong>
-                  {selectTeamState === "loading"
-                    ? "Selecting Team..."
-                    : (selectedTeam?.name ??
-                      (boardState.selectedTeamId !== null ? "Unknown Team" : "None"))}
-                </strong>
-                {selectedTeamCapacity &&
-                !selectedTeamCapacity.canBuy &&
-                markSoldBlockedReasons.length === 0 ? (
-                  <ul>
-                    {selectedTeamCapacity.reasons.map((reason, index) => (
-                      <li data-testid="team-capacity-reason" key={`${reason}-${index}`}>
-                        Blocked: {reason}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {boardState.selectedTeamId !== null ? (
-                  <button
-                    className="secondary-action"
-                    data-testid="clear-selected-team"
-                    disabled={!selectionEnabled}
-                    onClick={() => onSelectTeam(null)}
-                    type="button"
-                  >
-                    Clear selected Team
-                  </button>
-                ) : null}
-              </div>
-
-              {markSoldBlockedReasons.length > 0 ? (
-                <div
-                  aria-live="assertive"
-                  className="blocked-reason-panel"
-                  data-testid="mark-sold-blocked-reason"
-                  role="alert"
-                >
-                  {markSoldBlockedReasons.map((reason, index) => (
-                    <p key={`${reason}-${index}`}>{reason}</p>
-                  ))}
-                </div>
-              ) : null}
-
-              <p className="undo-summary" data-testid="undo-summary">
-                {boardState.lastUndoAction?.summary ?? "No actions to undo."}
-              </p>
-
               {revealNextError ? (
                 <p className="command-error" role="alert">
                   <AlertCircle aria-hidden="true" size={18} />
@@ -3582,11 +3687,6 @@ function AuctionBoard({
                 <p className="command-error" data-testid="undo-error" role="alert">
                   <AlertCircle aria-hidden="true" size={18} />
                   <span>{undoError}</span>
-                </p>
-              ) : null}
-              {undoSummary ? (
-                <p className="undo-success" data-testid="undo-success" role="status">
-                  {undoSummary}
                 </p>
               ) : null}
               {markSoldError ? (
@@ -3628,10 +3728,6 @@ function AuctionBoard({
                 </p>
               ) : null}
 
-              <p className="unsold-pool-summary" data-testid="unsold-pool-summary">
-                Unsold (Phase 2 rebid): {boardState.phase2PoolCount}
-              </p>
-
               {showPhase1Complete ? (
                 <div className="phase1-complete-panel" data-testid="phase1-complete">
                   <p>Phase 1 complete.</p>
@@ -3647,119 +3743,8 @@ function AuctionBoard({
                 </div>
               ) : null}
             </div>
+            </section>
           </div>
-
-          <section
-            aria-busy={selectTeamState === "loading"}
-            className="team-board"
-            aria-label="Initialized Teams"
-            data-testid="team-matrix"
-          >
-            <div className="matrix-header">
-              <div className="subsection-heading">
-                <h3>Teams</h3>
-                <span>{boardState.teams.length}</span>
-              </div>
-              {selectedTeam ? (
-                <span className="selected-team-tag" title={`${selectedTeam.name} selected`}>
-                  {selectedTeam.name} selected
-                </span>
-              ) : null}
-            </div>
-            <div className="team-board-grid">
-            {boardState.teams.map((team) => {
-              const isSelected = team.id === boardState.selectedTeamId;
-              const capacity = team.currentPlayerCapacity;
-              const soldRosterRows = getSoldRosterRowsForTeam(boardState, team.id);
-              const displayRole =
-                currentPlayer?.role ?? soldRosterRows.at(-1)?.role;
-              const roleCount =
-                displayRole === undefined
-                  ? undefined
-                  : team.roleCounts[displayRole];
-              const roleTarget =
-                displayRole === undefined
-                  ? undefined
-                  : boardState.parameters.roleTargets[displayRole];
-              const roleCapacityLabel =
-                roleCount === undefined || roleTarget === undefined
-                  ? currentPlayer === null
-                    ? "—"
-                    : "Unknown"
-                  : currentPlayer !== null && capacity && !capacity.canBuy
-                    ? "Blocked"
-                    : `${roleCount} of ${roleTarget}`;
-              const capacityText =
-                currentPlayer === null
-                  ? soldRosterRows.length > 0
-                    ? `${soldRosterRows.length} sold player(s) on squad`
-                    : "Capacity pending Current Player"
-                  : capacity
-                    ? capacity.canBuy
-                      ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${formatAuctionRoleLabel(currentPlayer.role)} slots available`
-                      : capacity.reasons.join(" ")
-                    : "Capacity pending Current Player";
-              return (
-                <article className="team-tile-shell" key={team.id}>
-                <button
-                  aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
-                  aria-pressed={isSelected}
-                  className={isSelected ? "team-tile team-tile-selected" : "team-tile"}
-                  data-testid={isSelected ? "team-tile-selected" : "team-tile"}
-                  disabled={!selectionEnabled}
-                  onClick={() => onSelectTeam(team.id)}
-                  type="button"
-                >
-                  <div className="team-tile-heading">
-                    <TeamLogo
-                      teamName={team.name}
-                      {...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {})}
-                    />
-                    <span>
-                      <strong>{team.name}</strong>
-                      <span>{team.captain}</span>
-                    </span>
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>Remaining</dt>
-                      <dd>{team.remainingBudget}</dd>
-                    </div>
-                    <div>
-                      <dt>Squad</dt>
-                      <dd>{team.squadCount}</dd>
-                    </div>
-                    <div>
-                      <dt>{displayRole ? formatAuctionRoleLabel(displayRole) : "Role"}</dt>
-                      <dd>{roleCapacityLabel}</dd>
-                    </div>
-                  </dl>
-                  <span
-                    className="team-capacity-text"
-                    data-testid={
-                      capacity && !capacity.canBuy
-                        ? "team-tile-capacity-reason"
-                        : undefined
-                    }
-                  >
-                    {capacityText}
-                  </span>
-                </button>
-                <button
-                  aria-label={`View ${team.name} details`}
-                  className="team-detail-trigger"
-                  data-testid="team-detail-trigger"
-                  onClick={(event) => handleOpenTeamDetail(team.id, event.currentTarget)}
-                  type="button"
-                >
-                  <Info aria-hidden="true" size={18} />
-                  <span>Details</span>
-                </button>
-                </article>
-              );
-            })}
-          </div>
-        </section>
         </div>
       </section>
       )}

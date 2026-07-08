@@ -695,9 +695,20 @@ button:focus-visible {
 
 .current-player-layout {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
-  gap: 20px;
-  align-items: center;
+  gap: 12px;
+}
+
+.current-player-body {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.current-player-side {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .current-player-media {
@@ -734,11 +745,16 @@ button:focus-visible {
 }
 
 .current-player-panel h2 {
-  margin: 0 0 10px;
+  margin: 0;
   color: #111827;
   font-size: 32px;
   line-height: 1.15;
   letter-spacing: 0;
+}
+
+.current-player-panel h2 + .current-player-body,
+.current-player-panel h2 + p {
+  margin-top: 0;
 }
 
 .current-player-facts {
@@ -774,6 +790,10 @@ button:focus-visible {
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
+}
+
+.current-player-facts dd[data-testid="current-player-base-price"] {
+  font-size: 22px;
 }
 
 .current-player-panel p:last-child {
@@ -1234,6 +1254,7 @@ button:focus-visible {
   .parameter-grid,
   .auction-parameters-summary,
   .current-player-layout,
+  .current-player-body,
   .current-player-facts,
   .board-main,
   .phase1-progress-summary,
@@ -1856,7 +1877,7 @@ button:focus-visible {
 
 .live-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: start;
 }
@@ -1892,18 +1913,35 @@ button:focus-visible {
 }
 
 .live-app-shell .player-stage .current-player-layout {
-  grid-template-columns: minmax(88px, 120px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.live-app-shell .player-stage .current-player-body {
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
   gap: 10px;
 }
 
 .live-app-shell .player-stage .current-player-media {
-  max-width: 120px;
+  max-width: 200px;
 }
 
 .live-app-shell .player-stage .current-player-panel h2 {
   font-size: 24px;
   line-height: 1.05;
   overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.live-app-shell .player-stage .current-player-side .current-bid-hero {
+  min-height: 56px;
+  border-color: var(--border-subtle);
+  background: var(--surface-muted);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+}
+
+.live-app-shell .player-stage .current-player-facts dd[data-testid="current-player-base-price"] {
+  font-size: 20px;
 }
 
 .live-app-shell .player-stage .current-player-facts {
@@ -1923,12 +1961,31 @@ button:focus-visible {
 
 .current-bid-hero {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f9fafb;
+}
+
+.current-bid-primary {
+  display: grid;
   align-content: center;
   gap: 2px;
-  min-height: 72px;
-  border-top: 1px solid var(--border-subtle);
-  padding: 8px 10px;
-  background: var(--surface-muted);
+  min-width: 0;
+}
+
+.current-bid-team-status {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .current-bid-hero .status-label {
@@ -1976,11 +2033,31 @@ button:focus-visible {
 .live-outcome-region {
   display: grid;
   gap: 4px;
-  min-height: 56px;
+  min-height: 0;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 8px;
   background: var(--surface-raised);
+}
+
+.bid-feedback-panel {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.bid-feedback-panel p,
+.bid-feedback-panel li {
+  margin: 0;
+}
+
+.live-app-shell .bid-feedback-panel {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+  color: var(--ink-inverse);
+  font-size: 11px;
 }
 
 .live-outcome-region .selected-team-panel {
@@ -2006,6 +2083,13 @@ button:focus-visible {
   gap: 8px;
   min-height: 0;
   padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.live-app-shell .live-board-stage .team-board {
+  margin-top: 0;
 }
 
 .matrix-header {
@@ -2029,7 +2113,7 @@ button:focus-visible {
 }
 
 .live-app-shell .team-board-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   align-content: start;
 }
@@ -2159,10 +2243,15 @@ button:focus-visible {
 .live-app-shell .phase1-progress-panel strong,
 .live-app-shell .team-tile strong,
 .live-app-shell .selected-team-panel strong,
+.live-app-shell .current-bid-team-status,
 .live-app-shell .roster-team-section-heading h3,
 .live-app-shell .team-detail-drawer-heading h2,
 .live-app-shell .roster-player-name {
   color: var(--ink-inverse);
+}
+
+.live-app-shell .current-bid-team-status {
+  font-size: 14px;
 }
 
 .live-app-shell .eyebrow,
@@ -2459,6 +2548,67 @@ button:focus-visible {
     display: none;
   }
 
+  .live-app-shell .live-board-stage {
+    gap: 4px;
+  }
+
+  .live-app-shell .live-board-stage .team-board {
+    padding: 4px;
+  }
+
+  .live-app-shell .player-stage .current-player-panel {
+    padding: 6px;
+  }
+
+  .live-app-shell .player-stage .current-player-body {
+    grid-template-columns: minmax(110px, 150px) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .live-app-shell .player-stage .current-player-media {
+    max-width: 150px;
+  }
+
+  .live-app-shell .player-stage .current-player-side .current-bid-hero {
+    min-height: 48px;
+    padding: 6px 8px;
+  }
+
+  .live-app-shell .current-bid-hero .current-bid-live {
+    font-size: 36px;
+    min-height: 32px;
+  }
+
+  .live-app-shell .team-detail-trigger {
+    display: none;
+  }
+
+  .live-app-shell .team-tile-shell {
+    gap: 0;
+  }
+
+  .live-app-shell .matrix-header {
+    margin-bottom: 0;
+  }
+
+  .bid-feedback-panel {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+
+  .live-app-shell .player-stage .current-player-facts div {
+    min-height: 40px;
+    padding: 4px;
+  }
+
+  .live-app-shell .board-rosters-switch {
+    margin-bottom: 2px;
+  }
+
+  .live-topbar {
+    margin-bottom: 2px;
+  }
+
   .manual-assignment-topbar {
     margin-bottom: 4px;
   }
@@ -2599,12 +2749,19 @@ button:focus-visible {
     display: -webkit-box;
     font-size: 9px;
     line-height: 1.2;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
   }
 
   .live-app-shell .team-detail-trigger {
-    min-height: 32px;
-    padding: 4px 8px;
+    display: none;
+  }
+
+  .live-app-shell .live-board-stage {
+    gap: 6px;
+  }
+
+  .live-app-shell .live-board-stage .team-board {
+    padding: 6px;
   }
 
   .live-app-shell .team-tile {
@@ -2634,7 +2791,11 @@ button:focus-visible {
 
 @media (min-width: 761px) and (max-width: 1100px) {
   .live-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-app-shell .team-board-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .live-counter-band {
@@ -2665,12 +2826,26 @@ button:focus-visible {
 
 @media (min-width: 761px) and (max-height: 780px) {
   .live-app-shell .team-tile {
-    min-height: 58px;
-    padding: 4px;
+    min-height: 50px;
+    padding: 3px;
   }
 
   .live-app-shell .team-board-grid {
+    gap: 3px;
+  }
+
+  .live-command-strip {
+    min-height: 40px;
+    padding: 3px;
     gap: 4px;
+  }
+
+  .live-command-strip .primary-action,
+  .live-command-strip .live-action,
+  .live-command-strip .secondary-action {
+    min-height: 34px;
+    padding: 3px 4px;
+    font-size: 10px;
   }
 
   .live-topbar,

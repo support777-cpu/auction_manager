@@ -134,6 +134,30 @@ export function canUndo(boardState: BoardStateDto): boolean {
   return boardState.canUndo && boardState.persistenceFailure === null;
 }
 
+export function formatLiveBiddingStatus(
+  boardState: BoardStateDto,
+  options?: { selecting?: boolean }
+): string {
+  if (options?.selecting) {
+    return "Selecting team...";
+  }
+
+  const selectedTeam =
+    boardState.selectedTeamId === null
+      ? null
+      : boardState.teams.find((team) => team.id === boardState.selectedTeamId) ?? null;
+
+  if (
+    selectedTeam &&
+    boardState.currentPlayer !== null &&
+    boardState.currentBid !== null
+  ) {
+    return `${selectedTeam.name} is bidding`;
+  }
+
+  return "Waiting for bids";
+}
+
 export type ManualAssignmentCounters = {
   pool: number;
   assigned: number;

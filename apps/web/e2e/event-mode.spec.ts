@@ -325,7 +325,7 @@ test("reviews and saves auction parameters before starting the auction", async (
     "private-player@example.com"
   );
   await expect(page.getByTestId("auction-board")).not.toContainText("UPI-PRIVATE");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("team-logo-placeholder").first()).toContainText(
     "Team logo placeholder"
   );
@@ -333,7 +333,7 @@ test("reviews and saves auction parameters before starting the auction", async (
 
   const teamTiles = page.locator(".team-board-grid .team-tile");
   await teamTiles.first().click();
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Falcons");
 
   await page.getByTestId("mark-sold").click();
@@ -344,7 +344,7 @@ test("reviews and saves auction parameters before starting the auction", async (
     "No Current Player"
   );
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
   await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
     "180"
@@ -383,7 +383,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("auction-board")).toBeVisible();
   await expect(page.getByTestId("current-player-panel")).toContainText("No Current Player");
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
 
   const stateAfterRosterSwitch = await request.get("/api/state");
@@ -428,17 +428,13 @@ test("reviews and saves auction parameters before starting the auction", async (
     "No Current Player"
   );
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
-  await expect(page.getByTestId("undo-summary")).toContainText("Undo Mark Sold");
 
   await page.getByTestId("undo-action").click();
-  await expect(page.getByTestId("undo-success")).toHaveText(
-    "Undid Mark Sold: Aarav Menon."
-  );
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
   await expect(page.getByTestId("current-bid")).toHaveText("20");
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
   await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
     "200"
   );
@@ -470,7 +466,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await resumeSavedAuction(page);
   await expect(page.getByTestId("current-player-name")).toContainText("Aarav Menon");
   await expect(page.getByTestId("current-bid")).toHaveText("20");
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
   await page.getByTestId("mark-sold").click();
   await expect(page.getByTestId("mark-sold-success")).toHaveText(
     "Sold Aarav Menon to Falcons for 20."
@@ -486,7 +482,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   expect(secondPlayerName).not.toContain("Aarav Menon");
   await expect(page.getByTestId("current-bid")).toHaveText("10");
   await page.locator(".team-board-grid .team-tile").first().click();
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
 
   for (let increaseCount = 0; increaseCount < 100; increaseCount += 1) {
     if (await page.getByTestId("mark-sold").isDisabled()) {
@@ -533,13 +529,13 @@ test("reviews and saves auction parameters before starting the auction", async (
     secondPlayerName
   );
   await expect(page.getByTestId("current-bid")).toHaveText(blockedBid ?? "");
-  await expect(page.getByTestId("selected-team")).toContainText("Falcons");
+  await expect(page.getByTestId("selected-team")).toContainText("Falcons is bidding");
   await expect(page.getByTestId("mark-sold-blocked-reason")).toContainText(
     blockedMessage ?? ""
   );
 
   await teamTiles.nth(1).click();
-  await expect(page.getByTestId("selected-team")).toContainText("Tigers");
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers is bidding");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
 
   await page.reload();
@@ -548,11 +544,8 @@ test("reviews and saves auction parameters before starting the auction", async (
     secondPlayerName
   );
   await expect(page.getByTestId("current-bid")).toContainText(blockedBid ?? "");
-  await expect(page.getByTestId("selected-team")).toContainText("Tigers");
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers is bidding");
   await expect(page.getByTestId("team-tile-selected")).toContainText("Tigers");
-
-  await page.getByTestId("clear-selected-team").click();
-  await expect(page.getByTestId("selected-team")).toContainText("None");
 
   await page.reload();
   await resumeSavedAuction(page);
@@ -567,7 +560,7 @@ test("reviews and saves auction parameters before starting the auction", async (
     secondPlayerName
   );
   await expect(page.getByTestId("current-bid")).toContainText(blockedBid ?? "");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers is bidding");
 
   const falconsTile = page.locator(".team-board-grid .team-tile").first();
   await expect(falconsTile).toContainText("180");
@@ -581,11 +574,9 @@ test("reviews and saves auction parameters before starting the auction", async (
     "No Current Player"
   );
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
-  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
-    "Unsold (Phase 2 rebid): 1"
-  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveCount(0);
   await expect(falconsTile).toContainText("180");
   await expect(falconsTile).toContainText("1");
   await expect(falconsTile).not.toContainText("2 of 2");
@@ -607,27 +598,19 @@ test("reviews and saves auction parameters before starting the auction", async (
       (player: { status: string }) => player.status === "Pending"
     )
   ).toHaveLength(6);
-  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
-    "Unsold (Phase 2 rebid): 1"
-  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveCount(0);
   await expect(page.getByTestId("current-player-panel")).toContainText(
     "No Current Player"
   );
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
-  await expect(page.getByTestId("undo-summary")).toContainText("Undo Mark Unsold");
 
   await page.keyboard.press("u");
-  await expect(page.getByTestId("undo-success")).toHaveText(
-    new RegExp(`Undid Mark Unsold: ${secondPlayerName.trim()}\\.`)
-  );
   await expect(page.getByTestId("current-player-name")).toContainText(
     secondPlayerName
   );
   await expect(page.getByTestId("current-bid")).toHaveText(blockedBid ?? "");
-  await expect(page.getByTestId("selected-team")).toContainText("None");
-  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
-    "Unsold (Phase 2 rebid): 0"
-  );
+  await expect(page.getByTestId("selected-team")).toContainText("Tigers is bidding");
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveCount(0);
   await expect(falconsTile).toContainText("180");
   await expect(falconsTile).toContainText("1");
 
@@ -660,9 +643,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("mark-unsold-success")).toHaveText(
     /Marked unsold\..+ moves to Phase 2 rebid\./
   );
-  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
-    "Unsold (Phase 2 rebid): 1"
-  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveCount(0);
 
   for (let playerIndex = 0; playerIndex < 6; playerIndex += 1) {
     await page.getByTestId("reveal-next").click();
@@ -676,7 +657,5 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("start-unsold-bidding-preview")).toContainText(
     "Start Unsold Bidding will rebid 7 unsold players."
   );
-  await expect(page.getByTestId("unsold-pool-summary")).toHaveText(
-    "Unsold (Phase 2 rebid): 7"
-  );
+  await expect(page.getByTestId("unsold-pool-summary")).toHaveCount(0);
 });

@@ -88,7 +88,9 @@ describe("AuctionBoard Mark Sold blocked state", () => {
       "Aarav Menon"
     );
     expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+      "Falcons is bidding"
+    );
     expect(
       fetchMock.mock.calls.some((call) => {
         const [url, init] = call as unknown as [
@@ -191,7 +193,9 @@ describe("AuctionBoard Mark Sold blocked state", () => {
     expect(await screen.findByTestId("mark-sold-blocked-reason")).toHaveTextContent(
       "Blocked: Falcons have 8 remaining; current bid is 10."
     );
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+      "Falcons is bidding"
+    );
   });
 
   it("shows API conflict text in mark-sold-error without duplicating capacity blockers", async () => {
@@ -285,7 +289,7 @@ describe("AuctionBoard Mark Sold blocked state", () => {
       "No Current Player"
     );
     expect(screen.getByTestId("current-bid")).toHaveTextContent("No current bid");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("None");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Waiting for bids");
     expect(screen.getByTestId("reveal-next")).toBeEnabled();
     expect(screen.queryByTestId("mark-sold-error")).not.toBeInTheDocument();
   });
@@ -336,11 +340,9 @@ describe("AuctionBoard Mark Unsold", () => {
       "No Current Player"
     );
     expect(screen.getByTestId("current-bid")).toHaveTextContent("No current bid");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("None");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Waiting for bids");
     expect(screen.getByTestId("reveal-next")).toBeEnabled();
-    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
-      "Unsold (Phase 2 rebid): 1"
-    );
+    expect(screen.queryByTestId("unsold-pool-summary")).not.toBeInTheDocument();
     expect(screen.getByTestId("team-tile")).toHaveTextContent("170");
     expect(screen.getByTestId("team-tile")).toHaveTextContent("0");
     expect(screen.queryByTestId("mark-unsold-error")).not.toBeInTheDocument();
@@ -398,9 +400,7 @@ describe("AuctionBoard Mark Unsold", () => {
     expect(screen.getByTestId("start-unsold-bidding-preview")).toHaveTextContent(
       "Start Unsold Bidding will rebid 1 unsold player."
     );
-    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
-      "Unsold (Phase 2 rebid): 1"
-    );
+    expect(screen.queryByTestId("unsold-pool-summary")).not.toBeInTheDocument();
   });
 
   it("guards duplicate Mark Unsold clicks while a request is in flight", async () => {
@@ -481,9 +481,7 @@ describe("AuctionBoard Mark Unsold", () => {
     expect(
       screen.queryByTestId("start-unsold-bidding-preview")
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("unsold-pool-summary")).toHaveTextContent(
-      "Unsold (Phase 2 rebid): 0"
-    );
+    expect(screen.queryByTestId("unsold-pool-summary")).not.toBeInTheDocument();
   });
 
   it("clears the Mark Unsold success summary after Reveal Next Player", async () => {
@@ -567,13 +565,10 @@ describe("AuctionBoard Undo", () => {
     await import("./main.js");
     await resumeSavedAuction();
 
-    expect(await screen.findByTestId("undo-summary")).toHaveTextContent(
-      "No actions to undo."
-    );
-    expect(screen.getByTestId("undo-action")).toBeDisabled();
+    expect(await screen.findByTestId("undo-action")).toBeDisabled();
   });
 
-  it("displays last Undo summary and reconciles successful Undo response", async () => {
+  it("reconciles successful Undo response without status copy", async () => {
     const soldState = createSoldBoardState();
     const undoneState = {
       ...createEligibleBoardState(),
@@ -611,19 +606,14 @@ describe("AuctionBoard Undo", () => {
     await import("./main.js");
     await resumeSavedAuction();
 
-    expect(await screen.findByTestId("undo-summary")).toHaveTextContent(
-      "Undo Mark Sold: Aarav Menon -> Falcons, 10."
-    );
-    fireEvent.click(screen.getByTestId("undo-action"));
+    fireEvent.click(await screen.findByTestId("undo-action"));
 
-    expect(await screen.findByTestId("undo-success")).toHaveTextContent(
-      "Undid Mark Sold: Aarav Menon."
-    );
-    expect(screen.getByTestId("current-player-name")).toHaveTextContent(
+    expect(await screen.findByTestId("current-player-name")).toHaveTextContent(
       "Aarav Menon"
     );
-    expect(screen.getByTestId("undo-summary")).toHaveTextContent("Undo Select Team");
     expect(screen.queryByTestId("mark-sold-success")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("undo-success")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("undo-summary")).not.toBeInTheDocument();
   });
 
   it("shows Undo errors, refreshes board state, and supports keyboard u", async () => {
@@ -808,8 +798,8 @@ describe("Board and roster view switching", () => {
     expect(within(commandStrip).getByTestId("mark-sold")).toBeEnabled();
     expect(within(commandStrip).getByTestId("mark-unsold")).toBeEnabled();
     expect(within(commandStrip).getByTestId("undo-action")).toBeDisabled();
-    expect(screen.getByTestId("undo-summary")).toHaveTextContent(
-      "No actions to undo."
+    expect(screen.getByTestId("live-bidding-status")).toHaveTextContent(
+      "Falcons is bidding"
     );
 
     const teamMatrix = screen.getByTestId("team-matrix");
@@ -1102,7 +1092,9 @@ describe("Board and roster view switching", () => {
 
     expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
     expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+      "Falcons is bidding"
+    );
 
     const postCountBefore = fetchMock.mock.calls.filter((call) => {
       const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
@@ -1116,7 +1108,9 @@ describe("Board and roster view switching", () => {
     expect(await screen.findByTestId("auction-board")).toBeInTheDocument();
     expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
     expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
-    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+      "Falcons is bidding"
+    );
 
     const postCountAfter = fetchMock.mock.calls.filter((call) => {
       const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];

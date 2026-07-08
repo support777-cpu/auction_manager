@@ -12,6 +12,7 @@ import {
   canRevealNextPlayer,
   canSwitchLiveView,
   formatAuctionRoleLabel,
+  formatLiveBiddingStatus,
   formatRoleCountsSummary,
   getManualAssignmentBlockedReasons,
   getManualAssignmentCounters,
@@ -383,6 +384,73 @@ describe("auction board helpers", () => {
         })
       )
     ).toBe(false);
+  });
+
+  it("formats live bidding status from team selection and current bid", () => {
+    const team = {
+      id: "team-1",
+      name: "Falcons",
+      captain: "Priya Captain",
+      budget: 170,
+      remainingBudget: 170,
+      squadCount: 0,
+      roleCounts: {
+        Ace: 0,
+        Batting: 0,
+        Bowling: 0,
+        AllRounder: 0,
+        Girls: 0
+      },
+      currentPlayerCapacity: {
+        teamId: "team-1",
+        canBuy: true,
+        reasons: []
+      }
+    };
+
+    expect(
+      formatLiveBiddingStatus(
+        createBoardState({
+          teams: [team],
+          teamRosters: [
+            {
+              teamId: "team-1",
+              name: "Falcons",
+              captain: "Priya Captain",
+              budget: 170,
+              remainingBudget: 170,
+              squadCount: 0,
+              roleCounts: team.roleCounts,
+              roster: []
+            }
+          ],
+          selectedTeamId: "team-1",
+          currentBid: 10,
+          currentPlayer: {
+            id: "player-1",
+            name: "Aarav Menon",
+            role: "Ace",
+            phase1Category: "Ace Men",
+            basePrice: 10,
+            status: "Current",
+            soldPrice: null,
+            winningTeamId: null,
+            acquisitionType: null
+          }
+        })
+      )
+    ).toBe("Falcons is bidding");
+    expect(
+      formatLiveBiddingStatus(
+        createBoardState({
+          selectedTeamId: null,
+          currentBid: 10
+        })
+      )
+    ).toBe("Waiting for bids");
+    expect(formatLiveBiddingStatus(createBoardState(), { selecting: true })).toBe(
+      "Selecting team..."
+    );
   });
 
   it("ignores Increase Bid shortcut targets inside editable fields", () => {
