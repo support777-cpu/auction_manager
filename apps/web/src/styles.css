@@ -1742,6 +1742,12 @@ button:focus-visible {
 }
 
 .live-app-shell {
+  --live-font-label: 10px;
+  --live-font-small: 11px;
+  --live-font-body: 12px;
+  --live-font-value: 16px;
+  --live-font-title: 22px;
+  --live-font-hero: 42px;
   color-scheme: dark;
   background: var(--surface-base);
   color: var(--ink-inverse);
@@ -1810,7 +1816,10 @@ button:focus-visible {
 
 .live-counter-band {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns:
+    repeat(4, minmax(0, 0.85fr))
+    minmax(120px, 1fr)
+    minmax(180px, 1.35fr);
   gap: 1px;
   overflow: hidden;
 }
@@ -1828,19 +1837,49 @@ button:focus-visible {
 .live-counter-band strong {
   min-height: 22px;
   color: var(--ink-inverse);
-  font-size: 18px;
+  font-size: var(--live-font-value);
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
 .live-counter-band .status-label {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--live-font-label);
   font-weight: 800;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+.live-counter-band .live-view-switch-cell {
+  align-content: stretch;
+  gap: 4px;
+  padding: 5px 6px;
+}
+
+.live-view-switch-cell .status-label {
+  padding-inline: 2px;
+}
+
+.live-counter-band .board-rosters-switch {
+  max-width: none;
+  margin: 0;
+}
+
+.live-counter-band .board-rosters-switch-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  min-height: 30px;
+  padding: 3px;
+}
+
+.live-counter-band .board-rosters-switch-tab {
+  min-height: 24px;
+  padding: 4px 6px;
+  font-size: var(--live-font-small);
+  line-height: 1.1;
 }
 
 .persistence-warning {
@@ -1926,10 +1965,28 @@ button:focus-visible {
 }
 
 .live-app-shell .player-stage .current-player-panel h2 {
-  font-size: 24px;
+  font-size: var(--live-font-title);
   line-height: 1.05;
   overflow-wrap: anywhere;
   margin: 0;
+}
+
+.live-app-shell .player-stage .current-player-panel-empty {
+  background: var(--surface-muted);
+}
+
+.live-app-shell .player-stage .current-player-panel-empty .current-bid-hero {
+  border-color: var(--border-subtle);
+  background: var(--surface-panel-soft);
+  color: var(--ink-inverse);
+}
+
+.live-app-shell .player-stage .current-player-panel-empty p {
+  margin: 0;
+  color: var(--ink-inverse-secondary);
+  font-size: var(--live-font-body);
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .live-app-shell .player-stage .current-player-side .current-bid-hero {
@@ -1941,7 +1998,7 @@ button:focus-visible {
 }
 
 .live-app-shell .player-stage .current-player-facts dd[data-testid="current-player-base-price"] {
-  font-size: 20px;
+  font-size: var(--live-font-value);
 }
 
 .live-app-shell .player-stage .current-player-facts {
@@ -1956,7 +2013,7 @@ button:focus-visible {
 }
 
 .live-app-shell .player-stage .current-player-facts dd {
-  font-size: 14px;
+  font-size: var(--live-font-body);
 }
 
 .current-bid-hero {
@@ -1981,7 +2038,7 @@ button:focus-visible {
 .current-bid-team-status {
   margin: 0;
   color: #111827;
-  font-size: 16px;
+  font-size: var(--live-font-value);
   font-weight: 800;
   line-height: 1.2;
   text-align: right;
@@ -2014,7 +2071,7 @@ button:focus-visible {
   gap: 6px;
   margin: 0;
   padding: 8px 6px;
-  font-size: 12px;
+  font-size: var(--live-font-body);
   font-weight: 800;
   line-height: 1.15;
   text-align: center;
@@ -2057,7 +2114,7 @@ button:focus-visible {
   border: 1px solid var(--border-subtle);
   background: var(--surface-muted);
   color: var(--ink-inverse);
-  font-size: 11px;
+  font-size: var(--live-font-small);
 }
 
 .live-outcome-region .selected-team-panel {
@@ -2133,7 +2190,7 @@ button:focus-visible {
 }
 
 .live-app-shell .team-tile strong {
-  font-size: 14px;
+  font-size: var(--live-font-body);
   line-height: 1.1;
   overflow-wrap: anywhere;
 }
@@ -2152,15 +2209,15 @@ button:focus-visible {
 }
 
 .live-app-shell .team-tile dt {
-  font-size: 9px;
+  font-size: var(--live-font-label);
 }
 
 .live-app-shell .team-tile dd {
-  font-size: 14px;
+  font-size: var(--live-font-body);
 }
 
 .live-app-shell .team-capacity-text {
-  font-size: 11px;
+  font-size: var(--live-font-small);
   line-height: 1.25;
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -2172,13 +2229,13 @@ button:focus-visible {
 .live-app-shell .team-detail-trigger {
   min-height: 32px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--live-font-small);
 }
 
 .live-app-shell .current-bid-hero .current-bid-live {
   min-height: 44px;
   color: var(--live-red);
-  font-size: 48px;
+  font-size: var(--live-font-hero);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 0.95;
@@ -2251,7 +2308,7 @@ button:focus-visible {
 }
 
 .live-app-shell .current-bid-team-status {
-  font-size: 14px;
+  font-size: var(--live-font-body);
 }
 
 .live-app-shell .eyebrow,

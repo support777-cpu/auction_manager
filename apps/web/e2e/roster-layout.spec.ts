@@ -261,9 +261,9 @@ test("captures live roster board layout at desktop targets", async ({ page }, te
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByTestId("resume-auction").click();
-  await page.getByRole("tab", { name: "Rosters" }).click();
+  await page.getByTestId("board-rosters-switch").getByRole("tab", { name: "Teams" }).click();
 
-  await expect(page.getByTestId("roster-board-title")).toHaveText("Team Rosters");
+  await expect(page.getByTestId("roster-board-title")).toHaveText("Teams");
   await expect(page.getByTestId("team-rosters-view")).not.toContainText(
     "private-player@example.com"
   );
@@ -301,13 +301,13 @@ test("captures Closed roster board layout without live commands", async ({ page 
   await page.getByTestId("resume-auction").click();
 
   await expect(page.getByTestId("closed-rosters-view")).toBeAttached();
-  await expect(page.getByTestId("roster-board-title")).toHaveText("Final Rosters");
+  await expect(page.getByTestId("roster-board-title")).toHaveText("Final Teams");
   await expect(page.getByTestId("live-status-counters")).toContainText("Auction Closed");
   await expect(page.getByTestId("live-command-strip")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Board" }).click();
+  await page.getByTestId("board-rosters-switch").getByRole("tab", { name: "Auction" }).click();
   await expect(page.getByTestId("auction-board")).toBeVisible();
   await expect(page.getByTestId("live-command-strip")).toHaveCount(0);
-  await page.getByRole("tab", { name: "Rosters" }).click();
+  await page.getByTestId("board-rosters-switch").getByRole("tab", { name: "Teams" }).click();
 
   await assertRosterLayout(
     page,

@@ -719,7 +719,7 @@ describe("AuctionBoard Undo", () => {
   });
 });
 
-describe("Board and roster view switching", () => {
+describe("Auction and team view switching", () => {
   beforeEach(() => {
     vi.resetModules();
     document.body.innerHTML = '<div id="root"></div>';
@@ -747,7 +747,7 @@ describe("Board and roster view switching", () => {
     return mock;
   }
 
-  it("shows the Board/Rosters switch and activates Rosters with keyboard navigation", async () => {
+  it("shows the Auction/Teams switch and activates Teams with keyboard navigation", async () => {
     await loadEligibleBoard();
 
     const switchRoot = await screen.findByTestId("board-rosters-switch");
@@ -772,12 +772,13 @@ describe("Board and roster view switching", () => {
     expect(counters).toHaveTextContent("Pending");
     expect(counters).toHaveTextContent("Unsold");
     expect(counters).toHaveTextContent("Category");
-    expect(counters).toHaveTextContent("Teams");
+    expect(within(counters).getByRole("tab", { name: "Auction" })).toBeInTheDocument();
+    expect(within(counters).getByRole("tab", { name: "Teams" })).toBeInTheDocument();
     expect(screen.getByTestId("phase1-ordered-count")).toHaveTextContent("1");
     expect(screen.getByTestId("phase1-revealed-count")).toHaveTextContent("1");
     expect(screen.getByTestId("phase1-pending-count")).toHaveTextContent("0");
     expect(screen.getByTestId("live-unsold-count")).toHaveTextContent("0");
-    expect(screen.getByTestId("live-teams-counter")).toHaveTextContent("1");
+    expect(screen.queryByTestId("live-teams-counter")).not.toBeInTheDocument();
 
     const stage = screen.getByTestId("live-board-stage");
     expect(within(stage).getByTestId("current-player-panel")).toHaveTextContent(
@@ -786,6 +787,11 @@ describe("Board and roster view switching", () => {
     expect(within(stage).getByTestId("current-bid")).toHaveTextContent("10");
 
     const commandStrip = within(stage).getByTestId("live-command-strip");
+    const stagedTeamMatrix = within(stage).getByTestId("team-matrix");
+    expect(
+      commandStrip.compareDocumentPosition(stagedTeamMatrix) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     expect(
       within(commandStrip).getByRole("button", { name: /Increase Bid/ })
     ).toBeEnabled();
@@ -842,7 +848,7 @@ describe("Board and roster view switching", () => {
     expect(screen.getByTestId("phase1-revealed-count")).toHaveTextContent("1");
     expect(screen.getByTestId("live-unsold-count")).toHaveTextContent("2");
     expect(screen.getByTestId("live-category-counter")).toHaveTextContent("Ace Men");
-    expect(screen.getByTestId("live-teams-counter")).toHaveTextContent("8");
+    expect(screen.queryByTestId("live-teams-counter")).not.toBeInTheDocument();
     expect(screen.getByTestId("auction-board")).not.toHaveTextContent(
       "private-player@example.com"
     );
@@ -974,12 +980,12 @@ describe("Board and roster view switching", () => {
     await resumeSavedAuction();
     await screen.findByTestId("board-rosters-switch");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
 
     const rosterView = await screen.findByTestId("team-rosters-view");
     expect(screen.getByTestId("roster-board")).toBeInTheDocument();
-    expect(screen.getByTestId("roster-board-header")).toHaveTextContent("Live Rosters");
-    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Team Rosters");
+    expect(screen.getByTestId("roster-board-header")).toHaveTextContent("Live Teams");
+    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Teams");
     expect(screen.getByTestId("roster-team-grid")).toBeInTheDocument();
     expect(screen.getAllByTestId("roster-team-section")).toHaveLength(8);
     expect(screen.getAllByTestId("roster-team-summary")).toHaveLength(8);
@@ -1051,7 +1057,7 @@ describe("Board and roster view switching", () => {
 
     const rosterView = await screen.findByTestId("team-rosters-view");
     expect(screen.getByTestId("closed-rosters-view")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Rosters" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Teams" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
@@ -1061,7 +1067,7 @@ describe("Board and roster view switching", () => {
     expect(screen.getByTestId("roster-board-header")).toHaveTextContent(
       "Auction Closed"
     );
-    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Final Rosters");
+    expect(screen.getByTestId("roster-board-title")).toHaveTextContent("Final Teams");
     expect(rosterView).toHaveTextContent("Falcons");
     expect(rosterView).toHaveTextContent("Aarav Menon");
 
@@ -1075,10 +1081,10 @@ describe("Board and roster view switching", () => {
       const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
       return init?.method === "POST";
     }).length;
-    fireEvent.click(screen.getByRole("tab", { name: "Board" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Auction" }));
     expect(await screen.findByTestId("auction-board")).toBeInTheDocument();
     expect(screen.queryByTestId("live-command-strip")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
     expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
     const postCallCountAfter = fetchMock.mock.calls.filter((call) => {
       const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
@@ -1087,7 +1093,7 @@ describe("Board and roster view switching", () => {
     expect(postCallCountAfter).toBe(postCallCountBefore);
   });
 
-  it("preserves board bidding state when switching back from Rosters without POSTs", async () => {
+  it("preserves auction bidding state when switching back from Teams without POSTs", async () => {
     const fetchMock = await loadEligibleBoard();
 
     expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
@@ -1101,10 +1107,10 @@ describe("Board and roster view switching", () => {
       return init?.method === "POST";
     }).length;
 
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
     expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Board" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Auction" }));
     expect(await screen.findByTestId("auction-board")).toBeInTheDocument();
     expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
     expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
@@ -1180,7 +1186,7 @@ describe("Board and roster view switching", () => {
     await resumeSavedAuction();
     await screen.findByTestId("board-rosters-switch");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
     const rosterView = await screen.findByTestId("team-rosters-view");
     const rosterDetailTrigger = within(rosterView).getByTestId("team-detail-trigger");
     fireEvent.click(rosterDetailTrigger);
@@ -1195,14 +1201,14 @@ describe("Board and roster view switching", () => {
     expect(rosterDetailTrigger).toHaveFocus();
   });
 
-  it("closes the drawer when switching back to Board", async () => {
+  it("closes the drawer when switching back to Auction", async () => {
     await loadEligibleBoard();
 
     const detailTrigger = await screen.findByTestId("team-detail-trigger");
     fireEvent.click(detailTrigger);
     expect(await screen.findByTestId("team-detail-drawer")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
     await waitFor(() => {
       expect(screen.queryByTestId("team-detail-drawer")).not.toBeInTheDocument();
     });
@@ -1388,7 +1394,7 @@ describe("Manual Assignment surface", () => {
       return String(url).startsWith("/api/auction/") && init?.method === "POST";
     }).length;
 
-    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Teams" }));
     expect(screen.queryByTestId("team-rosters-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("manual-assignment-surface")).toBeInTheDocument();
 

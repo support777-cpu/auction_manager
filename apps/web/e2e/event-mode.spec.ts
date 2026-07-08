@@ -327,7 +327,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("auction-board")).not.toContainText("UPI-PRIVATE");
   await expect(page.getByTestId("selected-team")).toContainText("Waiting for bids");
   await expect(page.getByTestId("team-logo-placeholder").first()).toContainText(
-    "Team logo placeholder"
+    "Team Logo"
   );
   await expect(page.getByTestId("team-tile").first()).toContainText("0 of 2");
 
@@ -360,7 +360,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   expect(stateBeforeRosterSwitch.status()).toBe(200);
   const stateBeforeRosterSwitchJson = await stateBeforeRosterSwitch.json();
 
-  await page.getByRole("tab", { name: "Rosters" }).click();
+  await page.getByTestId("board-rosters-switch").getByRole("tab", { name: "Teams" }).click();
   await expect(page.getByTestId("team-rosters-view")).toBeVisible();
   await expect(page.getByTestId("team-rosters-view")).toContainText("Aarav Menon");
   await expect(page.getByTestId("team-rosters-view")).toContainText("Sold");
@@ -379,7 +379,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   );
   expect(stateOnRosterViewJson.resume.lastSavedAction).toBe("MarkSold");
 
-  await page.getByRole("tab", { name: "Board" }).click();
+  await page.getByTestId("board-rosters-switch").getByRole("tab", { name: "Auction" }).click();
   await expect(page.getByTestId("auction-board")).toBeVisible();
   await expect(page.getByTestId("current-player-panel")).toContainText("No Current Player");
   await expect(page.getByTestId("current-bid")).toHaveText("No current bid");

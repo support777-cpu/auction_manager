@@ -51,7 +51,11 @@ test("fits eight-team live board in the first viewport at 1440x900 and 1366x768"
   await page.getByTestId("setup-start-auction").click();
 
   await expect(page.getByTestId("live-status-counters")).toBeVisible();
-  await expect(page.getByTestId("live-teams-counter")).toHaveText("8");
+  const liveViewSwitch = page.getByTestId("board-rosters-switch");
+  await expect(
+    liveViewSwitch.getByRole("tab", { name: "Auction" })
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(liveViewSwitch.getByRole("tab", { name: "Teams" })).toBeEnabled();
   await page.getByTestId("reveal-next").click();
   await expect(page.getByTestId("current-player-name")).toBeVisible();
   await expect(page.getByTestId("auction-board")).not.toContainText(

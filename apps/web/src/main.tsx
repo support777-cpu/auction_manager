@@ -2179,8 +2179,8 @@ function BoardRostersSwitch({
   readonly disabled: boolean;
 }) {
   const options: { id: LiveView; label: string }[] = [
-    { id: "board", label: "Board" },
-    { id: "rosters", label: "Rosters" }
+    { id: "board", label: "Auction" },
+    { id: "rosters", label: "Teams" }
   ];
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -2212,7 +2212,7 @@ function BoardRostersSwitch({
 
   return (
     <nav
-      aria-label="Board and rosters"
+      aria-label="Auction and teams"
       className="board-rosters-switch"
       data-testid="board-rosters-switch"
     >
@@ -2282,7 +2282,7 @@ function TeamLogo({
           hidden
           role="img"
         >
-          Team logo placeholder
+          Team Logo
         </span>
       </>
     );
@@ -2295,7 +2295,7 @@ function TeamLogo({
       data-testid="team-logo-placeholder"
       role="img"
     >
-      Team logo placeholder
+      Team Logo
     </span>
   );
 }
@@ -2308,8 +2308,8 @@ function TeamRostersView({
   readonly onOpenTeamDetail: (teamId: string, trigger: HTMLButtonElement) => void;
 }) {
   const isClosed = boardState.phase === "Closed";
-  const phaseLabel = isClosed ? "Auction Closed" : "Live Rosters";
-  const title = isClosed ? "Final Rosters" : "Team Rosters";
+  const phaseLabel = isClosed ? "Auction Closed" : "Live Teams";
+  const title = isClosed ? "Final Teams" : "Teams";
 
   return (
     <section
@@ -3216,9 +3216,13 @@ function AuctionBoard({
               {boardState.phase1Progress.currentCategory ?? "None"}
             </strong>
           </article>
-          <article>
-            <span className="status-label">Teams</span>
-            <strong data-testid="live-teams-counter">{boardState.teams.length}</strong>
+          <article className="live-view-switch-cell">
+            <span className="status-label">View</span>
+            <BoardRostersSwitch
+              disabled={!canSwitchLiveView(boardState)}
+              liveView={liveView}
+              onChange={handleLiveViewChange}
+            />
           </article>
         </div>
       </section>
@@ -3261,12 +3265,6 @@ function AuctionBoard({
         })}
       </section>
 
-      <BoardRostersSwitch
-        disabled={!canSwitchLiveView(boardState)}
-        liveView={liveView}
-        onChange={handleLiveViewChange}
-      />
-
       {liveView === "rosters" ? (
         <TeamRostersView
           boardState={boardState}
@@ -3282,7 +3280,7 @@ function AuctionBoard({
         >
           <div className="closed-board-panel">
             <span className="eyebrow">Auction Closed</span>
-            <h2>Final Rosters are the active display</h2>
+            <h2>Final Teams are the active display</h2>
             <p>
               Routine bidding controls are unavailable after the auction is closed.
             </p>
@@ -3306,7 +3304,11 @@ function AuctionBoard({
             >
               <section className="player-stage" aria-label="Current player and bid">
               <section
-                className="current-player-panel"
+                className={
+                  currentPlayer
+                    ? "current-player-panel"
+                    : "current-player-panel current-player-panel-empty"
+                }
                 data-testid="current-player-panel"
                 aria-labelledby="current-player-title"
               >
@@ -3451,6 +3453,104 @@ function AuctionBoard({
             </section>
 
             <section
+              className="live-command-strip"
+              aria-label="Live auction commands"
+              data-testid="live-command-strip"
+            >
+              <button
+                aria-busy={revealNextState === "loading"}
+                className={
+                  revealDisabled
+                    ? "primary-action primary-action-disabled"
+                    : "primary-action"
+                }
+                data-testid="reveal-next"
+                disabled={revealDisabled}
+                onClick={onRevealNext}
+                type="button"
+              >
+                <PlayCircle aria-hidden="true" size={20} />
+                <span>
+                  {revealNextState === "loading"
+                    ? "Revealing..."
+                    : "Reveal Next Player"}
+                </span>
+              </button>
+              <button
+                aria-busy={increaseBidState === "loading"}
+                className={
+                  increaseBidDisabled
+                    ? "live-action live-action-disabled"
+                    : "live-action"
+                }
+                data-testid="increase-bid"
+                disabled={increaseBidDisabled}
+                onClick={onIncreaseBid}
+                type="button"
+              >
+                <span>
+                  {increaseBidState === "loading" ? "Increasing..." : "Increase Bid"}
+                </span>
+                <span className="bid-increment-chip">
+                  +{boardState.parameters.bidIncrement}
+                </span>
+              </button>
+              <button
+                aria-busy={markSoldState === "loading"}
+                className={
+                  markSoldDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="mark-sold"
+                disabled={markSoldDisabled}
+                onClick={onMarkSold}
+                type="button"
+              >
+                <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
+              </button>
+              <button
+                aria-busy={markUnsoldState === "loading"}
+                aria-label="Mark Unsold"
+                className={
+                  markUnsoldDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="mark-unsold"
+                disabled={markUnsoldDisabled}
+                onClick={onMarkUnsold}
+                type="button"
+              >
+                <span>
+                  {markUnsoldState === "loading" ? "Marking Unsold..." : "Mark Unsold"}
+                </span>
+              </button>
+              <button
+                aria-busy={undoState === "loading"}
+                aria-label={
+                  boardState.lastUndoAction
+                    ? boardState.lastUndoAction.summary.startsWith("Undo")
+                      ? boardState.lastUndoAction.summary
+                      : `Undo: ${boardState.lastUndoAction.summary}`
+                    : "Undo: No actions to undo."
+                }
+                className={
+                  undoDisabled
+                    ? "secondary-action secondary-action-disabled"
+                    : "secondary-action"
+                }
+                data-testid="undo-action"
+                disabled={undoDisabled}
+                onClick={onUndo}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" size={18} />
+                <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
+              </button>
+            </section>
+
+            <section
               aria-busy={selectTeamState === "loading"}
               className="team-board"
               aria-label="Initialized Teams"
@@ -3561,104 +3661,6 @@ function AuctionBoard({
               })}
             </div>
           </section>
-
-            <section
-              className="live-command-strip"
-              aria-label="Live auction commands"
-              data-testid="live-command-strip"
-            >
-              <button
-                aria-busy={revealNextState === "loading"}
-                className={
-                  revealDisabled
-                    ? "primary-action primary-action-disabled"
-                    : "primary-action"
-                }
-                data-testid="reveal-next"
-                disabled={revealDisabled}
-                onClick={onRevealNext}
-                type="button"
-              >
-                <PlayCircle aria-hidden="true" size={20} />
-                <span>
-                  {revealNextState === "loading"
-                    ? "Revealing..."
-                    : "Reveal Next Player"}
-                </span>
-              </button>
-              <button
-                aria-busy={increaseBidState === "loading"}
-                className={
-                  increaseBidDisabled
-                    ? "live-action live-action-disabled"
-                    : "live-action"
-                }
-                data-testid="increase-bid"
-                disabled={increaseBidDisabled}
-                onClick={onIncreaseBid}
-                type="button"
-              >
-                <span>
-                  {increaseBidState === "loading" ? "Increasing..." : "Increase Bid"}
-                </span>
-                <span className="bid-increment-chip">
-                  +{boardState.parameters.bidIncrement}
-                </span>
-              </button>
-              <button
-                aria-busy={markSoldState === "loading"}
-                className={
-                  markSoldDisabled
-                    ? "secondary-action secondary-action-disabled"
-                    : "secondary-action"
-                }
-                data-testid="mark-sold"
-                disabled={markSoldDisabled}
-                onClick={onMarkSold}
-                type="button"
-              >
-                <span>{markSoldState === "loading" ? "Marking Sold..." : "Mark Sold"}</span>
-              </button>
-              <button
-                aria-busy={markUnsoldState === "loading"}
-                aria-label="Mark Unsold"
-                className={
-                  markUnsoldDisabled
-                    ? "secondary-action secondary-action-disabled"
-                    : "secondary-action"
-                }
-                data-testid="mark-unsold"
-                disabled={markUnsoldDisabled}
-                onClick={onMarkUnsold}
-                type="button"
-              >
-                <span>
-                  {markUnsoldState === "loading" ? "Marking Unsold..." : "Mark Unsold"}
-                </span>
-              </button>
-              <button
-                aria-busy={undoState === "loading"}
-                aria-label={
-                  boardState.lastUndoAction
-                    ? boardState.lastUndoAction.summary.startsWith("Undo")
-                      ? boardState.lastUndoAction.summary
-                      : `Undo: ${boardState.lastUndoAction.summary}`
-                    : "Undo: No actions to undo."
-                }
-                className={
-                  undoDisabled
-                    ? "secondary-action secondary-action-disabled"
-                    : "secondary-action"
-                }
-                data-testid="undo-action"
-                disabled={undoDisabled}
-                onClick={onUndo}
-                type="button"
-              >
-                <RotateCcw aria-hidden="true" size={18} />
-                <span>{undoState === "loading" ? "Undoing..." : "Undo"}</span>
-              </button>
-            </section>
 
             <div className="live-outcome-region" data-testid="live-outcome-region">
               {revealNextError ? (
