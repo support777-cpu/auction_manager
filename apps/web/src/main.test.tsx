@@ -855,6 +855,51 @@ describe("Auction and team view switching", () => {
     expect(screen.getByTestId("auction-board")).not.toHaveTextContent("UPI-PRIVATE");
   });
 
+  it("surfaces scan-friendly team status chips on live team cards", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createTeamStatusBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("team-matrix");
+
+    const expectedStatuses = [
+      ["Falcons", "Eligible"],
+      ["Tigers", "Quota full"],
+      ["Royals", "Low budget"],
+      ["Warriors", "Cannot bid"]
+    ] as const;
+
+    for (const [teamName, status] of expectedStatuses) {
+      const teamButton = screen.getByRole("button", {
+        name: new RegExp(`${teamName}.*status ${status}`)
+      });
+      expect(within(teamButton).getByTestId("team-status-chip")).toHaveTextContent(
+        status
+      );
+    }
+
+    expect(
+      screen.getByRole("button", { name: /Tigers.*Ace quota 2 \/ 2/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Ace slot full.")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Royals.*Royals have 8 remaining/ })
+    ).toBeInTheDocument();
+  });
+
   it("keeps command strip controls visible across disabled and blocked states", async () => {
     vi.stubGlobal(
       "fetch",
@@ -1661,6 +1706,93 @@ function createEightTeamBoardState(): BoardStateDto {
     lastUndoAction: null,
     persistenceFailure: null,
     phase2PoolCount: 2
+  };
+}
+
+function createTeamStatusBoardState(): BoardStateDto {
+  const baseState = createEightTeamBoardState();
+  const statusTeams = baseState.teams.slice(0, 4).map((team, index) => {
+    if (index === 0) {
+      return {
+        ...team,
+        captain: "Priya Captain",
+        currentPlayerCapacity: {
+          teamId: team.id,
+          canBuy: true,
+          reasons: []
+        }
+      };
+    }
+
+    if (index === 1) {
+      return {
+        ...team,
+        remainingBudget: 120,
+        squadCount: 4,
+        roleCounts: {
+          ...team.roleCounts,
+          Ace: 2
+        },
+        currentPlayerCapacity: {
+          teamId: team.id,
+          canBuy: false,
+          reasons: ["Ace slot full."]
+        }
+      };
+    }
+
+    if (index === 2) {
+      return {
+        ...team,
+        remainingBudget: 8,
+        squadCount: 3,
+        currentPlayerCapacity: {
+          teamId: team.id,
+          canBuy: false,
+          reasons: ["Royals have 8 remaining; current bid is 10."]
+        }
+      };
+    }
+
+    return {
+      ...team,
+      remainingBudget: 80,
+      squadCount: 13,
+      currentPlayerCapacity: {
+        teamId: team.id,
+        canBuy: false,
+        reasons: ["Squad cap reached."]
+      }
+    };
+  });
+
+  return {
+    ...baseState,
+    teams: statusTeams,
+    teamRosters: statusTeams.map((team) => ({
+      teamId: team.id,
+      name: team.name,
+      captain: team.captain,
+      budget: team.budget,
+      remainingBudget: team.remainingBudget,
+      squadCount: team.squadCount,
+      roleCounts: { ...team.roleCounts },
+      roster: []
+    })),
+    selectedTeamId: statusTeams[0]!.id,
+    phase1Progress: {
+      ...baseState.phase1Progress,
+      orderedPlayerCount: 4,
+      pendingPlayerCount: 3,
+      categories: [
+        {
+          category: "Ace Men",
+          total: 4,
+          pending: 3,
+          completed: 0
+        }
+      ]
+    }
   };
 }
 

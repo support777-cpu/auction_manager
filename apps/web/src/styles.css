@@ -1043,10 +1043,51 @@ button:focus-visible {
 
 .team-tile-heading {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 48px;
+}
+
+.team-tile .team-status-chip {
+  display: inline-flex;
+  min-width: 78px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.team-tile .team-status-eligible {
+  border-color: #bbf7d0;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.team-tile .team-status-quota {
+  border-color: #fed7aa;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.team-tile .team-status-budget {
+  border-color: #fde68a;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.team-tile .team-status-blocked {
+  border-color: #fecaca;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .team-logo,
@@ -1079,6 +1120,13 @@ button:focus-visible {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin: 16px 0 0;
+}
+
+.team-tile-metrics div {
+  min-width: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .team-tile dt,
@@ -2189,6 +2237,15 @@ button:focus-visible {
   gap: 8px;
 }
 
+.live-app-shell .team-status-chip {
+  min-width: 70px;
+  min-height: 22px;
+  margin-top: 0;
+  padding: 3px 7px;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
 .live-app-shell .team-tile strong {
   font-size: var(--live-font-body);
   line-height: 1.1;
@@ -2206,6 +2263,10 @@ button:focus-visible {
 
 .live-app-shell .team-tile dl div {
   min-height: 0;
+}
+
+.live-app-shell .team-tile-metrics div {
+  padding: 4px 5px;
 }
 
 .live-app-shell .team-tile dt {
@@ -2508,6 +2569,14 @@ button:focus-visible {
   color: var(--ink-inverse-secondary);
 }
 
+.live-app-shell .team-tile-selected .team-tile-metrics div {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.live-app-shell .team-tile-selected .team-status-chip {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
 .live-app-shell .selected-team-panel {
   border-top: 0;
   padding: 12px;
@@ -2726,8 +2795,31 @@ button:focus-visible {
     padding: 5px;
   }
 
+  .live-app-shell .team-tile-heading {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 5px;
+    min-height: 38px;
+  }
+
+  .live-app-shell .team-logo,
+  .live-app-shell .team-logo-placeholder {
+    width: 36px;
+    height: 36px;
+  }
+
+  .live-app-shell .team-status-chip {
+    min-width: 58px;
+    min-height: 18px;
+    padding: 2px 5px;
+    font-size: 8px;
+  }
+
   .live-app-shell .team-tile dl {
     gap: 2px;
+  }
+
+  .live-app-shell .team-tile-metrics div {
+    padding: 2px 3px;
   }
 
   .live-app-shell .team-tile dt {
@@ -3419,6 +3511,18 @@ button:focus-visible {
   border-color: transparent;
 }
 
+.live-app-shell .team-tile-heading .team-logo-placeholder {
+  font-size: 0;
+}
+
+.live-app-shell .team-tile-heading .team-logo-placeholder::before {
+  content: attr(data-initial);
+  color: var(--ink-inverse);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .live-app-shell .team-tile,
 .manual-assignment-team-option,
 .roster-team-section,
@@ -3426,6 +3530,86 @@ button:focus-visible {
   border-color: transparent;
   background: var(--surface-muted);
   box-shadow: var(--live-soft-shadow);
+}
+
+.live-app-shell .team-tile {
+  --team-accent: var(--border-subtle);
+  --team-card-glow: rgba(255, 255, 255, 0.03);
+  --team-chip-bg: #334155;
+  --team-chip-border: rgba(255, 255, 255, 0.16);
+  --team-chip-text: #f8fafc;
+  --team-metric-bg: rgba(148, 163, 184, 0.16);
+  --team-metric-border: rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, var(--team-card-glow), transparent 58%),
+    var(--surface-muted);
+}
+
+.live-app-shell .team-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--team-accent);
+  opacity: 0.9;
+}
+
+.live-app-shell .team-tile-status-eligible {
+  --team-accent: #22c55e;
+  --team-card-glow: rgba(34, 197, 94, 0.12);
+  --team-chip-bg: #15803d;
+  --team-chip-border: rgba(187, 247, 208, 0.55);
+  --team-chip-text: #f0fdf4;
+  --team-metric-bg: rgba(22, 101, 52, 0.22);
+  --team-metric-border: rgba(34, 197, 94, 0.18);
+}
+
+.live-app-shell .team-tile-status-quota {
+  --team-accent: #f59e0b;
+  --team-card-glow: rgba(245, 158, 11, 0.16);
+  --team-chip-bg: #d97706;
+  --team-chip-border: rgba(254, 215, 170, 0.65);
+  --team-chip-text: #fff7ed;
+  --team-metric-bg: rgba(146, 64, 14, 0.28);
+  --team-metric-border: rgba(245, 158, 11, 0.22);
+}
+
+.live-app-shell .team-tile-status-budget {
+  --team-accent: #f97316;
+  --team-card-glow: rgba(249, 115, 22, 0.17);
+  --team-chip-bg: #c2410c;
+  --team-chip-border: rgba(254, 215, 170, 0.62);
+  --team-chip-text: #fff7ed;
+  --team-metric-bg: rgba(154, 52, 18, 0.3);
+  --team-metric-border: rgba(249, 115, 22, 0.24);
+}
+
+.live-app-shell .team-tile-status-blocked {
+  --team-accent: #ef4444;
+  --team-card-glow: rgba(239, 68, 68, 0.16);
+  --team-chip-bg: #b91c1c;
+  --team-chip-border: rgba(254, 202, 202, 0.62);
+  --team-chip-text: #fef2f2;
+  --team-metric-bg: rgba(127, 29, 29, 0.3);
+  --team-metric-border: rgba(239, 68, 68, 0.25);
+}
+
+.live-app-shell .team-tile .team-status-chip {
+  border-color: var(--team-chip-border);
+  background: var(--team-chip-bg);
+  color: var(--team-chip-text);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.live-app-shell .team-tile-metrics div {
+  border: 1px solid var(--team-metric-border);
+  background: var(--team-metric-bg);
+}
+
+.live-app-shell .team-tile dt {
+  color: rgba(248, 250, 252, 0.68);
 }
 
 .live-app-shell .team-tile-selected,

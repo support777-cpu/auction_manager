@@ -102,6 +102,56 @@ const emptyIssueGroups: PlayerCsvImportReviewResponse["issueGroups"] = [
   }
 ];
 
+type TeamBidStatus = {
+  readonly label: "Eligible" | "Quota full" | "Low budget" | "Cannot bid";
+  readonly tone: "eligible" | "quota" | "budget" | "blocked";
+};
+
+function getTeamBidStatus({
+  team,
+  hasCurrentPlayer,
+  currentBid,
+  roleCount,
+  roleTarget
+}: {
+  readonly team: BoardStateDto["teams"][number];
+  readonly hasCurrentPlayer: boolean;
+  readonly currentBid: number | null;
+  readonly roleCount: number | undefined;
+  readonly roleTarget: number | undefined;
+}): TeamBidStatus {
+  if (!hasCurrentPlayer) {
+    return { label: "Cannot bid", tone: "blocked" };
+  }
+
+  const capacity = team.currentPlayerCapacity;
+  const reasons = capacity?.reasons.join(" ").toLowerCase() ?? "";
+  const quotaFull =
+    (roleCount !== undefined && roleTarget !== undefined && roleCount >= roleTarget) ||
+    /quota|slot|role|category/.test(reasons);
+  const lowBudget =
+    (currentBid !== null && team.remainingBudget <= currentBid) ||
+    /budget|remaining|bid|purse/.test(reasons);
+
+  if (capacity?.canBuy === false) {
+    if (quotaFull) {
+      return { label: "Quota full", tone: "quota" };
+    }
+
+    if (lowBudget) {
+      return { label: "Low budget", tone: "budget" };
+    }
+
+    return { label: "Cannot bid", tone: "blocked" };
+  }
+
+  if (lowBudget) {
+    return { label: "Low budget", tone: "budget" };
+  }
+
+  return { label: "Eligible", tone: "eligible" };
+}
+
 function createEmptyNumberFields(): ParameterNumberFields {
   const emptyRoleValues = Object.fromEntries(
     auctionRoleValues.map((role) => [role, ""])
@@ -2278,6 +2328,7 @@ function TeamLogo({
         <span
           aria-label="Team logo placeholder"
           className="team-logo-placeholder team-logo-fallback"
+          data-initial={teamName.charAt(0).toUpperCase()}
           data-testid="team-logo-placeholder"
           hidden
           role="img"
@@ -2292,6 +2343,7 @@ function TeamLogo({
     <span
       aria-label="Team logo placeholder"
       className="team-logo-placeholder"
+      data-initial={teamName.charAt(0).toUpperCase()}
       data-testid="team-logo-placeholder"
       role="img"
     >
@@ -3582,14 +3634,19 @@ function AuctionBoard({
                   displayRole === undefined
                     ? undefined
                     : boardState.parameters.roleTargets[displayRole];
-                const roleCapacityLabel =
+                const quotaMetricLabel =
                   roleCount === undefined || roleTarget === undefined
                     ? currentPlayer === null
                       ? "—"
                       : "Unknown"
-                    : currentPlayer !== null && capacity && !capacity.canBuy
-                      ? "Blocked"
-                      : `${roleCount} of ${roleTarget}`;
+                    : `${roleCount} / ${roleTarget}`;
+                const bidStatus = getTeamBidStatus({
+                  team,
+                  hasCurrentPlayer: currentPlayer !== null,
+                  currentBid: boardState.currentBid,
+                  roleCount,
+                  roleTarget
+                });
                 const capacityText =
                   currentPlayer === null
                     ? soldRosterRows.length > 0
@@ -3600,12 +3657,20 @@ function AuctionBoard({
                         ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${formatAuctionRoleLabel(currentPlayer.role)} slots available`
                         : capacity.reasons.join(" ")
                       : "Capacity pending Current Player";
+                const showCapacityText =
+                  bidStatus.label !== "Eligible" && bidStatus.label !== "Quota full";
                 return (
                   <article className="team-tile-shell" key={team.id}>
                   <button
-                    aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
+                    aria-label={`${team.name}, captain ${team.captain}, remaining purse ${team.remainingBudget}, squad ${team.squadCount}, ${displayRole ? formatAuctionRoleLabel(displayRole) : "Role"} quota ${quotaMetricLabel}, status ${bidStatus.label}, ${capacityText}`}
                     aria-pressed={isSelected}
-                    className={isSelected ? "team-tile team-tile-selected" : "team-tile"}
+                    className={[
+                      "team-tile",
+                      `team-tile-status-${bidStatus.tone}`,
+                      isSelected ? "team-tile-selected" : null
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                     data-testid={isSelected ? "team-tile-selected" : "team-tile"}
                     disabled={!selectionEnabled}
                     onClick={() => onSelectTeam(team.id)}
@@ -3620,10 +3685,16 @@ function AuctionBoard({
                         <strong>{team.name}</strong>
                         <span>{team.captain}</span>
                       </span>
+                      <span
+                        className={`team-status-chip team-status-${bidStatus.tone}`}
+                        data-testid="team-status-chip"
+                      >
+                        {bidStatus.label}
+                      </span>
                     </div>
-                    <dl>
+                    <dl className="team-tile-metrics">
                       <div>
-                        <dt>Remaining</dt>
+                        <dt>Purse</dt>
                         <dd>{team.remainingBudget}</dd>
                       </div>
                       <div>
@@ -3631,20 +3702,22 @@ function AuctionBoard({
                         <dd>{team.squadCount}</dd>
                       </div>
                       <div>
-                        <dt>{displayRole ? formatAuctionRoleLabel(displayRole) : "Role"}</dt>
-                        <dd>{roleCapacityLabel}</dd>
+                        <dt>{displayRole ? formatAuctionRoleLabel(displayRole) : "Quota"}</dt>
+                        <dd>{quotaMetricLabel}</dd>
                       </div>
                     </dl>
-                    <span
-                      className="team-capacity-text"
-                      data-testid={
-                        capacity && !capacity.canBuy
-                          ? "team-tile-capacity-reason"
-                          : undefined
-                      }
-                    >
-                      {capacityText}
-                    </span>
+                    {showCapacityText ? (
+                      <span
+                        className="team-capacity-text"
+                        data-testid={
+                          capacity && !capacity.canBuy
+                            ? "team-tile-capacity-reason"
+                            : undefined
+                        }
+                      >
+                        {capacityText}
+                      </span>
+                    ) : null}
                   </button>
                   <button
                     aria-label={`View ${team.name} details`}

@@ -329,7 +329,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("team-logo-placeholder").first()).toContainText(
     "Team Logo"
   );
-  await expect(page.getByTestId("team-tile").first()).toContainText("0 of 2");
+  await expect(page.getByTestId("team-tile").first()).toContainText("0 / 2");
 
   const teamTiles = page.locator(".team-board-grid .team-tile");
   await teamTiles.first().click();
@@ -353,7 +353,7 @@ test("reviews and saves auction parameters before starting the auction", async (
     "1"
   );
   await expect(page.locator(".team-board-grid .team-tile").first()).toContainText(
-    "1 of 2"
+    "1 / 2"
   );
 
   const stateBeforeRosterSwitch = await request.get("/api/state");
