@@ -3501,14 +3501,14 @@ button:focus-visible {
 .live-app-shell .selected-team-panel,
 .live-app-shell .roster-team-summary div,
 .live-app-shell .team-detail-drawer-summary div {
-  border-color: transparent;
+  border: 0;
   background: var(--surface-panel-soft);
   box-shadow: var(--live-soft-shadow);
 }
 
 .live-app-shell .current-player-media,
 .live-app-shell .team-logo-placeholder {
-  border-color: transparent;
+  border: 0;
 }
 
 .live-app-shell .team-tile-heading .team-logo-placeholder {
@@ -3527,7 +3527,7 @@ button:focus-visible {
 .manual-assignment-team-option,
 .roster-team-section,
 .roster-player-row {
-  border-color: transparent;
+  border: 0;
   background: var(--surface-muted);
   box-shadow: var(--live-soft-shadow);
 }
@@ -3597,14 +3597,14 @@ button:focus-visible {
 }
 
 .live-app-shell .team-tile .team-status-chip {
-  border-color: var(--team-chip-border);
+  border-color: transparent;
   background: var(--team-chip-bg);
   color: var(--team-chip-text);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
 }
 
 .live-app-shell .team-tile-metrics div {
-  border: 1px solid var(--team-metric-border);
+  border: 0;
   background: var(--team-metric-bg);
 }
 
@@ -3620,6 +3620,17 @@ button:focus-visible {
   box-shadow:
     inset 0 0 0 1px var(--command-red),
     0 0 0 1px rgba(224, 31, 45, 0.14);
+}
+
+.live-app-shell .team-tile-selected,
+.live-app-shell .board-rosters-switch-tab-active {
+  background: var(--command-red);
+  color: var(--on-accent-foreground);
+}
+
+.manual-assignment-team-selected,
+.manual-assignment-pool-row-active {
+  background: rgba(198, 40, 40, 0.14);
 }
 
 .manual-assignment-pool-row-active {

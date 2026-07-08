@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-06T21:32:18+0530
-last_updated: 2026-07-08T12:21:00+0530
+last_updated: 2026-07-08T16:25:23+0530
 project: auction_manager
 project_key: NOKEY
 tracking_system: file-system
@@ -75,7 +75,7 @@ development_status:
   2-5-2-redesign-the-live-auction-board-layout: done
   2-5-3-prepare-the-focused-manual-assignment-surface: done
   2-5-4-redesign-rosters-and-closed-state-display: done
-  2-5-5-run-redesign-functional-e2e-unit-and-visual-qa-gates: backlog
+  2-5-5-clarify-bid-leader-and-event-timeline: ready-for-dev
   epic-2-5-retrospective: optional
 
   epic-3: backlog

@@ -274,9 +274,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("phase1-progress")).toContainText(
     "Phase 1 order ready"
   );
-  await expect(page.getByTestId("phase1-current-category")).toContainText(
-    "Current category: Ace Men"
-  );
+  await expect(page.getByTestId("phase1-current-category")).toHaveText("Ace Men");
   await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
   await expect(page.getByTestId("current-bid")).toContainText("No current bid");
   await expect(page.getByTestId("reveal-next")).toBeEnabled();
@@ -552,9 +550,7 @@ test("reviews and saves auction parameters before starting the auction", async (
   await expect(page.getByTestId("phase1-progress")).toContainText(
     "Phase 1 in progress"
   );
-  await expect(page.getByTestId("phase1-current-category")).toContainText(
-    "Current category: Ace Women"
-  );
+  await expect(page.getByTestId("phase1-current-category")).toHaveText("Ace Women");
   await expect(page.getByTestId("phase1-ordered-count")).toContainText("8");
   await expect(page.getByTestId("current-player-name")).toContainText(
     secondPlayerName

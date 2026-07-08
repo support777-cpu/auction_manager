@@ -42,7 +42,7 @@ FR9: Display live auction state and Team roster state for the operator, Captains
 
 FR10: Keep routine operator controls obvious and visually easier to reach than destructive or rare actions, with Dangerous Operations separated from normal live flow.
 
-FR11: Select, change, or clear the Team associated with the Current Bid, show the selected Team on the Auction Board, and include selection changes in Undo History.
+FR11: Select, change, or clear the Team bidding at the Current Bid, record that Team's bid at that value, show the leading Team on the Auction Board, and include bid-leader changes in Undo History and the event timeline.
 
 FR12: Increase the Current Bid by the configured Bid Increment, immediately reflect the updated Current Bid on the Auction Board, and include bid changes in Undo History.
 
@@ -1140,48 +1140,66 @@ So that the room can inspect Teams without returning to Excel.
 **When** a second agent reviews it
 **Then** the reviewer checks all-Team visibility, row readability, closed-state readiness, privacy, non-mutation behavior, and consistency with the redesign mockup.
 
-### Story 2.5.5: Run Redesign Functional, E2E, Unit, and Visual QA Gates
+### Story 2.5.5: Clarify Bid Leader and Event Timeline
 
-As an event organizer,
-I want the redesigned surfaces verified functionally and visually before Epic 3 starts,
-So that unsold-player implementation builds on a stable, readable UI foundation.
+As an auction operator,
+I want selecting a Team to record that Team's bid at the current value and make the leading Team obvious,
+So that I can run verbal bidding without reading the log or interpreting redundant selection chrome.
 
 **Acceptance Criteria:**
 
-**Given** Epic 2.5 implementation is complete
-**When** unit and component tests run
-**Then** redesigned shell components, Current Player stage, command strip, Team matrix, Board/Rosters switch, roster cards, blocked-reason rendering, keyboard behavior, and privacy-safe rendering are covered
-**And** tests use stable `data-testid` anchors rather than brittle CSS-only selectors where behavior matters.
+**Given** a Current Player is revealed and the Current Bid is 6
+**When** the operator selects `Warriors`
+**Then** the system records a bid event that `Warriors bid 6`
+**And** `Warriors` becomes the current leading Team for the Current Player.
 
-**Given** Epic 2.5 implementation is complete
-**When** full E2E regression tests run
-**Then** setup-to-start, reveal, select Team, increase bid, blocked sale, mark sold, mark unsold, roster view switch, resume, undo, command-in-flight protection, keyboard operation, and live-board privacy still pass against the redesigned UI
-**And** E2E tests are updated for any renamed controls, moved controls, or new stable selectors introduced by the redesign.
+**Given** a different Team is already leading at the Current Bid
+**When** the operator selects another valid Team
+**Then** the leading Team changes to the newly selected Team at the same Current Bid
+**And** the event timeline records the new Team bid value without requiring a bid increment first.
 
-**Given** Epic 2.5 implementation is complete
-**When** visual QA runs
-**Then** Playwright captures or equivalent artifacts exist for live board, manual assignment, rosters, and closed-state fixtures at 1440x900, 1366x768, 1920x1080, and 390x844.
+**Given** the operator increases the Current Bid
+**When** no Team has been selected at the increased value yet
+**Then** the board makes clear that the Current Bid needs a Team bid record
+**And** the previous leading Team is not visually presented as having bid the new value unless that is the intended domain behavior and tests explicitly preserve it.
 
-**Given** screenshots are inspected
-**When** critical areas are evaluated
-**Then** counters, Current Player, Current Bid, command strip, Team matrix, blocked reasons, assignment pool, roster cards, and Board/Rosters switch do not overlap or truncate critical text incoherently.
+**Given** Team cards render during bidding
+**When** one Team is the current leader
+**Then** that Team is visually highlighted with a strong border, glow, badge, or accent background
+**And** the auctioneer can identify the leader without reading the event timeline.
 
-**Given** existing Epic 2 behavior is retested
-**When** automated regression results are reviewed
-**Then** the redesign has not regressed domain command behavior, API reconciliation, persistence, privacy, accessibility, keyboard operation, or Undo semantics.
+**Given** the Team matrix header renders
+**When** the board is in a live bidding phase
+**Then** the header no longer shows a selected-Team icon or selected-Team label beside the Teams title
+**And** the Teams title no longer shows the count of Teams.
 
-**Given** narrow fallback is tested
-**When** the viewport is 390x844
-**Then** workflow order is preserved and controls remain usable
-**And** v1 does not need mobile-first polish beyond readable, non-overlapping operation.
+**Given** the live board section headers render
+**When** Current Player, Teams, event timeline, roster, or command sections appear
+**Then** section headers are noticeably larger and more scannable than the surrounding body text
+**And** the change does not cause truncation, overlap, or loss of first-viewport fit at 1440x900 and 1366x768.
+
+**Given** live actions occur
+**When** the event timeline renders
+**Then** it shows timestamped events such as `10:42 PM - Sold Stuti Jude to Warriors for 6`, `10:41 PM - Warriors bid 6`, `10:41 PM - Tigers bid 4`, and `10:40 PM - Revealed Stuti Jude`
+**And** the latest event is visually emphasized compared with earlier entries.
+
+**Given** timeline events render
+**When** event types are displayed
+**Then** sold events use green/positive treatment, reveal events use gray/neutral treatment, unsold events use red or orange treatment, and bid-change or Team-bid events use blue treatment
+**And** color is not the only cue for event type.
+
+**Given** the operator marks the Current Player sold
+**When** the sale succeeds
+**Then** the timeline records the sold event using the current leading Team and Current Bid
+**And** prior Team bid events remain visible in reverse chronological order.
 
 **Given** a developer finishes this story
 **When** they run the story's Dev Gate
-**Then** build, typecheck, full relevant unit/component tests, full relevant E2E tests, accessibility checks, and the redesign visual QA screenshot suite pass or any exception is explicitly triaged with owner, risk, and follow-up.
+**Then** typecheck, unit/component tests for bid-leader display and timeline rendering, relevant domain/API tests for bid-leader action log semantics, accessibility checks, and focused E2E coverage for reveal, select-Team-as-bid, increase bid, leader highlight, mark sold, undo, and timeline ordering pass.
 
 **Given** the dev agent marks the story complete
 **When** a second agent reviews it
-**Then** the reviewer compares screenshots against the redesign mockup, verifies no critical overlap, reviews updated unit/E2E assertions, reruns high-risk regression tests, and blocks Epic 3 start for any issue that would make live operation unreliable.
+**Then** the reviewer checks bid-leader semantics, undo restoration, timeline ordering and colors, leader highlight readability, removed Teams-header clutter, larger section headers, accessibility, privacy, and regression risk to reveal, bid, sold, unsold, roster switching, and resume flows.
 
 ## Epic 3: Resolve Unsold Players
 

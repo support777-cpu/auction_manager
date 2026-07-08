@@ -238,14 +238,14 @@ The interface makes the safe next action clear during live auction flow.
 
 **Functional Requirements:**
 
-#### FR-11: Select bidding team
+#### FR-11: Record bidding team
 
-The Auction Operator can select the Team currently associated with the Current Bid.
+The Auction Operator can select the Team bidding at the Current Bid, record that Team's bid at that value, and make that Team the current visible leader.
 
 **Consequences:**
-- The selected Team is visible on the Auction Board.
-- Changing the selected Team is included in Undo History.
-- The system can clear or change the selected Team before sale.
+- The leading Team is visibly highlighted on the Auction Board without requiring the operator to read the action log.
+- Team bid records are included in Undo History and the event timeline.
+- The system can change or clear the leading Team before sale.
 
 #### FR-12: Increase bid
 
@@ -254,6 +254,7 @@ The Auction Operator can increase the Current Bid by the configured Bid Incremen
 **Consequences:**
 - Bid changes are included in Undo History.
 - The Auction Board immediately reflects the updated Current Bid.
+- The next Team selected at the updated Current Bid is recorded as the bidder at that value.
 
 #### FR-13: Hard-block invalid sales
 

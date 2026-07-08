@@ -3423,7 +3423,6 @@ function AuctionBoard({
                           <div>
                             <dt>Category</dt>
                             <dd data-testid="phase1-current-category">
-                              Current category:{" "}
                               {boardState.phase1Progress.currentCategory ?? "None"}
                             </dd>
                           </div>
@@ -3481,8 +3480,10 @@ function AuctionBoard({
                 ) : (
                   <>
                     <h2 id="current-player-title">No Current Player</h2>
-                    <p data-testid="phase1-current-category">
-                      Current category:{" "}
+                    <p
+                      aria-label="Current category"
+                      data-testid="phase1-current-category"
+                    >
                       {boardState.phase1Progress.currentCategory ?? "None"}
                     </p>
                     <div className="current-bid-hero" data-testid="selected-team">
