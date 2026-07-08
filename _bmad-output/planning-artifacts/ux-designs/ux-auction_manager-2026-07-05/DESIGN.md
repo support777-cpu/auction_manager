@@ -5,29 +5,33 @@ status: final
 sources:
   - ../../prds/prd-auction_manager-2026-07-04/prd.md
   - ../../architecture/architecture-auction_manager-2026-07-05/ARCHITECTURE-SPINE.md
-updated: 2026-07-06
+updated: 2026-07-08
 colors:
-  surface-base: '#F7F8FA'
-  surface-raised: '#FFFFFF'
-  surface-muted: '#EEF1F4'
-  surface-inverse: '#111827'
-  surface-inverse-raised: '#1F2937'
+  surface-base: '#08090B'
+  surface-raised: '#111318'
+  surface-muted: '#191C22'
+  surface-inverse: '#08090B'
+  surface-inverse-raised: '#111318'
+  surface-panel-soft: '#22262E'
   ink-primary: '#111827'
   ink-secondary: '#4B5563'
   ink-muted: '#6B7280'
   ink-inverse: '#F9FAFB'
   ink-inverse-secondary: '#D1D5DB'
-  field-green: '#136F45'
-  field-green-strong: '#0B5133'
-  gold-live: '#F5B841'
-  gold-live-strong: '#B7791F'
+  command-red: '#E01F2D'
+  command-red-strong: '#AF121F'
+  live-red: '#FF3347'
+  field-green: '#21A67A'
+  field-green-strong: '#136F45'
+  gold-live: '#FF3347'
+  gold-live-strong: '#E01F2D'
   sky-info: '#2563EB'
   success: '#15803D'
   warning: '#B45309'
   danger: '#B91C1C'
-  border-subtle: '#D8DEE6'
-  border-strong: '#9CA3AF'
-  focus-ring: '#F5B841'
+  border-subtle: '#30343D'
+  border-strong: '#4B5563'
+  focus-ring: '#FF3347'
 typography:
   display-score:
     fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif'
@@ -119,12 +123,12 @@ components:
     foreground: '{colors.ink-primary}'
     radius: '{rounded.sm}'
   button-primary:
-    background: '{colors.field-green}'
+    background: '{colors.command-red}'
     foreground: '#FFFFFF'
     radius: '{rounded.md}'
   button-live:
-    background: '{colors.gold-live}'
-    foreground: '#2A1A03'
+    background: '#F7F4EE'
+    foreground: '{colors.command-red-strong}'
     radius: '{rounded.md}'
   button-danger:
     background: '{colors.danger}'
@@ -138,18 +142,21 @@ components:
 
 ## Brand & Style
 
-Auction Manager is a live-event operations tool first and a cricket scoreboard second. The product should read as calm, legible, and hard to misuse while a room is watching. [ASSUMPTION] The visual identity uses a restrained sports-control palette: dark board surfaces for the projected auction state, field green for valid team/action context, gold for the live bid, and red only for blocking errors or dangerous operations.
+Auction Manager is a live-event operations tool first and a cricket scoreboard second. The product should read as calm, legible, and hard to misuse while a room is watching. The Epic 2 redesign establishes the v1 live-event direction: black event-console surfaces, red command emphasis, off-white text, dense team matrices, and repeated counters that keep the room oriented without instructional clutter.
 
-The interface should feel like a reliable event console: clear hierarchy, large numbers, obvious next actions, and minimal decoration. It should not feel like a SaaS dashboard, a public betting product, or a playful fantasy-sports app. Church-event warmth should come from language restraint, spacing, team logos, and player photos, not decorative motifs. [ASSUMPTION]
+The interface should feel like a reliable event console: clear hierarchy, large numbers, obvious next actions, and minimal decoration. It should not feel like a SaaS dashboard, a public betting product, or a playful fantasy-sports app. Church-event warmth should come from language restraint, spacing, team logos, and player photos, not decorative motifs.
 
 The implementation stack is React with Tailwind CSS and Lucide React icons, served locally by the event-mode app. No full component system is named by the architecture, so these tokens define the product visual layer directly rather than overriding shadcn, MUI, or another library.
 
 ## Colors
 
-- **Board Ink (`{colors.surface-inverse}`)** is the primary large-display canvas. It gives the Current Player and Current Bid enough contrast when mirrored to a projector or TV.
-- **Raised Board (`{colors.surface-inverse-raised}`)** separates player media, bid state, and phase context on the live board without relying on heavy shadows.
-- **Field Green (`{colors.field-green}`)** marks safe primary action, selected valid team context, and cricket/event identity. It is not used for every positive number.
-- **Live Gold (`{colors.gold-live}`)** is reserved for the Current Bid and the one control that advances the live moment. Gold means "the room is looking here."
+- **Board Ink (`{colors.surface-inverse}`)** is the primary large-display canvas. It gives the Current Player, Current Bid, counters, and Team matrix enough contrast when mirrored to a projector or TV.
+- **Raised Board (`{colors.surface-inverse-raised}`)** separates player media, bid state, phase context, Team cards, command strips, and roster cards without relying on heavy shadows.
+- **Panel Soft (`{colors.surface-panel-soft}`)** is used inside cards for metric cells and roster rows where repeated scan targets need subtle separation.
+- **Command Red (`{colors.command-red}`)** marks primary live commands, selected Team/assignment state, and the product's event-console identity. It is the dominant action color in live surfaces.
+- **Live Red (`{colors.live-red}`)** is reserved for the Current Bid and the bid-changing moment. Red means "the room is looking here."
+- **Field Green (`{colors.field-green}`)** is a secondary success color for committed state or non-primary validity. It is not the main live command color.
+- **Off White (`{colors.ink-inverse}`)** is the main text color on dark live surfaces.
 - **Danger Red (`{colors.danger}`)** is reserved for invalid outcomes, reset, close, and destructive confirmation. It must not be used for ordinary unsold state.
 - **Sky Info (`{colors.sky-info}`)** supports setup guidance, resume notices, and non-blocking informational states.
 
@@ -187,10 +194,12 @@ Avoid oversized rounded cards. The product should read as an event tool, not a c
 
 ## Components
 
-- **Live board** — Dark full-width region using `{components.live-board.background}`. It contains phase, Current Player, Current Bid, selected Team, and outcome state. It is the anchor visual for the room.
+- **Live board** — Dark full-width event-console region using `{components.live-board.background}`. It contains top status counters, Current Player stage, Current Bid, command strip, selected Team, blocked reason, and Team matrix in the first viewport at 1440x900 and 1366x768.
+- **Top status counters** — Compact repeated cells for ordered/revealed/pending/unsold/category/team or pool/assigned/remaining/valid/blocked/team counts. They must use stable widths and tabular numeric rendering.
 - **Current bid** — Uses `{components.current-bid.typography}` and `{components.current-bid.foreground}`. It must be large enough to read from the back of the room and should not share emphasis with any other number.
-- **Player panel** — Shows photo or placeholder, name, role, and base price. Placeholder uses neutral surfaces, not error red.
-- **Team tile** — Shows logo, name, remaining budget, squad count, and role capacity for the Current Player role. Active team uses `{components.team-tile-active.background}`.
+- **Player stage** — Shows photo or placeholder, name, Role, Base Price, Category, and bid. Missing photo uses the neutral dark photo well, not error styling.
+- **Command strip** — A fixed-height row of routine commands below the player stage. Primary/red commands include Next and assignment; the bid increment uses off-white with red text; disabled or unavailable commands keep stable dimensions.
+- **Team matrix** — A dense two-column matrix at desktop widths. Each card shows logo/initial placeholder, Team name, Captain, Budget, Squad, and the Current Player role capacity. Active cards use Command Red; blocked cards are subdued but still readable.
 - **Board/Rosters switch** — Compact two-option control for moving between the live auction board and the all-Team roster surface. It should read as navigation, not as a state-changing command.
 - **Team roster screen** — Read-only room-facing surface for all current or final Team rosters. It uses light raised Team sections inside the app frame, with a clear phase label and no routine bidding controls after Close Auction.
 - **Roster team section** — Uses `{components.roster-team-section.background}` and groups one Team's logo, name, captain, remaining budget, squad count, role counts, and Player list. Empty sections remain visible.
@@ -204,7 +213,7 @@ Avoid oversized rounded cards. The product should read as an event tool, not a c
 - **Live button** — Bid increment action. Uses `{components.button-live.background}` because it changes the number the room is watching.
 - **Undo control** — Secondary action with visible last-action summary nearby. It should never look destructive.
 - **Blocked status** — Inline panel using `{components.status-blocked.background}` for invalid sale or assignment reasons. It appears near the attempted action, not as a generic top-of-page alert.
-- **Manual assignment control** — Phase 3 team selection and assign action for players still unsold after Phase 2 rebidding. It should visually read like a deliberate operator choice, not a random draw or automated optimization.
+- **Manual assignment control** — Phase 3 has its own focused surface: assignment player and pool list on the left, eligible Team matrix on the right, blocked reason at the bottom, and no routine bidding controls. It should visually read like a deliberate operator choice, not a random draw or automated optimization.
 - **Dangerous operation button** — Reset Auction and Close Auction only. Hidden behind a separated menu or management surface and always confirmed in a modal.
 
 ## Do's and Don'ts
@@ -217,6 +226,8 @@ Avoid oversized rounded cards. The product should read as an event tool, not a c
 | Use clear placeholders for missing photos/logos | Treat missing media as a live-event failure |
 | Show blocked reasons in plain operational language | Rely on red alone to explain invalid actions |
 | Keep setup light, dense, and checklist-like | Make setup look like the live board |
+| Keep live Team tiles and roster cards dense enough to scan | Inflate Team state into large repeated dashboards |
+| Use the red/black event-console style for live and closed surfaces | Revert to the earlier dark-green/gold scoreboard palette for Epic 2+ implementation |
 | Make final rosters readable as the closed-auction surface | End on a disabled board with no roster summary |
 | Keep roster rows factual and compact | Turn rosters into celebratory player cards that are hard to scan |
 | Preserve privacy by excluding non-auction CSV fields | Surface registration/payment fields because they were imported |

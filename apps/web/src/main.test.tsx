@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AuctionParameters,
@@ -719,6 +719,203 @@ describe("AuctionBoard Undo", () => {
     await waitFor(() => {
       expect(screen.getByTestId("undo-action")).toBeEnabled();
     });
+  });
+});
+
+describe("Board and roster view switching", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="root"></div>';
+  });
+
+  async function loadEligibleBoard(fetchMock?: ReturnType<typeof vi.fn>) {
+    const mock =
+      fetchMock ??
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createEligibleBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      });
+    vi.stubGlobal("fetch", mock);
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+    return mock;
+  }
+
+  it("shows the Board/Rosters switch and activates Rosters with keyboard navigation", async () => {
+    await loadEligibleBoard();
+
+    const switchRoot = await screen.findByTestId("board-rosters-switch");
+    expect(switchRoot).toBeInTheDocument();
+    const tabs = switchRoot.querySelectorAll('[role="tab"]');
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.keyDown(tabs[0]!, { key: "ArrowRight" });
+    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+  });
+
+  it("renders empty roster copy for teams without sold players", async () => {
+    await loadEligibleBoard();
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+    expect(screen.getAllByTestId("roster-team-section")).toHaveLength(1);
+    expect(screen.getByText("No players bought yet.")).toBeInTheDocument();
+  });
+
+  it("renders sold player rows from authoritative teamRosters", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/state") {
+        return jsonResponse(createAuctionAppState(createSoldBoardState()));
+      }
+
+      if (url === "/api/setup/auction-parameters") {
+        return jsonResponse(createParameterReview());
+      }
+
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+
+    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+    expect(screen.getAllByTestId("roster-team-section")).toHaveLength(1);
+    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("Aarav Menon");
+    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("Sold");
+    expect(screen.getByTestId("team-rosters-view")).toHaveTextContent("10");
+    expect(screen.getAllByTestId("roster-player-row")).toHaveLength(1);
+  });
+
+  it("preserves board bidding state when switching back from Rosters without POSTs", async () => {
+    const fetchMock = await loadEligibleBoard();
+
+    expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
+    expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+
+    const postCountBefore = fetchMock.mock.calls.filter((call) => {
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return init?.method === "POST";
+    }).length;
+
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Board" }));
+    expect(await screen.findByTestId("auction-board")).toBeInTheDocument();
+    expect(screen.getByTestId("current-player-name")).toHaveTextContent("Aarav Menon");
+    expect(screen.getByTestId("current-bid")).toHaveTextContent("10");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent("Falcons");
+
+    const postCountAfter = fetchMock.mock.calls.filter((call) => {
+      const [, init] = call as unknown as [RequestInfo | URL, RequestInit | undefined];
+      return init?.method === "POST";
+    }).length;
+    expect(postCountAfter).toBe(postCountBefore);
+  });
+
+  it("opens a read-only team detail drawer with capacity reasons and closes on Escape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createBlockedBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+
+    const detailTrigger = await screen.findByTestId("team-detail-trigger");
+    fireEvent.click(detailTrigger);
+
+    const drawer = await screen.findByTestId("team-detail-drawer");
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(drawer).toHaveTextContent("Falcons");
+    expect(drawer).toHaveTextContent("Falcons have 8 remaining; current bid is 10.");
+    expect(screen.getByTestId("selected-team")).toHaveTextContent(
+      "Blocked: Falcons have 8 remaining; current bid is 10."
+    );
+
+    fireEvent.keyDown(drawer, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("team-detail-drawer")).not.toBeInTheDocument();
+    });
+    expect(detailTrigger).toHaveFocus();
+  });
+
+  it("opens the roster-view drawer and restores focus to the roster details trigger", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/state") {
+          return jsonResponse(createAuctionAppState(createBlockedBoardState()));
+        }
+
+        if (url === "/api/setup/auction-parameters") {
+          return jsonResponse(createParameterReview());
+        }
+
+        return jsonResponse({}, 404);
+      })
+    );
+
+    await import("./main.js");
+    await resumeSavedAuction();
+    await screen.findByTestId("board-rosters-switch");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    const rosterView = await screen.findByTestId("team-rosters-view");
+    const rosterDetailTrigger = within(rosterView).getByTestId("team-detail-trigger");
+    fireEvent.click(rosterDetailTrigger);
+
+    const drawer = await screen.findByTestId("team-detail-drawer");
+    expect(drawer).toHaveTextContent("Falcons");
+
+    fireEvent.keyDown(drawer, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("team-detail-drawer")).not.toBeInTheDocument();
+    });
+    expect(rosterDetailTrigger).toHaveFocus();
+  });
+
+  it("closes the drawer when switching back to Board", async () => {
+    await loadEligibleBoard();
+
+    const detailTrigger = await screen.findByTestId("team-detail-trigger");
+    fireEvent.click(detailTrigger);
+    expect(await screen.findByTestId("team-detail-drawer")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Rosters" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("team-detail-drawer")).not.toBeInTheDocument();
+    });
+    expect(await screen.findByTestId("team-rosters-view")).toBeInTheDocument();
   });
 });
 

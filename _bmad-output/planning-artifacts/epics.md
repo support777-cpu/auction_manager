@@ -220,6 +220,18 @@ UX-DR29: Build roster Team sections and roster Player rows using the updated des
 
 UX-DR30: After Close Auction succeeds, automatically make Team rosters the default final room-facing surface with phase shown as `Closed`, routine live controls disabled, and final roster state readable on the mirrored display.
 
+UX-DR31: Adopt the Epic 2 redesign review mockup at `ux-designs/ux-auction_manager-2026-07-05/mockups/epic-2-redesign-review.html` as the implementation reference for live board, manual assignment, roster, and closed-state structure before Epic 3 begins.
+
+UX-DR32: Build the redesigned red/black event-console live board with compact top counters, a stable Current Player/Bid stage, fixed command strip, and right-side Team matrix that keeps eight Teams visible in the first viewport at 1440x900 and 1366x768.
+
+UX-DR33: Replace instructional live-board clutter with repeated operational metrics and concise blocked/outcome copy; the UI should communicate through hierarchy, counters, commands, and state labels rather than explanatory paragraphs.
+
+UX-DR34: Build Manual Assignment as its own focused surface using the redesign pattern: assignment player and pool list on the left, eligible Team matrix on the right, bottom blocked-reason panel, and no routine bidding controls.
+
+UX-DR35: Build the roster and Closed surfaces with dense dark roster cards, Board/Rosters switch, final roster title treatment, and all-Team visibility matching the redesign hierarchy while preserving privacy allowlists.
+
+UX-DR36: Add visual QA gates for the redesigned surfaces at 1440x900, 1366x768, 1920x1080, and 390x844, including checks that command controls, counters, player stage, Team matrix, blocked reasons, and roster cards do not overlap or push critical content out of workflow order.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Player CSV import and auction-relevant Player data derivation.
@@ -279,6 +291,12 @@ The operator can import Players, photos, Teams, logos, configure auction paramet
 The operator can run Phase 1 from the projected board: reveal randomized role-wise Players, select teams, increase bids, block invalid sales, mark sold/unsold, see team state and current rosters, and recover from ordinary mistakes.
 
 **FRs covered:** FR7, FR8, FR9, FR10, FR11, FR12, FR13, FR14, FR15, FR19, FR20
+
+### Epic 2.5: Implement the Epic 2 UI Redesign Before Unsold Resolution
+
+The operator gets the approved red/black event-console UI from the Epic 2 redesign review applied across the current live board and future-facing Phase 3/closed roster surfaces before Epic 3 adds unsold bidding and manual-assignment behavior.
+
+**FRs covered:** FR9, FR10, FR18 UI preparation, FR22 UI preparation, plus UX-DR31 through UX-DR36.
 
 ### Epic 3: Resolve Unsold Players
 
@@ -972,6 +990,188 @@ So that captains and attendees can inspect bought Players without leaving Auctio
 **Given** the dev agent marks the story complete
 **When** a second agent reviews it
 **Then** the reviewer checks roster projection source-of-truth, privacy allowlist, accessibility, view-switch non-mutation behavior, unit/component/API tests, and the roster-view E2E/acceptance gate, raises findings, and sends blocking issues back for iteration.
+
+## Epic 2.5: Implement the Epic 2 UI Redesign Before Unsold Resolution
+
+The operator gets the approved red/black event-console UI from the Epic 2 redesign review applied across the current live board and future-facing Phase 3/closed roster surfaces before Epic 3 adds unsold bidding and manual-assignment behavior.
+
+Implementation boundary: Epic 2.5 is a UI/UX implementation bridge. It may reshape components, view composition, styling tokens, interaction layout, visual QA, and E2E selectors for the redesigned surfaces. It must not change domain rules, persistence semantics, auction command contracts, randomized order behavior, undo semantics, or privacy allowlists except where tests expose an existing mismatch.
+
+### Story 2.5.1: Apply Red/Black Event Console Tokens and App Frame
+
+As an auction operator,
+I want the live app to use the approved event-console visual system,
+So that the board feels purpose-built for the room before unsold-player workflows are added.
+
+**Acceptance Criteria:**
+
+**Given** the app renders any post-setup live surface
+**When** the visual shell loads
+**Then** it uses the red/black event-console tokens from `DESIGN.md`
+**And** it no longer presents the earlier green/gold live-board palette as the primary Epic 2+ experience.
+
+**Given** common live surfaces render
+**When** colors, borders, radii, typography, and spacing are inspected
+**Then** they match the structural hierarchy of `mockups/epic-2-redesign-review.html`
+**And** command red, live red, off-white text, dark raised panels, and compact metric cells are used consistently.
+
+**Given** controls use icons
+**When** buttons render
+**Then** Lucide icons are used where available
+**And** icon-only affordances have accessible names or adjacent visible labels according to the UX accessibility floor.
+
+**Given** a developer finishes this story
+**When** they run the story's Dev Gate
+**Then** build, typecheck, component tests for tokenized shell/components, and at least one Playwright screenshot capture of the live frame pass.
+
+**Given** the dev agent marks the story complete
+**When** a second agent reviews it
+**Then** the reviewer checks design-token consistency, accessibility names, visual drift from the redesign mockup, and regression risk to existing Epic 2 behavior.
+
+### Story 2.5.2: Redesign the Live Auction Board Layout
+
+As an auction operator,
+I want the live auction board to match the approved compact event-console layout,
+So that Current Player, Current Bid, commands, and all Teams remain visible under live pressure.
+
+**Acceptance Criteria:**
+
+**Given** the auction is in Initial Auction with a Current Player
+**When** the live board renders at 1440x900 and 1366x768
+**Then** the first viewport shows the top status counters, Current Player stage, dominant Current Bid, fixed command strip, selected Team state, Team matrix, and blocked reason area
+**And** eight Team cards remain visible without pushing routine commands below the first viewport.
+
+**Given** the live board renders top counters
+**When** auction state changes
+**Then** ordered, revealed, pending, unsold, category, and team-count metrics update from authoritative state
+**And** numeric changes use stable dimensions without shifting the command strip or Team matrix.
+
+**Given** routine commands render
+**When** commands are enabled, disabled, pending, or recently completed
+**Then** Next/Reveal, Bid Increment, Sold, Unsold, and Undo stay in a stable fixed-height command strip
+**And** disabled controls do not disappear in a way that changes muscle memory.
+
+**Given** Team cards render
+**When** a Team is selected or blocked for the Current Player
+**Then** selected state uses the approved red treatment
+**And** blocked Team reasons remain visible as text near the Team matrix and Mark Sold context.
+
+**Given** the board renders private imported data
+**When** DTOs, UI, logs, and snapshots are inspected
+**Then** the existing privacy allowlist remains enforced
+**And** no redesign element introduces email, mobile, payment, transaction, source timestamp, or ignored source fields.
+
+**Given** a developer finishes this story
+**When** they run the story's Dev Gate
+**Then** live-board component tests, accessibility tests, existing Epic 2 command E2E tests, and Playwright screenshots at 1440x900 and 1366x768 pass.
+
+**Given** the dev agent marks the story complete
+**When** a second agent reviews it
+**Then** the reviewer checks first-viewport fit, command stability, selected/blocked Team readability, privacy, keyboard operation, and regression risk to reveal, bid, sold, unsold, and undo flows.
+
+### Story 2.5.3: Prepare the Focused Manual Assignment Surface
+
+As an auction operator,
+I want the manual-assignment UI shell ready before Epic 3 implements assignment behavior,
+So that Epic 3 can add domain commands into an approved, uncluttered surface.
+
+**Acceptance Criteria:**
+
+**Given** the app can render a Manual Assignment phase fixture or mocked authoritative state
+**When** the Manual Assignment surface appears
+**Then** it follows the redesign structure: top assignment counters, assignment player card, assignment pool list, eligible Team matrix, bottom blocked-reason panel, and one primary assignment command
+**And** routine bidding controls are hidden from this surface.
+
+**Given** the assignment pool list renders
+**When** unresolved Players are present
+**Then** each row shows order, Player name, and Role only
+**And** no private imported fields are exposed.
+
+**Given** eligible and blocked Teams render
+**When** the operator selects a Team or a Team is invalid
+**Then** selected and blocked states match the redesigned Team matrix
+**And** exact blocked reasons are visible as text outside hover-only UI.
+
+**Given** Epic 3 domain behavior is not implemented yet
+**When** this story is completed
+**Then** any fixture/demo state is isolated to tests, story fixtures, or development-only rendering paths
+**And** no fake assignment mutation is added to production command behavior.
+
+**Given** a developer finishes this story
+**When** they run the story's Dev Gate
+**Then** component tests, accessibility tests, privacy checks, and Playwright screenshot coverage for the Manual Assignment surface pass.
+
+**Given** the dev agent marks the story complete
+**When** a second agent reviews it
+**Then** the reviewer checks that this is UI preparation only, no domain/persistence shortcuts were introduced, bidding controls are absent, and Epic 3 can wire real assignment state into the surface.
+
+### Story 2.5.4: Redesign Rosters and Closed-State Display
+
+As an auction operator,
+I want roster and final closed-auction screens to match the approved dense room-facing design,
+So that the room can inspect Teams without returning to Excel.
+
+**Acceptance Criteria:**
+
+**Given** the operator switches to Rosters during a live phase
+**When** the roster surface renders
+**Then** it uses the redesigned dark roster board with compact Team cards
+**And** every Team remains visible with logo or placeholder, Team name, Captain, budget, squad, relevant role count, and roster rows.
+
+**Given** roster rows render
+**When** Players have been sold or assigned
+**Then** rows show Player name, Role where space requires it, acquisition type, and price when applicable
+**And** row density stays readable without turning each Player into a large decorative card.
+
+**Given** Close Auction succeeds in later Epic 4 behavior
+**When** the phase is `Closed`
+**Then** the redesigned roster surface is the default room-facing final surface
+**And** routine live controls remain disabled or absent.
+
+**Given** the Board/Rosters switch renders
+**When** the operator changes views
+**Then** the switch is keyboard reachable, non-mutating, and styled consistently with the redesigned event-console frame.
+
+**Given** a developer finishes this story
+**When** they run the story's Dev Gate
+**Then** roster component tests, Board/Rosters switch non-mutation tests, privacy checks, accessibility checks, and Playwright screenshots for live roster and Closed fixtures pass.
+
+**Given** the dev agent marks the story complete
+**When** a second agent reviews it
+**Then** the reviewer checks all-Team visibility, row readability, closed-state readiness, privacy, non-mutation behavior, and consistency with the redesign mockup.
+
+### Story 2.5.5: Run Redesign Visual QA and Regression Gates
+
+As an event organizer,
+I want the redesigned surfaces verified across target viewports before Epic 3 starts,
+So that unsold-player implementation builds on a stable, readable UI foundation.
+
+**Acceptance Criteria:**
+
+**Given** Epic 2.5 implementation is complete
+**When** visual QA runs
+**Then** Playwright captures or equivalent artifacts exist for live board, manual assignment, rosters, and closed-state fixtures at 1440x900, 1366x768, 1920x1080, and 390x844.
+
+**Given** screenshots are inspected
+**When** critical areas are evaluated
+**Then** counters, Current Player, Current Bid, command strip, Team matrix, blocked reasons, assignment pool, roster cards, and Board/Rosters switch do not overlap or truncate critical text incoherently.
+
+**Given** existing Epic 2 behavior is retested
+**When** reveal, select Team, increase bid, blocked sale, mark sold, mark unsold, roster view switch, resume, and undo tests run
+**Then** the redesign has not regressed domain command behavior, persistence, privacy, or Undo semantics.
+
+**Given** narrow fallback is tested
+**When** the viewport is 390x844
+**Then** workflow order is preserved and controls remain usable
+**And** v1 does not need mobile-first polish beyond readable, non-overlapping operation.
+
+**Given** a developer finishes this story
+**When** they run the story's Dev Gate
+**Then** build, typecheck, unit/component tests, relevant existing Epic 2 E2E tests, and the redesign visual QA screenshot suite pass or any exception is explicitly triaged.
+
+**Given** the dev agent marks the story complete
+**When** a second agent reviews it
+**Then** the reviewer compares screenshots against the redesign mockup, verifies no critical overlap, reruns high-risk regression tests, and blocks Epic 3 start for any issue that would make live operation unreliable.
 
 ## Epic 3: Resolve Unsold Players
 

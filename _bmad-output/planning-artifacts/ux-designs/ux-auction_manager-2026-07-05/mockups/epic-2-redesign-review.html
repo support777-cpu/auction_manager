@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auction Manager - Epic 2 UX Redesign Review</title>
+    <style>
+      /*
+        Governed by DESIGN.md: Brand & Style, Colors, Typography, Layout & Spacing, Components.
+        Governed by EXPERIENCE.md: Information Architecture, Component Patterns, State Patterns,
+        Interaction Primitives, Responsive & Platform, Key Flows 2, 5, 6, 7.
+
+        Proposed review tokens:
+        ink-black #08090b, panel-black #111318, panel-raised #191c22, panel-soft #22262e,
+        command-red #e01f2d, command-red-strong #af121f, live-red #ff3347,
+        off-white #f7f4ee, muted #9ca3af, steel #4b5563, line #30343d, success #21a67a.
+      */
+
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #08090b;
+        color: #f7f4ee;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 10% 0%, rgba(224, 31, 45, 0.16), transparent 28rem),
+          linear-gradient(180deg, #08090b 0%, #111318 48%, #08090b 100%);
+      }
+
+      .review-page {
+        display: grid;
+        gap: 28px;
+        min-height: 100vh;
+        padding: 28px;
+      }
+
+      .review-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        max-width: 1480px;
+        width: 100%;
+        margin: 0 auto;
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      dl,
+      dd {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 30px;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      .review-header p {
+        max-width: 760px;
+        margin-top: 8px;
+        color: #c7cbd3;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .review-chip {
+        display: inline-flex;
+        min-height: 34px;
+        align-items: center;
+        border: 1px solid rgba(224, 31, 45, 0.72);
+        border-radius: 999px;
+        padding: 0 12px;
+        background: rgba(224, 31, 45, 0.14);
+        color: #fff1f2;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .screen {
+        max-width: 1480px;
+        width: 100%;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid #30343d;
+        border-radius: 8px;
+        background: #111318;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+      }
+
+      .screen-caption {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        border-bottom: 1px solid #30343d;
+        padding: 12px 16px;
+        background: #08090b;
+      }
+
+      .screen-caption h2 {
+        font-size: 16px;
+        line-height: 1.2;
+      }
+
+      .screen-caption span {
+        color: #9ca3af;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .app-frame {
+        min-height: 760px;
+        padding: 16px;
+        background: #08090b;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.6fr) minmax(620px, 1.4fr);
+        gap: 12px;
+        align-items: stretch;
+        margin-bottom: 12px;
+      }
+
+      .brand-block,
+      .count-block {
+        border: 1px solid #30343d;
+        border-radius: 8px;
+        background: #111318;
+      }
+
+      .brand-block {
+        display: grid;
+        align-content: center;
+        gap: 3px;
+        padding: 12px 14px;
+      }
+
+      .eyebrow,
+      .metric-label {
+        color: #9ca3af;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-transform: uppercase;
+      }
+
+      .brand-block strong {
+        color: #f7f4ee;
+        font-size: 22px;
+        line-height: 1.08;
+      }
+
+      .count-block {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 1px;
+        overflow: hidden;
+      }
+
+      .count-block div {
+        display: grid;
+        align-content: center;
+        gap: 4px;
+        min-height: 64px;
+        padding: 10px 12px;
+        background: #191c22;
+      }
+
+      .count-block strong {
+        font-size: 22px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .live-layout {
+        display: grid;
+        grid-template-columns: minmax(500px, 1fr) minmax(390px, 460px);
+        gap: 12px;
+        min-height: 656px;
+      }
+
+      .board-column {
+        display: grid;
+        grid-template-rows: minmax(250px, 1fr) auto;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .player-stage,
+      .command-strip,
+      .assignment-matrix,
+      .roster-board,
+      .manual-column {
+        border: 1px solid #30343d;
+        border-radius: 8px;
+        background: #111318;
+      }
+
+      .player-stage {
+        display: grid;
+        grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+        gap: 18px;
+        align-items: stretch;
+        padding: 18px;
+      }
+
+      .photo {
+        display: grid;
+        min-height: 230px;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid #3a3f49;
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, rgba(224, 31, 45, 0.24), rgba(247, 244, 238, 0.08)),
+          #191c22;
+        color: #d6d9df;
+        font-weight: 900;
+      }
+
+      .player-photo {
+        width: min(100%, 300px);
+        min-height: 0;
+        aspect-ratio: 1;
+        align-self: start;
+      }
+
+      .media-stack {
+        display: grid;
+        align-content: start;
+        gap: 12px;
+      }
+
+      .player-copy {
+        display: grid;
+        align-content: start;
+        min-width: 0;
+      }
+
+      .player-name {
+        color: #ffffff;
+        font-size: clamp(42px, 5vw, 74px);
+        font-weight: 900;
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .fact {
+        min-height: 74px;
+        border: 1px solid #30343d;
+        border-radius: 6px;
+        padding: 10px;
+        background: #191c22;
+      }
+
+      .fact dd {
+        margin-top: 6px;
+        color: #f7f4ee;
+        font-size: 22px;
+        font-weight: 900;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .bid-hero {
+        display: grid;
+        align-content: center;
+        gap: 2px;
+        min-height: 114px;
+        border-left: 5px solid #e01f2d;
+        padding-left: 16px;
+      }
+
+      .bid-hero strong {
+        color: #ff3347;
+        font-size: clamp(64px, 8vw, 108px);
+        font-weight: 950;
+        line-height: 0.9;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .command-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr 0.8fr;
+        gap: 6px;
+        padding: 8px;
+      }
+
+      .cmd {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid #3a3f49;
+        border-radius: 6px;
+        background: #191c22;
+        color: #f7f4ee;
+        font-size: 13px;
+        font-weight: 950;
+      }
+
+      .cmd-icon {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.1);
+        font-size: 15px;
+        line-height: 1;
+      }
+
+      .cmd.primary {
+        border-color: #ff3347;
+        background: #e01f2d;
+        color: #ffffff;
+      }
+
+      .cmd.live {
+        border-color: #ff3347;
+        background: #fff1f2;
+        color: #af121f;
+      }
+
+      .cmd.secondary {
+        color: #c7cbd3;
+      }
+
+      .assignment-matrix {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .matrix-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .matrix-header h3 {
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .selected-tag {
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: #fff1f2;
+        color: #af121f;
+        font-size: 12px;
+        font-weight: 950;
+      }
+
+      .team-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        align-content: start;
+      }
+
+      .team-card {
+        display: grid;
+        gap: 9px;
+        min-height: 106px;
+        border: 1px solid #30343d;
+        border-radius: 7px;
+        padding: 10px;
+        background: #191c22;
+      }
+
+      .team-card.selected {
+        border-color: #ff3347;
+        background: linear-gradient(180deg, rgba(224, 31, 45, 0.96), #af121f);
+        color: #ffffff;
+      }
+
+      .team-card.blocked {
+        opacity: 0.58;
+      }
+
+      .team-head {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .logo {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 6px;
+        background: #30343d;
+        color: #f7f4ee;
+        font-size: 12px;
+        font-weight: 950;
+      }
+
+      .team-card.selected .logo {
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .team-name {
+        overflow: hidden;
+        font-size: 15px;
+        font-weight: 950;
+        line-height: 1.1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .captain {
+        overflow: hidden;
+        color: #9ca3af;
+        font-size: 11px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .team-card.selected .captain {
+        color: rgba(255, 255, 255, 0.76);
+      }
+
+      .team-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .team-stats div {
+        display: grid;
+        gap: 3px;
+      }
+
+      .team-stats span {
+        color: #9ca3af;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .team-card.selected .team-stats span {
+        color: rgba(255, 255, 255, 0.74);
+      }
+
+      .team-stats strong {
+        font-size: 18px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .blocked-note {
+        display: grid;
+        min-height: 42px;
+        align-content: center;
+        border: 1px solid rgba(224, 31, 45, 0.55);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: rgba(224, 31, 45, 0.12);
+        color: #fecdd3;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .manual-layout {
+        display: grid;
+        grid-template-columns: minmax(460px, 0.9fr) minmax(520px, 1.1fr);
+        gap: 12px;
+        min-height: 656px;
+      }
+
+      .manual-column {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .assignment-player {
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr);
+        gap: 14px;
+      }
+
+      .assignment-player .photo {
+        width: 150px;
+        min-height: 150px;
+        aspect-ratio: 1;
+      }
+
+      .assignment-player h3 {
+        font-size: 40px;
+        line-height: 1;
+      }
+
+      .pool-list {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+
+      .pool-row {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        min-height: 56px;
+        border: 1px solid #30343d;
+        border-radius: 6px;
+        padding: 8px;
+        background: #191c22;
+      }
+
+      .pool-row.active {
+        border-color: #ff3347;
+      }
+
+      .number-badge {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 6px;
+        background: #30343d;
+        color: #f7f4ee;
+        font-weight: 950;
+      }
+
+      .pool-row.active .number-badge {
+        background: #e01f2d;
+      }
+
+      .assign-action {
+        display: flex;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 7px;
+        background: #e01f2d;
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 950;
+      }
+
+      .roster-board {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .roster-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      .roster-tabs {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
+        border: 1px solid #30343d;
+        border-radius: 7px;
+        overflow: hidden;
+      }
+
+      .roster-tabs span {
+        display: grid;
+        min-height: 38px;
+        place-items: center;
+        padding: 0 12px;
+        color: #9ca3af;
+        font-size: 12px;
+        font-weight: 950;
+      }
+
+      .roster-tabs .active {
+        background: #e01f2d;
+        color: #ffffff;
+      }
+
+      .roster-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .roster-card {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+        min-height: 250px;
+        border: 1px solid #30343d;
+        border-radius: 7px;
+        padding: 10px;
+        background: #191c22;
+      }
+
+      .roster-title {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .roster-title h3 {
+        overflow: hidden;
+        font-size: 16px;
+        line-height: 1.1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .roster-summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .roster-summary div,
+      .player-row {
+        border-radius: 5px;
+        background: #22262e;
+      }
+
+      .roster-summary div {
+        display: grid;
+        gap: 3px;
+        padding: 7px;
+      }
+
+      .roster-summary span {
+        color: #9ca3af;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .roster-summary strong {
+        font-size: 17px;
+        line-height: 1;
+      }
+
+      .player-list {
+        display: grid;
+        gap: 5px;
+      }
+
+      .player-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        min-height: 34px;
+        align-items: center;
+        padding: 7px;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .player-row span:first-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .player-row span:last-child {
+        color: #c7cbd3;
+        font-variant-numeric: tabular-nums;
+      }
+
+      @media (max-width: 1180px) {
+        .topbar,
+        .live-layout,
+        .manual-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .assignment-matrix {
+          min-height: auto;
+        }
+
+        .team-grid,
+        .roster-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .review-page {
+          padding: 14px;
+        }
+
+        .review-header,
+        .screen-caption,
+        .roster-header {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .app-frame {
+          padding: 10px;
+        }
+
+        .count-block,
+        .player-stage,
+        .command-strip,
+        .assignment-player,
+        .team-grid,
+        .roster-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .board-column {
+          grid-template-rows: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="review-page">
+      <header class="review-header">
+        <div>
+          <h1>Auction Manager - Epic 2 UX Redesign Review</h1>
+          <p>
+            Red/black event-console direction. The main change is structural: current player,
+            bid, outcome controls, and team assignment tiles are visible together, with less
+            instructional copy and smaller repeated metrics.
+          </p>
+        </div>
+        <span class="review-chip">Review mockups before implementation</span>
+      </header>
+
+      <section class="screen">
+        <div class="screen-caption">
+          <h2>Screen 1 - Live Auction Board</h2>
+          <span>Targets 1440x900 and 1366x768: team tiles stay in first viewport</span>
+        </div>
+        <div class="app-frame">
+          <div class="topbar">
+            <div class="brand-block">
+              <span class="eyebrow">Auction Manager</span>
+              <strong>Initial Auction</strong>
+            </div>
+            <div class="count-block" aria-label="Auction status">
+              <div><span class="metric-label">Ordered</span><strong>80</strong></div>
+              <div><span class="metric-label">Revealed</span><strong>38</strong></div>
+              <div><span class="metric-label">Pending</span><strong>42</strong></div>
+              <div><span class="metric-label">Unsold</span><strong>7</strong></div>
+              <div><span class="metric-label">Category</span><strong>Ace</strong></div>
+              <div><span class="metric-label">Teams</span><strong>8</strong></div>
+            </div>
+          </div>
+
+          <div class="live-layout">
+            <div class="board-column">
+              <section class="player-stage">
+                <div class="media-stack">
+                  <div class="photo player-photo">Player Photo</div>
+                  <div class="bid-hero">
+                    <span class="eyebrow">Current Bid</span>
+                    <strong>26</strong>
+                  </div>
+                </div>
+                <div class="player-copy">
+                  <div>
+                    <span class="eyebrow">Current Player</span>
+                    <h2 class="player-name">Aarav Patel</h2>
+                    <dl class="facts">
+                      <div class="fact"><dt class="metric-label">Role</dt><dd>All Rounder</dd></div>
+                      <div class="fact"><dt class="metric-label">Base</dt><dd>10</dd></div>
+                      <div class="fact"><dt class="metric-label">Category</dt><dd>Ace</dd></div>
+                    </dl>
+                  </div>
+                </div>
+              </section>
+
+              <section class="command-strip" aria-label="Auction commands">
+                <div class="cmd primary"><span class="cmd-icon">▶</span><span>Next</span></div>
+                <div class="cmd live"><span class="cmd-icon">+</span><span>Bid 2</span></div>
+                <div class="cmd secondary"><span class="cmd-icon">✓</span><span>Sold</span></div>
+                <div class="cmd secondary"><span class="cmd-icon">Ø</span><span>Unsold</span></div>
+                <div class="cmd secondary"><span class="cmd-icon">↶</span><span>Undo</span></div>
+              </section>
+            </div>
+
+            <aside class="assignment-matrix" aria-label="Teams">
+              <div class="matrix-header">
+                <h3>Teams</h3>
+                <span class="selected-tag">Selected: Eagles</span>
+              </div>
+              <div class="team-grid">
+                <article class="team-card selected">
+                  <div class="team-head"><span class="logo">E</span><div><div class="team-name">Eagles</div><div class="captain">Mathew</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>74</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>AR</span><strong>1 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">L</span><div><div class="team-name">Lions</div><div class="captain">Dinesh</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>52</strong></div><div><span>Squad</span><strong>7</strong></div><div><span>AR</span><strong>2 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">F</span><div><div class="team-name">Falcons</div><div class="captain">Peter</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>88</strong></div><div><span>Squad</span><strong>5</strong></div><div><span>AR</span><strong>0 / 2</strong></div></div>
+                </article>
+                <article class="team-card blocked">
+                  <div class="team-head"><span class="logo">W</span><div><div class="team-name">Warriors</div><div class="captain">Sam</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>18</strong></div><div><span>Squad</span><strong>8</strong></div><div><span>AR</span><strong>2 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">T</span><div><div class="team-name">Titans</div><div class="captain">Joel</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>64</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>AR</span><strong>1 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">R</span><div><div class="team-name">Royals</div><div class="captain">Arun</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>60</strong></div><div><span>Squad</span><strong>5</strong></div><div><span>AR</span><strong>0 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">S</span><div><div class="team-name">Strikers</div><div class="captain">Naveen</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>44</strong></div><div><span>Squad</span><strong>7</strong></div><div><span>AR</span><strong>1 / 2</strong></div></div>
+                </article>
+                <article class="team-card">
+                  <div class="team-head"><span class="logo">K</span><div><div class="team-name">Kings</div><div class="captain">Chris</div></div></div>
+                  <div class="team-stats"><div><span>Budget</span><strong>70</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>AR</span><strong>1 / 2</strong></div></div>
+                </article>
+              </div>
+              <div class="blocked-note">Warriors blocked: All Rounder slot full.</div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="screen-caption">
+          <h2>Screen 2 - Manual Assignment</h2>
+          <span>Assignment is its own focused mode; no bidding controls or explanatory clutter</span>
+        </div>
+        <div class="app-frame">
+          <div class="topbar">
+            <div class="brand-block"><span class="eyebrow">Auction Manager</span><strong>Manual Assignment</strong></div>
+            <div class="count-block" aria-label="Manual assignment status">
+              <div><span class="metric-label">Pool</span><strong>5</strong></div>
+              <div><span class="metric-label">Assigned</span><strong>0</strong></div>
+              <div><span class="metric-label">Remaining</span><strong>5</strong></div>
+              <div><span class="metric-label">Valid</span><strong>6</strong></div>
+              <div><span class="metric-label">Blocked</span><strong>2</strong></div>
+              <div><span class="metric-label">Teams</span><strong>8</strong></div>
+            </div>
+          </div>
+
+          <div class="manual-layout">
+            <aside class="manual-column">
+              <section class="assignment-player">
+                <div class="photo">Player Photo</div>
+                <div>
+                  <span class="eyebrow">Assign Player</span>
+                  <h3>Nisha George</h3>
+                  <dl class="facts">
+                    <div class="fact"><dt class="metric-label">Role</dt><dd>Girls</dd></div>
+                    <div class="fact"><dt class="metric-label">Base</dt><dd>8</dd></div>
+                  </dl>
+                </div>
+              </section>
+
+              <section class="pool-list" aria-label="Manual assignment pool">
+                <article class="pool-row active"><span class="number-badge">1</span><strong>Nisha George</strong><span>Girls</span></article>
+                <article class="pool-row"><span class="number-badge">2</span><strong>Rohan Iyer</strong><span>Bowling</span></article>
+                <article class="pool-row"><span class="number-badge">3</span><strong>Kevin Thomas</strong><span>Batting</span></article>
+                <article class="pool-row"><span class="number-badge">4</span><strong>Meera Paul</strong><span>Girls</span></article>
+                <article class="pool-row"><span class="number-badge">5</span><strong>Jude Varghese</strong><span>All Rounder</span></article>
+              </section>
+
+              <div class="assign-action"><span class="cmd-icon">✓</span><span>Assign to Falcons</span></div>
+            </aside>
+
+            <aside class="assignment-matrix" aria-label="Eligible teams">
+              <div class="matrix-header">
+                <h3>Eligible Teams</h3>
+                <span class="selected-tag">Selected: Falcons</span>
+              </div>
+              <div class="team-grid">
+                <article class="team-card"><div class="team-head"><span class="logo">E</span><div><div class="team-name">Eagles</div><div class="captain">Mathew</div></div></div><div class="team-stats"><div><span>Budget</span><strong>74</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>Girls</span><strong>1 / 3</strong></div></div></article>
+                <article class="team-card blocked"><div class="team-head"><span class="logo">L</span><div><div class="team-name">Lions</div><div class="captain">Dinesh</div></div></div><div class="team-stats"><div><span>Budget</span><strong>52</strong></div><div><span>Squad</span><strong>8</strong></div><div><span>Girls</span><strong>3 / 3</strong></div></div></article>
+                <article class="team-card selected"><div class="team-head"><span class="logo">F</span><div><div class="team-name">Falcons</div><div class="captain">Peter</div></div></div><div class="team-stats"><div><span>Budget</span><strong>88</strong></div><div><span>Squad</span><strong>5</strong></div><div><span>Girls</span><strong>1 / 3</strong></div></div></article>
+                <article class="team-card"><div class="team-head"><span class="logo">W</span><div><div class="team-name">Warriors</div><div class="captain">Sam</div></div></div><div class="team-stats"><div><span>Budget</span><strong>18</strong></div><div><span>Squad</span><strong>7</strong></div><div><span>Girls</span><strong>2 / 3</strong></div></div></article>
+                <article class="team-card"><div class="team-head"><span class="logo">T</span><div><div class="team-name">Titans</div><div class="captain">Joel</div></div></div><div class="team-stats"><div><span>Budget</span><strong>64</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>Girls</span><strong>2 / 3</strong></div></div></article>
+                <article class="team-card blocked"><div class="team-head"><span class="logo">R</span><div><div class="team-name">Royals</div><div class="captain">Arun</div></div></div><div class="team-stats"><div><span>Budget</span><strong>60</strong></div><div><span>Squad</span><strong>8</strong></div><div><span>Girls</span><strong>2 / 3</strong></div></div></article>
+              </div>
+              <div class="blocked-note">Lions blocked: Girls slot full. Royals blocked: squad cap reached.</div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen">
+        <div class="screen-caption">
+          <h2>Screen 3 - Rosters / Closed State</h2>
+          <span>Dense room-facing roster surface with the same visual language</span>
+        </div>
+        <div class="app-frame">
+          <section class="roster-board">
+            <div class="roster-header">
+              <div>
+                <span class="eyebrow">Auction Closed</span>
+                <h2>Final Rosters</h2>
+              </div>
+              <div class="roster-tabs"><span>Board</span><span class="active">Rosters</span></div>
+            </div>
+            <div class="roster-grid">
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">E</span><div><h3>Eagles</h3><div class="captain">Mathew</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>74</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>AR</span><strong>1 / 2</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Aarav Patel</span><span>26</span></div><div class="player-row"><span>Riya Thomas</span><span>18</span></div><div class="player-row"><span>Ben Mathew</span><span>14</span></div><div class="player-row"><span>Anil Paul</span><span>12</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">L</span><div><h3>Lions</h3><div class="captain">Dinesh</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>52</strong></div><div><span>Squad</span><strong>8</strong></div><div><span>AR</span><strong>2 / 2</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Sarah John</span><span>22</span></div><div class="player-row"><span>Rohan Iyer</span><span>A</span></div><div class="player-row"><span>Jason Kurian</span><span>16</span></div><div class="player-row"><span>Arvind K</span><span>10</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">F</span><div><h3>Falcons</h3><div class="captain">Peter</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>88</strong></div><div><span>Squad</span><strong>5</strong></div><div><span>Girls</span><strong>2 / 3</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Nisha George</span><span>A</span></div><div class="player-row"><span>Kevin Thomas</span><span>20</span></div><div class="player-row"><span>Merin Philip</span><span>12</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">W</span><div><h3>Warriors</h3><div class="captain">Sam</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>18</strong></div><div><span>Squad</span><strong>8</strong></div><div><span>AR</span><strong>2 / 2</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Jude Varghese</span><span>24</span></div><div class="player-row"><span>Meera Paul</span><span>18</span></div><div class="player-row"><span>Joel Thomas</span><span>16</span></div><div class="player-row"><span>Chris Babu</span><span>14</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">T</span><div><h3>Titans</h3><div class="captain">Joel</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>64</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>Girls</span><strong>2 / 3</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Daniel Roy</span><span>20</span></div><div class="player-row"><span>Anna Jacob</span><span>16</span></div><div class="player-row"><span>Vivek K</span><span>10</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">R</span><div><h3>Royals</h3><div class="captain">Arun</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>60</strong></div><div><span>Squad</span><strong>5</strong></div><div><span>AR</span><strong>0 / 2</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Stephen Jose</span><span>18</span></div><div class="player-row"><span>Amy Susan</span><span>14</span></div><div class="player-row"><span>Neil Paul</span><span>12</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">S</span><div><h3>Strikers</h3><div class="captain">Naveen</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>44</strong></div><div><span>Squad</span><strong>7</strong></div><div><span>Bowl</span><strong>3 / 3</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>Mark Davis</span><span>22</span></div><div class="player-row"><span>Jerin George</span><span>18</span></div><div class="player-row"><span>Sandra B</span><span>12</span></div></div>
+              </article>
+              <article class="roster-card">
+                <div class="roster-title"><span class="logo">K</span><div><h3>Kings</h3><div class="captain">Chris</div></div></div>
+                <div class="roster-summary"><div><span>Budget</span><strong>70</strong></div><div><span>Squad</span><strong>6</strong></div><div><span>Bat</span><strong>2 / 3</strong></div></div>
+                <div class="player-list"><div class="player-row"><span>David Cherian</span><span>24</span></div><div class="player-row"><span>Rachel M</span><span>14</span></div><div class="player-row"><span>Sam Philip</span><span>12</span></div></div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

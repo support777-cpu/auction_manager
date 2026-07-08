@@ -10,7 +10,13 @@ import {
   canUndo,
   canSelectTeam,
   canRevealNextPlayer,
+  canSwitchLiveView,
+  formatAuctionRoleLabel,
+  formatRoleCountsSummary,
   getPhase1OrderStatusLabel,
+  getSoldRosterRowsForTeam,
+  getTeamCapacityCopy,
+  getTeamRoster,
   isEditableShortcutTarget
 } from "./auction-board-helpers.js";
 
@@ -386,5 +392,135 @@ describe("auction board helpers", () => {
     const editable = document.createElement("div");
     Object.defineProperty(editable, "isContentEditable", { value: true });
     expect(isEditableShortcutTarget(editable)).toBe(true);
+  });
+
+  it("looks up team rosters and formats role labels from board state", () => {
+    const roster = {
+      teamId: "team-1",
+      name: "Falcons",
+      captain: "Priya Captain",
+      budget: 170,
+      remainingBudget: 160,
+      squadCount: 1,
+      roleCounts: {
+        Ace: 1,
+        Batting: 0,
+        Bowling: 0,
+        AllRounder: 0,
+        Girls: 0
+      },
+      roster: [
+        {
+          playerId: "player-1",
+          name: "Aarav Menon",
+          role: "Ace" as const,
+          acquisitionType: "Sold" as const,
+          soldPrice: 10
+        }
+      ]
+    };
+    const boardState = createBoardState({
+      teams: [
+        {
+          id: "team-1",
+          name: "Falcons",
+          captain: "Priya Captain",
+          budget: 170,
+          remainingBudget: 160,
+          squadCount: 1,
+          roleCounts: roster.roleCounts
+        }
+      ],
+      teamRosters: [roster]
+    });
+
+    expect(getTeamRoster(boardState, "team-1")).toEqual(roster);
+    expect(getSoldRosterRowsForTeam(boardState, "team-missing")).toEqual([]);
+    expect(formatAuctionRoleLabel("AllRounder")).toBe("All Rounder");
+    expect(formatRoleCountsSummary(roster.roleCounts)).toContain("All Rounder 0");
+    expect(canSwitchLiveView(boardState)).toBe(true);
+    expect(canSwitchLiveView(createBoardState({ persistenceFailure: "snapshot_write_failed" }))).toBe(
+      false
+    );
+  });
+
+  it("formats team capacity copy for missing current player and blocked reasons", () => {
+    const boardState = createBoardState({
+      teams: [
+        {
+          id: "team-1",
+          name: "Falcons",
+          captain: "Priya Captain",
+          budget: 170,
+          remainingBudget: 160,
+          squadCount: 0,
+          roleCounts: {
+            Ace: 0,
+            Batting: 0,
+            Bowling: 0,
+            AllRounder: 0,
+            Girls: 0
+          }
+        }
+      ],
+      teamRosters: [
+        {
+          teamId: "team-1",
+          name: "Falcons",
+          captain: "Priya Captain",
+          budget: 170,
+          remainingBudget: 160,
+          squadCount: 0,
+          roleCounts: {
+            Ace: 0,
+            Batting: 0,
+            Bowling: 0,
+            AllRounder: 0,
+            Girls: 0
+          },
+          roster: []
+        }
+      ]
+    });
+
+    expect(getTeamCapacityCopy(boardState, "team-1")).toBe("Capacity pending Current Player");
+
+    const blockedBoardState = createBoardState({
+      currentPlayer: {
+        id: "player-1",
+        name: "Aarav Menon",
+        role: "Ace",
+        phase1Category: "Ace Men",
+        basePrice: 10,
+        status: "Current",
+        soldPrice: null,
+        winningTeamId: null,
+        acquisitionType: null
+      },
+      teams: [
+        {
+          id: "team-1",
+          name: "Falcons",
+          captain: "Priya Captain",
+          budget: 170,
+          remainingBudget: 8,
+          squadCount: 0,
+          roleCounts: {
+            Ace: 0,
+            Batting: 0,
+            Bowling: 0,
+            AllRounder: 0,
+            Girls: 0
+          },
+          currentPlayerCapacity: {
+            teamId: "team-1",
+            canBuy: false,
+            reasons: []
+          }
+        }
+      ]
+    });
+
+    expect(getTeamCapacityCopy(blockedBoardState, "team-1")).toBe("Cannot buy current player");
   });
 });

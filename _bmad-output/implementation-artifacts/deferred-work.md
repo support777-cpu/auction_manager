@@ -61,3 +61,8 @@
 
 - Concurrent undo requests can race like other live commands — single-writer pattern matches Stories 2.2–2.8 until optimistic concurrency lands
 - E2E undo flow does not assert action log or snapshot files — API and repository tests cover audit/snapshot evidence for this story
+
+## Deferred from: code review of 2-10-view-team-rosters-during-the-auction (2026-07-08)
+
+- DOM-level roster privacy allowlist test — relies on existing shared contract tests; dedicated DOM scan deferred
+- Full enabled/disabled control-state preservation test beyond AC5 minimum — E2E covers reveal-next; exhaustive control matrix deferred

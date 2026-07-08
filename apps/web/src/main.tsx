@@ -5,6 +5,7 @@ import {
   Circle,
   AlertCircle,
   FileWarning,
+  Info,
   ListChecks,
   PlayCircle,
   RotateCcw,
@@ -52,8 +53,14 @@ import {
   canRevealNextPlayer,
   canIncreaseBid,
   canSelectTeam,
+  canSwitchLiveView,
   canUndo,
+  formatAuctionRoleLabel,
+  formatRoleCountsSummary,
   getPhase1OrderStatusLabel,
+  getSoldRosterRowsForTeam,
+  getTeamCapacityCopy,
+  getTeamRoster,
   isEditableShortcutTarget
 } from "./auction-board-helpers.js";
 import "./styles.css";
@@ -2111,6 +2118,377 @@ function ResumeStartSurface({
   );
 }
 
+type LiveView = "board" | "rosters";
+
+function BoardRostersSwitch({
+  liveView,
+  onChange,
+  disabled
+}: {
+  readonly liveView: LiveView;
+  readonly onChange: (view: LiveView) => void;
+  readonly disabled: boolean;
+}) {
+  const options: { id: LiveView; label: string }[] = [
+    { id: "board", label: "Board" },
+    { id: "rosters", label: "Rosters" }
+  ];
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (disabled) {
+      return;
+    }
+
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") {
+      nextIndex = (index + 1) % options.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = (index - 1 + options.length) % options.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = options.length - 1;
+    }
+
+    if (nextIndex === null) {
+      return;
+    }
+
+    event.preventDefault();
+    onChange(options[nextIndex]!.id);
+    const switchRoot = event.currentTarget.closest('[data-testid="board-rosters-switch"]');
+    const nextTab = switchRoot?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex];
+    nextTab?.focus();
+  }
+
+  return (
+    <nav
+      aria-label="Board and rosters"
+      className="board-rosters-switch"
+      data-testid="board-rosters-switch"
+    >
+      <div className="board-rosters-switch-tabs" role="tablist">
+        {options.map((option, index) => {
+          const isSelected = liveView === option.id;
+          return (
+            <button
+              aria-controls={`live-view-panel-${option.id}`}
+              aria-selected={isSelected}
+              className={
+                isSelected
+                  ? "board-rosters-switch-tab board-rosters-switch-tab-active"
+                  : "board-rosters-switch-tab"
+              }
+              disabled={disabled}
+              id={`live-view-tab-${option.id}`}
+              key={option.id}
+              onClick={() => onChange(option.id)}
+              onKeyDown={(event) => handleKeyDown(event, index)}
+              role="tab"
+              type="button"
+              {...(disabled ? { "aria-describedby": "live-view-switch-disabled-reason" } : {})}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {disabled ? (
+        <p className="board-rosters-switch-disabled-copy" id="live-view-switch-disabled-reason">
+          View switching is unavailable while persistence recovery is required.
+        </p>
+      ) : null}
+    </nav>
+  );
+}
+
+function TeamLogo({
+  logoAssetId,
+  teamName
+}: {
+  readonly logoAssetId?: string | undefined;
+  readonly teamName: string;
+}) {
+  if (logoAssetId) {
+    return (
+      <>
+        <img
+          alt={`${teamName} logo`}
+          className="team-logo"
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+            const fallback = event.currentTarget.parentElement?.querySelector(
+              ".team-logo-fallback"
+            );
+            if (fallback instanceof HTMLElement) {
+              fallback.hidden = false;
+            }
+          }}
+          src={`/assets/teams/${logoAssetId}.webp`}
+        />
+        <span
+          aria-label="Team logo placeholder"
+          className="team-logo-placeholder team-logo-fallback"
+          data-testid="team-logo-placeholder"
+          hidden
+          role="img"
+        >
+          Team logo placeholder
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <span
+      aria-label="Team logo placeholder"
+      className="team-logo-placeholder"
+      data-testid="team-logo-placeholder"
+      role="img"
+    >
+      Team logo placeholder
+    </span>
+  );
+}
+
+function TeamRostersView({
+  boardState,
+  onOpenTeamDetail
+}: {
+  readonly boardState: BoardStateDto;
+  readonly onOpenTeamDetail: (teamId: string, trigger: HTMLButtonElement) => void;
+}) {
+  return (
+    <section
+      aria-labelledby="live-view-tab-rosters team-rosters-title"
+      className="team-rosters-view"
+      data-testid="team-rosters-view"
+      id="live-view-panel-rosters"
+      role="tabpanel"
+    >
+      <div className="subsection-heading">
+        <h2 id="team-rosters-title">Team rosters</h2>
+        <span>{boardState.teamRosters.length}</span>
+      </div>
+      <div className="team-rosters-grid">
+        {boardState.teamRosters.map((teamRoster) => {
+          const team = boardState.teams.find((entry) => entry.id === teamRoster.teamId);
+          const logoAssetId = teamRoster.logoAssetId ?? team?.logoAssetId;
+          return (
+            <article
+              className="roster-team-section"
+              data-testid="roster-team-section"
+              key={teamRoster.teamId}
+            >
+              <div className="roster-team-section-header">
+                <div className="roster-team-section-heading">
+                  <TeamLogo
+                    teamName={teamRoster.name}
+                    {...(logoAssetId ? { logoAssetId } : {})}
+                  />
+                  <div>
+                    <h3>{teamRoster.name}</h3>
+                    <p>{teamRoster.captain}</p>
+                  </div>
+                </div>
+                <button
+                  aria-label={`View ${teamRoster.name} details`}
+                  className="team-detail-trigger"
+                  data-testid="team-detail-trigger"
+                  onClick={(event) => onOpenTeamDetail(teamRoster.teamId, event.currentTarget)}
+                  type="button"
+                >
+                  <Info aria-hidden="true" size={18} />
+                  <span>Details</span>
+                </button>
+              </div>
+              <dl className="roster-team-summary">
+                <div>
+                  <dt>Remaining budget</dt>
+                  <dd>{teamRoster.remainingBudget}</dd>
+                </div>
+                <div>
+                  <dt>Squad</dt>
+                  <dd>{teamRoster.squadCount}</dd>
+                </div>
+              </dl>
+              <p className="roster-role-counts">{formatRoleCountsSummary(teamRoster.roleCounts)}</p>
+              {teamRoster.roster.length === 0 ? (
+                <p className="roster-empty-copy">No players bought yet.</p>
+              ) : (
+                <ul className="roster-player-list">
+                  {teamRoster.roster.map((player) => (
+                    <li
+                      className="roster-player-row"
+                      data-testid="roster-player-row"
+                      key={player.playerId}
+                    >
+                      <span className="roster-player-name">{player.name}</span>
+                      <span>{formatAuctionRoleLabel(player.role)}</span>
+                      <span>{player.acquisitionType}</span>
+                      <span>{player.soldPrice}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TeamDetailDrawer({
+  boardState,
+  teamId,
+  onClose,
+  triggerRef
+}: {
+  readonly boardState: BoardStateDto;
+  readonly teamId: string;
+  readonly onClose: () => void;
+  readonly triggerRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const panelRef = useRef<HTMLElement>(null);
+  const team = boardState.teams.find((entry) => entry.id === teamId);
+  const teamRoster = getTeamRoster(boardState, teamId);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(panel.querySelectorAll<HTMLElement>(focusableSelector));
+    focusable[0]?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, teamId]);
+
+  useEffect(() => {
+    return () => {
+      triggerRef.current?.focus();
+    };
+  }, [triggerRef]);
+
+  useEffect(() => {
+    if (!team || !teamRoster) {
+      onClose();
+    }
+  }, [onClose, team, teamRoster]);
+
+  if (!team || !teamRoster) {
+    return null;
+  }
+
+  const capacityCopy = getTeamCapacityCopy(boardState, teamId);
+  const logoAssetId = teamRoster.logoAssetId ?? team.logoAssetId;
+
+  return (
+    <div className="team-detail-drawer-overlay">
+      <section
+        aria-labelledby="team-detail-drawer-title"
+        aria-modal="true"
+        className="team-detail-drawer"
+        data-testid="team-detail-drawer"
+        ref={panelRef}
+        role="dialog"
+      >
+        <header className="team-detail-drawer-header">
+          <div className="team-detail-drawer-heading">
+            <TeamLogo teamName={team.name} {...(logoAssetId ? { logoAssetId } : {})} />
+            <div>
+              <h2 id="team-detail-drawer-title">{team.name}</h2>
+              <p>{team.captain}</p>
+            </div>
+          </div>
+          <button
+            aria-label="Close team details"
+            className="team-detail-drawer-close"
+            onClick={onClose}
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+        <dl className="team-detail-drawer-summary">
+          <div>
+            <dt>Budget</dt>
+            <dd>{team.budget}</dd>
+          </div>
+          <div>
+            <dt>Remaining</dt>
+            <dd>{team.remainingBudget}</dd>
+          </div>
+          <div>
+            <dt>Squad</dt>
+            <dd>{team.squadCount}</dd>
+          </div>
+        </dl>
+        <p className="roster-role-counts">{formatRoleCountsSummary(teamRoster.roleCounts)}</p>
+        <p
+          className="team-detail-capacity"
+          data-testid={
+            team.currentPlayerCapacity && !team.currentPlayerCapacity.canBuy
+              ? "team-capacity-reason"
+              : undefined
+          }
+        >
+          {capacityCopy}
+        </p>
+        {teamRoster.roster.length === 0 ? (
+          <p className="roster-empty-copy">No players bought yet.</p>
+        ) : (
+          <ul className="roster-player-list">
+            {teamRoster.roster.map((player) => (
+              <li
+                className="roster-player-row"
+                data-testid="roster-player-row"
+                key={player.playerId}
+              >
+                <span className="roster-player-name">{player.name}</span>
+                <span>{formatAuctionRoleLabel(player.role)}</span>
+                <span>{player.acquisitionType}</span>
+                <span>{player.soldPrice}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function AuctionBoard({
   boardState,
   onRevealNext,
@@ -2158,6 +2536,26 @@ function AuctionBoard({
   readonly selectTeamError: string | null;
   readonly selectTeamState: "idle" | "loading" | "ready" | "error";
 }) {
+  const [liveView, setLiveView] = useState<LiveView>("board");
+  const [detailTeamId, setDetailTeamId] = useState<string | null>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!canSwitchLiveView(boardState) && liveView === "rosters") {
+      setLiveView("board");
+      setDetailTeamId(null);
+    }
+  }, [boardState.persistenceFailure, liveView]);
+
+  function handleLiveViewChange(view: LiveView) {
+    setDetailTeamId(null);
+    setLiveView(view);
+  }
+
+  function handleOpenTeamDetail(teamId: string, trigger: HTMLButtonElement) {
+    detailTriggerRef.current = trigger;
+    setDetailTeamId(teamId);
+  }
   const currentPlayer = boardState.currentPlayer;
   const undoInFlight = undoState === "loading";
   const revealDisabled =
@@ -2254,7 +2652,26 @@ function AuctionBoard({
         })}
       </section>
 
-      <section className="auction-board" data-testid="auction-board" aria-live="polite">
+      <BoardRostersSwitch
+        disabled={!canSwitchLiveView(boardState)}
+        liveView={liveView}
+        onChange={handleLiveViewChange}
+      />
+
+      {liveView === "rosters" ? (
+        <TeamRostersView
+          boardState={boardState}
+          onOpenTeamDetail={handleOpenTeamDetail}
+        />
+      ) : (
+      <section
+        aria-labelledby="live-view-tab-board"
+        className="auction-board"
+        data-testid="auction-board"
+        aria-live="polite"
+        id="live-view-panel-board"
+        role="tabpanel"
+      >
         <div className="board-main">
           <section
             className="current-player-panel"
@@ -2608,14 +3025,9 @@ function AuctionBoard({
             {boardState.teams.map((team) => {
               const isSelected = team.id === boardState.selectedTeamId;
               const capacity = team.currentPlayerCapacity;
-              const soldPlayersOnTeam = boardState.players.filter(
-                (player) =>
-                  player.winningTeamId === team.id &&
-                  player.status === "Sold" &&
-                  player.acquisitionType === "Auction"
-              );
+              const soldRosterRows = getSoldRosterRowsForTeam(boardState, team.id);
               const displayRole =
-                currentPlayer?.role ?? soldPlayersOnTeam.at(-1)?.role;
+                currentPlayer?.role ?? soldRosterRows.at(-1)?.role;
               const roleCount =
                 displayRole === undefined
                   ? undefined
@@ -2634,62 +3046,30 @@ function AuctionBoard({
                     : `${roleCount} of ${roleTarget}`;
               const capacityText =
                 currentPlayer === null
-                  ? soldPlayersOnTeam.length > 0
-                    ? `${soldPlayersOnTeam.length} sold player(s) on squad`
+                  ? soldRosterRows.length > 0
+                    ? `${soldRosterRows.length} sold player(s) on squad`
                     : "Capacity pending Current Player"
                   : capacity
                     ? capacity.canBuy
-                      ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${currentPlayer.role} slots available`
+                      ? `${roleCount ?? 0} of ${roleTarget ?? "?"} ${formatAuctionRoleLabel(currentPlayer.role)} slots available`
                       : capacity.reasons.join(" ")
                     : "Capacity pending Current Player";
               return (
+                <article className="team-tile-shell" key={team.id}>
                 <button
                   aria-label={`${team.name}, captain ${team.captain}, remaining budget ${team.remainingBudget}, squad ${team.squadCount}, ${capacityText}`}
                   aria-pressed={isSelected}
                   className={isSelected ? "team-tile team-tile-selected" : "team-tile"}
                   data-testid={isSelected ? "team-tile-selected" : "team-tile"}
                   disabled={!selectionEnabled}
-                  key={team.id}
                   onClick={() => onSelectTeam(team.id)}
                   type="button"
                 >
                   <div className="team-tile-heading">
-                    {team.logoAssetId ? (
-                      <>
-                        <img
-                          alt={`${team.name} logo`}
-                          className="team-logo"
-                          onError={(event) => {
-                            event.currentTarget.hidden = true;
-                            const fallback = event.currentTarget.parentElement?.querySelector(
-                              ".team-logo-fallback"
-                            );
-                            if (fallback instanceof HTMLElement) {
-                              fallback.hidden = false;
-                            }
-                          }}
-                          src={`/assets/teams/${team.logoAssetId}.webp`}
-                        />
-                        <span
-                          aria-label="Team logo placeholder"
-                          className="team-logo-placeholder team-logo-fallback"
-                          data-testid="team-logo-placeholder"
-                          hidden
-                          role="img"
-                        >
-                          Team logo placeholder
-                        </span>
-                      </>
-                    ) : (
-                      <span
-                        aria-label="Team logo placeholder"
-                        className="team-logo-placeholder"
-                        data-testid="team-logo-placeholder"
-                        role="img"
-                      >
-                        Team logo placeholder
-                      </span>
-                    )}
+                    <TeamLogo
+                      teamName={team.name}
+                      {...(team.logoAssetId ? { logoAssetId: team.logoAssetId } : {})}
+                    />
                     <span>
                       <strong>{team.name}</strong>
                       <span>{team.captain}</span>
@@ -2705,7 +3085,7 @@ function AuctionBoard({
                       <dd>{team.squadCount}</dd>
                     </div>
                     <div>
-                      <dt>{displayRole ?? "Role"}</dt>
+                      <dt>{displayRole ? formatAuctionRoleLabel(displayRole) : "Role"}</dt>
                       <dd>{roleCapacityLabel}</dd>
                     </div>
                   </dl>
@@ -2718,11 +3098,32 @@ function AuctionBoard({
                     {capacityText}
                   </span>
                 </button>
+                <button
+                  aria-label={`View ${team.name} details`}
+                  className="team-detail-trigger"
+                  data-testid="team-detail-trigger"
+                  onClick={(event) => handleOpenTeamDetail(team.id, event.currentTarget)}
+                  type="button"
+                >
+                  <Info aria-hidden="true" size={18} />
+                  <span>Details</span>
+                </button>
+                </article>
               );
             })}
           </div>
         </section>
       </section>
+      )}
+
+      {detailTeamId ? (
+        <TeamDetailDrawer
+          boardState={boardState}
+          onClose={() => setDetailTeamId(null)}
+          teamId={detailTeamId}
+          triggerRef={detailTriggerRef}
+        />
+      ) : null}
     </main>
   );
 }

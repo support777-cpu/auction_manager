@@ -4,12 +4,12 @@ status: final
 sources:
   - ../../prds/prd-auction_manager-2026-07-04/prd.md
   - ../../architecture/architecture-auction_manager-2026-07-05/ARCHITECTURE-SPINE.md
-updated: 2026-07-06
+updated: 2026-07-08
 ---
 
 # Auction Manager - Experience Spine
 
-Fast-path draft, updated against the PRD revised on 2026-07-06 and the architecture spine. `[ASSUMPTION]` marks choices inferred from the source docs and not yet explicitly selected by Udeet. `DESIGN.md` is the visual identity reference; this spine owns information architecture, behavior, state, accessibility, and journeys. If a mockup or imported artifact conflicts with these spines, the spines win.
+Fast-path draft, updated against the PRD revised on 2026-07-06, the architecture spine, and the Epic 2 redesign review mockup at `mockups/epic-2-redesign-review.html`. `[ASSUMPTION]` marks choices inferred from the source docs and not yet explicitly selected by Udeet. `DESIGN.md` is the visual identity reference; this spine owns information architecture, behavior, state, accessibility, and journeys. If older mockups conflict with these spines, the 2026-07-08 Epic 2 redesign direction wins for live, manual-assignment, roster, and closed-state surfaces.
 
 ## Foundation
 
@@ -74,12 +74,13 @@ Behavioral rules. Visual specs live in `DESIGN.md.Components`.
 |---|---|---|
 | Setup checklist | Setup | Shows required inputs, import readiness, auction parameter readiness, and the configured Phase 1 category order. Start Auction remains disabled until required non-image Player data, Team data, and parameters are valid. |
 | Import review table | Setup / import review | Groups issues by architecture severity: `must_fix`, `can_proceed_with_placeholder`, `ignored_source_field`. Never displays phone numbers, payment IDs, or private fields on live surfaces. |
-| Live board | Auction board | First read is Current Player + Current Bid. Second read is selected Team, team capacity, and current phase/category or unsold-pool progress. Third read is routine controls. |
+| Live board | Auction board | First read is Current Player + Current Bid. Second read is the compact status counter row plus selected Team/team capacity. Third read is the fixed command strip and Team matrix. Team tiles stay in the first viewport for 1440x900 and 1366x768 targets. |
 | Board/Rosters switch | Auction board / Team rosters | Two-option switch for the room-facing surfaces. It must be visible during live phases and closed state, preserve current auction state, and never trigger a mutation by itself. |
-| Player panel | Auction board | Shows name, photo/placeholder, Role, Base Price, and status. Missing photo is neutral, not blocking. |
+| Player stage | Auction board | Shows name, photo/placeholder, Role, Base Price, Category, and Current Bid in one stable stage. Missing photo is neutral, not blocking. |
 | Auction parameter editor | Setup | Captures role base prices, bid increment, team budgets, squad cap, role targets, and manual-assignment budget behavior. Values are editable only before Start Auction and become read-only after Start Auction. |
-| Current bid control | Auction board | Used in Phase 1 and Phase 2. Bid starts at the configured Base Price for the revealed Player's Role. Increment button adds the configured Bid Increment. No custom bid editing appears during live bidding. |
-| Team tile grid | Auction board | Each tile shows logo/placeholder, Team name, Captain name, remaining budget, squad count, and Current Player role capacity. Selecting a tile sets bidding Team and records undo history. |
+| Current bid control | Auction board | Used in Phase 1 and Phase 2. Bid starts at the configured Base Price for the revealed Player's Role. Increment button adds the configured Bid Increment. No custom bid editing appears during live bidding. Current Bid is displayed as the dominant red live number. |
+| Command strip | Auction board | Fixed-height row below the player stage for Next/Reveal, Bid Increment, Sold, Unsold, and Undo. Controls must not jump when enabled, disabled, pending, or after outcome summaries. |
+| Team matrix | Auction board | Dense Team cards in a right-side matrix on desktop. Each tile shows logo/placeholder, Team name, Captain name, remaining budget, squad count, and Current Player role capacity. Selecting a tile sets bidding Team and records undo history. |
 | Capacity indicator | Team tile / Team detail | Indicates whether the Team can buy or receive the Current Player under budget, squad, and role rules. Blocked reasons must be specific. |
 | Mark Sold | Auction board | Enabled only when a Current Player exists, a Team is selected, and all hard-block rules pass. On success, updates Player status, price, team budget, squad, role count, roster projection, local state, and undo history. |
 | Mark Unsold | Auction board | Enabled when a Current Player exists during Initial Auction or Unsold Bidding. In Phase 1, sends Player to the Phase 2 Unsold Bidding pool. In Phase 2, sends Player to the Phase 3 Manual Assignment pool. No budget or count changes. |
@@ -89,7 +90,7 @@ Behavioral rules. Visual specs live in `DESIGN.md.Components`.
 | Roster team section | Team rosters / Team detail | Groups Players by Team. Each Player row shows name, Role, acquisition type (`Sold` or `Assigned`), and price when applicable. Empty Teams show `No players bought yet.` |
 | Undo | Auction board / history | Multi-step. Shows the action that will be undone before execution or confirms what was undone immediately after. Covers Phase 2 bidding actions and Manual Assignment. Does not cover Reset or Close. |
 | Team detail drawer | Team tile click | Read-only during live flow. Shows Team budget, squad, role counts, roster, and current capacity reasons. [ASSUMPTION] Editing team data is not supported in-app because source data is import-only. |
-| Manual assignment control | Manual assignment | Phase 3 only. Operator selects a valid Team for the current Player still unsold after Phase 2. Assignment updates squad, role counts, roster projection, follows the configured manual-assignment budget behavior, and records undo history. |
+| Manual assignment control | Manual assignment | Phase 3 only. Assignment is its own focused mode: left column for assignment player plus pool list, right side for eligible Team matrix, bottom blocked reason, and one primary assignment command. Bidding controls are hidden. Assignment updates squad, role counts, roster projection, follows the configured manual-assignment budget behavior, and records undo history. |
 | Dangerous menu | Any post-setup phase | Contains Reset Auction and Close Auction only. Access is visually separated from routine controls and requires confirmation modal. |
 
 ## State Patterns
@@ -106,6 +107,7 @@ Behavioral rules. Visual specs live in `DESIGN.md.Components`.
 | No Current Player | Auction board | Primary action: Reveal Next Player when pending players remain in the current bidding phase. |
 | Current Player revealed | Auction board | Current Bid starts at the Player's configured role Base Price. |
 | Team selected | Auction board | Selected tile visually active; Mark Sold validity recalculates immediately. |
+| Team blocked | Auction board / Manual assignment | Blocked Team cards remain visible in the matrix with subdued treatment. Exact blocked reasons appear in a text panel near the Team matrix and command context, not as tooltip-only or color-only feedback. |
 | Roster view active | Team rosters | Show every Team with current roster, budget, squad count, and role counts from authoritative state. Provide a clear return to Board while the auction is live. |
 | Empty Team roster | Team rosters / Team detail | Show `No players bought yet.` inside that Team section; do not hide the Team. |
 | Invalid sale | Auction board | Mark Sold disabled or blocked with reason: budget, squad size, or role target. The reason appears near Mark Sold and selected Team. |
@@ -117,7 +119,7 @@ Behavioral rules. Visual specs live in `DESIGN.md.Components`.
 | Marked unsold in Phase 2 | Auction board | Player enters the Phase 3 Manual Assignment pool; Reveal Next Player becomes safe next action if Phase 2 pending players remain. |
 | Phase 2 pending complete | Auction board | Show transition action to start Manual Assignment if Phase 3 pool has players; otherwise show Close Auction path. |
 | Pending players remain but user starts next phase | Phase transition review | Confirmation required because this skips remaining players in the current phase. Skipped players must be visible in the confirmation summary. [ASSUMPTION] |
-| Manual assignment active | Manual assignment | Current Player comes from the Phase 3 pool; bidding controls are hidden or disabled because this phase is assignment-only. |
+| Manual assignment active | Manual assignment | Current Player comes from the Phase 3 pool; bidding controls are hidden because this phase is assignment-only. The assignment pool list remains visible so the operator can see who remains. |
 | Unsold team selected | Manual assignment | Selected Team recalculates assignment validity immediately from squad, role target, and configured budget behavior. |
 | Manual assignment recorded | Manual assignment / Team rosters | Assigned Player leaves the Phase 3 pool and appears under the receiving Team with assignment status and no price unless configured budget behavior records one. |
 | No valid team for unsold player | Manual assignment | Block assignment and show exact reason per invalid Team category. Keep player unresolved. |
@@ -172,9 +174,9 @@ Behavioral accessibility. Visual contrast and tokens live in `DESIGN.md`.
 
 | Viewport / context | Behavior |
 |---|---|
-| Desktop / laptop operator view | Primary target. Live board, team grid, and controls visible without scrolling for common team counts where feasible. [ASSUMPTION] |
+| Desktop / laptop operator view | Primary target. Live board, top counters, command strip, and Team matrix visible without scrolling for eight Teams at 1440x900 and 1366x768. |
 | Large mirrored display | Optimize for readability at distance. Avoid private fields and avoid operator-only clutter dominating the board or roster screen. |
-| Team rosters on desktop / display | Use a scan-friendly multi-column grid of Team sections when space allows. Keep Team headings sticky only if it does not distract on the mirrored display. [ASSUMPTION] |
+| Team rosters on desktop / display | Use a scan-friendly multi-column grid of Team sections. The closed-state roster surface uses the same red/black event-console frame and dense roster cards as the Epic 2 redesign review. |
 | Narrow browser width | Preserve operation but not mobile-first polish. Stack player panel, bid, team grid, controls, and roster Team sections in workflow order. |
 | Projector / TV overscan risk | Keep critical live content away from extreme edges with `{spacing.app-gutter}` equivalent safe margins. [ASSUMPTION] |
 | Event mode | One Fastify process serves UI, API, assets, health, and local state. The operator should not need a Vite dev server, internet, Docker, or manual asset hosting during the event. |
@@ -186,6 +188,7 @@ Implementation acceptance profiles:
 - Projected display profile: 1920x1080 browser viewport with critical content kept inside safe margins.
 - Narrow fallback profile: 390x844 browser viewport, preserving workflow order without mobile-first polish.
 - Local command profile: mutating controls show immediate pending affordance, reject duplicate clicks, and reconcile from the authoritative server response without layout jumps. Rehearsal records any command response that feels slow under event-machine conditions.
+- Redesign implementation profile: live board, manual assignment, roster, and closed-state surfaces visually match `mockups/epic-2-redesign-review.html` in structure and hierarchy while using real app components, DTOs, accessibility semantics, and authoritative command behavior.
 
 Separate audience display is deferred. If v1 mirrored view becomes too cluttered, the first v2 candidate is an audience-only route derived from the same live state, not a second control system.
 

@@ -344,6 +344,55 @@ test("reviews and saves auction parameters before starting the auction", async (
     "1 of 2"
   );
 
+  const stateBeforeRosterSwitch = await request.get("/api/state");
+  expect(stateBeforeRosterSwitch.status()).toBe(200);
+  const stateBeforeRosterSwitchJson = await stateBeforeRosterSwitch.json();
+
+  await page.getByRole("tab", { name: "Rosters" }).click();
+  await expect(page.getByTestId("team-rosters-view")).toBeVisible();
+  await expect(page.getByTestId("team-rosters-view")).toContainText("Aarav Menon");
+  await expect(page.getByTestId("team-rosters-view")).toContainText("Sold");
+  await expect(page.getByTestId("team-rosters-view")).toContainText("20");
+
+  const stateOnRosterView = await request.get("/api/state");
+  expect(stateOnRosterView.status()).toBe(200);
+  const stateOnRosterViewJson = await stateOnRosterView.json();
+  expect(stateOnRosterViewJson.state.teamRosters[0].roster).toContainEqual(
+    expect.objectContaining({
+      name: "Aarav Menon",
+      role: "Ace",
+      acquisitionType: "Sold",
+      soldPrice: 20
+    })
+  );
+  expect(stateOnRosterViewJson.resume.lastSavedAction).toBe("MarkSold");
+
+  await page.getByRole("tab", { name: "Board" }).click();
+  await expect(page.getByTestId("auction-board")).toBeVisible();
+  await expect(page.getByTestId("current-player-panel")).toContainText("No Current Player");
+  await expect(page.getByTestId("current-bid")).toHaveText("No current bid");
+  await expect(page.getByTestId("selected-team")).toContainText("None");
+  await expect(page.getByTestId("reveal-next")).toBeEnabled();
+
+  const stateAfterRosterSwitch = await request.get("/api/state");
+  expect(stateAfterRosterSwitch.status()).toBe(200);
+  const stateAfterRosterSwitchJson = await stateAfterRosterSwitch.json();
+  expect(stateAfterRosterSwitchJson.resume.lastSavedAction).toBe(
+    stateBeforeRosterSwitchJson.resume.lastSavedAction
+  );
+  expect(stateAfterRosterSwitchJson.state.teamRosters).toEqual(
+    stateBeforeRosterSwitchJson.state.teamRosters
+  );
+  expect(stateAfterRosterSwitchJson.state.currentPlayer).toEqual(
+    stateBeforeRosterSwitchJson.state.currentPlayer
+  );
+  expect(stateAfterRosterSwitchJson.state.currentBid).toEqual(
+    stateBeforeRosterSwitchJson.state.currentBid
+  );
+  expect(stateAfterRosterSwitchJson.state.selectedTeamId).toEqual(
+    stateBeforeRosterSwitchJson.state.selectedTeamId
+  );
+
   await page.reload();
   await resumeSavedAuction(page);
   const resumedAfterSale = await request.get("/api/state");
